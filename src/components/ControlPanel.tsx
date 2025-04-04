@@ -10,7 +10,7 @@ interface WidgetConfig {
   params?: Record<string, any>;
   isLaunched: boolean;
   isVisible: boolean;
-  opacity?: number;
+  opacity: number;
 }
 
 export const ControlPanel: React.FC = () => {
@@ -98,11 +98,11 @@ export const ControlPanel: React.FC = () => {
     }
   };
 
-  // For controlling widget in a separate window
   const setWidgetOpacity = async (widgetId: string, opacity: number) => {
     if (!isElectron) return;
     
     try {
+      // Update widget opacity in Electron
       await window.electronAPI.widgets.setOpacity(widgetId, opacity);
       
       // Update the widget state to reflect opacity change
@@ -197,6 +197,45 @@ export const ControlPanel: React.FC = () => {
                   )}
                 </div>
               </div>
+              
+              {/* Always show basic controls for launched widgets */}
+              {widget.isLaunched && (
+                <div className="mt-3 pt-2 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center space-x-2">
+                      <input 
+                        type="checkbox" 
+                        checked={widget.isVisible}
+                        onChange={(e) => {
+                          setWidgetVisibility(widget.id, e.target.checked);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="text-sm">Visible</span>
+                    </label>
+                    <span className="text-xs font-medium">
+                      {Math.round(widget.opacity * 100)}%
+                    </span>
+                  </div>
+                  
+                  <div 
+                    className="opacity-slider" 
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input 
+                      type="range" 
+                      min="10" 
+                      max="100" 
+                      value={widget.opacity * 100}
+                      className="w-full"
+                      onChange={(e) => {
+                        const opacity = parseInt(e.target.value) / 100;
+                        setWidgetOpacity(widget.id, opacity);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -210,7 +249,7 @@ export const ControlPanel: React.FC = () => {
             <label className="flex items-center space-x-2 mb-3">
               <input 
                 type="checkbox" 
-                defaultChecked={activeWidget.isVisible !== false}
+                checked={activeWidget.isVisible}
                 onChange={(e) => {
                   setWidgetVisibility(activeWidget.id, e.target.checked);
                 }}
@@ -226,9 +265,9 @@ export const ControlPanel: React.FC = () => {
             <div className="flex items-center space-x-2">
               <input 
                 type="range" 
-                min="0" 
+                min="10" 
                 max="100" 
-                defaultValue="100"
+                value={activeWidget.opacity * 100}
                 className="w-full"
                 onChange={(e) => {
                   const opacity = parseInt(e.target.value) / 100;
@@ -236,7 +275,7 @@ export const ControlPanel: React.FC = () => {
                 }}
               />
               <span className="text-sm font-medium w-10 text-right">
-                {activeWidget.opacity ? Math.round(activeWidget.opacity * 100) : 100}%
+                {Math.round(activeWidget.opacity * 100)}%
               </span>
             </div>
           </div>

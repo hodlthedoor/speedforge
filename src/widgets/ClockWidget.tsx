@@ -1,5 +1,6 @@
+/// <reference path="../types/electron.d.ts" />
 import React from 'react';
-import { BaseWidget, BaseWidgetProps, WidgetState } from './BaseWidget';
+import { BaseWidget, BaseWidgetProps } from './BaseWidget';
 import { withWidgetRegistration } from './WidgetManager';
 
 // Extend the WidgetState to include time property
@@ -19,7 +20,10 @@ class ClockWidgetBase extends BaseWidget<ClockWidgetProps> {
   constructor(props: ClockWidgetProps) {
     super(props);
     // Initialize the time property in the state
-    this.setState({ time: new Date() });
+    this.state = {
+      ...this.state,
+      time: new Date()
+    };
   }
 
   componentDidMount() {

@@ -1,3 +1,4 @@
+/// <reference path="../types/electron.d.ts" />
 import React from 'react';
 import { BaseWidget, BaseWidgetProps } from './BaseWidget';
 import { withWidgetRegistration } from './WidgetManager';
@@ -14,12 +15,17 @@ interface WeatherData {
 }
 
 class WeatherWidgetBase extends BaseWidget<WeatherWidgetProps> {
-  state = {
-    ...this.state,
-    weather: this.generateMockWeatherData(),
-    loading: false,
-    error: null as string | null,
-  };
+  constructor(props: WeatherWidgetProps) {
+    super(props);
+    
+    // Extend the base state with weather-specific properties
+    this.state = {
+      ...this.state,
+      weather: this.generateMockWeatherData(),
+      loading: false,
+      error: null
+    };
+  }
 
   private refreshTimer: number | null = null;
 
@@ -105,7 +111,7 @@ class WeatherWidgetBase extends BaseWidget<WeatherWidgetProps> {
         
         <button 
           onClick={() => this.updateWeather()}
-          className="mt-3 text-sm text-blue-600 hover:text-blue-800"
+          className="mt-3 text-sm text-blue-600 hover:text-blue-800 non-draggable"
         >
           Refresh
         </button>

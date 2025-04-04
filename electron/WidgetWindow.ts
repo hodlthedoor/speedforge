@@ -145,7 +145,10 @@ export class WidgetWindowManager {
   setWidgetOpacity(widgetId: string, opacity: number): boolean {
     const win = this.windows.get(widgetId);
     if (win && !win.isDestroyed()) {
-      // Send opacity update to the renderer process in the widget window
+      // Set the entire window's opacity directly
+      win.setOpacity(opacity);
+      
+      // Also notify the renderer process to maintain state consistency
       win.webContents.send('widget:opacity', opacity);
       return true;
     }

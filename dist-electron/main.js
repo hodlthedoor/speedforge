@@ -115,6 +115,7 @@ class WidgetWindowManager {
   setWidgetOpacity(widgetId, opacity) {
     const win = this.windows.get(widgetId);
     if (win && !win.isDestroyed()) {
+      win.setOpacity(opacity);
       win.webContents.send("widget:opacity", opacity);
       return true;
     }
