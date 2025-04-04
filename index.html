@@ -4,7 +4,60 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <title>Widget Dashboard</title>
+    <style>
+      /* Base styles */
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+      
+      #root {
+        height: 100%;
+        width: 100%;
+      }
+      
+      /* Add styles for draggable regions */
+      .draggable {
+        -webkit-app-region: drag;
+        app-region: drag;
+        user-select: none;
+      }
+      
+      .non-draggable {
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+        user-select: auto;
+      }
+
+      /* Make sure widget containers are draggable by default */
+      .widget-container {
+        -webkit-app-region: drag;
+        app-region: drag;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+      }
+      
+      /* Set the cursor to indicate draggable areas */
+      .draggable {
+        cursor: move; /* Fallback */
+        cursor: grab;
+      }
+      
+      /* Ensure text doesn't look selected when dragging */
+      .draggable * {
+        user-select: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

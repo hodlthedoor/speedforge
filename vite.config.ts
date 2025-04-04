@@ -20,6 +20,7 @@ export default defineConfig(({ command, mode }) => {
       react(),
       electron([
         {
+          // Use TypeScript files for Electron
           entry: 'electron/main.ts',
           onstart(options) {
             options.startup();
@@ -30,8 +31,12 @@ export default defineConfig(({ command, mode }) => {
               minify: isBuild,
               outDir: 'dist-electron',
               rollupOptions: {
-                external: Object.keys(dependencies),
+                external: ['electron'],
               },
+            },
+            esbuild: {
+              // Recommended for TypeScript files
+              format: 'esm',
             },
           },
         },
@@ -46,8 +51,12 @@ export default defineConfig(({ command, mode }) => {
               minify: isBuild,
               outDir: 'dist-electron',
               rollupOptions: {
-                external: Object.keys(dependencies),
+                external: ['electron'],
               },
+            },
+            esbuild: {
+              // Use CommonJS format for preload
+              format: 'cjs',
             },
           },
         }
