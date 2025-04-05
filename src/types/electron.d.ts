@@ -15,6 +15,10 @@ declare global {
         setAlwaysOnTop: (widgetId: string, alwaysOnTop: boolean) => Promise<{ success: boolean }>;
         setOpacity: (widgetId: string, opacity: number) => Promise<{ success: boolean }>;
         setVisible: (widgetId: string, visible: boolean) => Promise<{ success: boolean }>;
+        updateParams: (widgetId: string, params: Record<string, any>) => Promise<{ success: boolean }>;
+      };
+      app: {
+        quit: () => Promise<{ success: boolean }>;
       };
     };
     electronDrag: {

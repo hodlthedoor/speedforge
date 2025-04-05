@@ -16,25 +16,32 @@ export interface WidgetState {
   width: number;
   height: number;
   showingControls: boolean;
+  telemetryData?: any;
+  connected: boolean;
 }
 
-// Widget control overlay component
-const WidgetControls: React.FC<{
+interface WidgetControls {
   onClose: () => void;
-}> = ({ onClose }) => {
+}
+
+// Simple controls component for widgets
+const WidgetControls: React.FC<WidgetControls> = ({ onClose }) => {
   return (
-    <div className="widget-controls absolute top-0 right-0 p-2 bg-gray-100 bg-opacity-80 rounded-bl-lg shadow-sm non-draggable z-10">
+    <div className="widget-controls absolute top-0 right-0 z-10 p-1">
       <button 
-        className="p-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+        className="close-btn bg-red-500 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center"
         onClick={onClose}
       >
-        ✕
+        ×
       </button>
     </div>
   );
 };
 
 export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> extends React.Component<P, any> {
+  private ws: WebSocket | null = null;
+  private reconnectTimer: number | null = null;
+  
   constructor(props: P) {
     super(props);
     
@@ -44,8 +51,98 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
       opacity: props.defaultOpacity ?? 1,
       width: props.defaultWidth ?? 300,
       height: props.defaultHeight ?? 200,
-      showingControls: false
+      showingControls: false,
+      telemetryData: null,
+      connected: false
     };
+  }
+  
+  componentDidMount() {
+    // Connect to telemetry WebSocket
+    this.connectWebSocket();
+    
+    // Listen for parameter updates from the main process
+    if (window.electronAPI) {
+      window.electronAPI.on('widget:params', this.handleParamsUpdate);
+    }
+  }
+  
+  componentWillUnmount() {
+    this.disconnectWebSocket();
+    // Clear any reconnect timer
+    if (this.reconnectTimer) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    // Remove parameter update listener
+    if (window.electronAPI) {
+      window.electronAPI.removeAllListeners('widget:params');
+    }
+    
+    // Log widget unmounting for debugging
+    console.log(`Widget ${this.props.id} unmounting and cleaning up resources`);
+  }
+  
+  // Handle parameter updates from the main process
+  handleParamsUpdate = (params: Record<string, any>) => {
+    // This method can be overridden by child widgets to handle specific parameters
+    console.log('Widget received parameter update:', params);
+    
+    // The base implementation does nothing with the params
+    // Child widgets can use componentDidUpdate to respond to prop changes
+  }
+
+  connectWebSocket = () => {
+    const wsUrl = 'ws://localhost:8080';
+    
+    try {
+      this.ws = new WebSocket(wsUrl);
+      
+      this.ws.onopen = () => {
+        console.log('Connected to telemetry WebSocket');
+        this.setState({ connected: true });
+      };
+      
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.setState({ telemetryData: data });
+          this.onTelemetryDataReceived(data);
+        } catch (error) {
+          console.error('Failed to parse telemetry data:', error);
+        }
+      };
+      
+      this.ws.onclose = () => {
+        console.log('Disconnected from telemetry WebSocket');
+        this.setState({ connected: false });
+        
+        // Try to reconnect after a delay
+        this.reconnectTimer = window.setTimeout(() => {
+          this.connectWebSocket();
+        }, 3000);
+      };
+      
+      this.ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        this.ws?.close();
+      };
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error);
+    }
+  };
+
+  disconnectWebSocket = () => {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  };
+  
+  // Method that can be overridden by widgets to handle new telemetry data
+  protected onTelemetryDataReceived(data: any) {
+    // Default implementation does nothing, widgets can override
   }
 
   setVisibility = (visible: boolean) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
+import { TelemetryWidget } from '../widgets/TelemetryWidget';
 
 declare global {
   interface Window {
@@ -19,7 +20,7 @@ declare global {
 
 interface WidgetContainerProps {
   id: string;
-  widget: 'clock' | 'weather';
+  widget: 'clock' | 'weather' | 'telemetry';
   params?: Record<string, any>;
   width?: number;
   height?: number;
@@ -125,6 +126,8 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({
         return <ClockWidget id={id} defaultWidth={width} defaultHeight={height} {...params} />;
       case 'weather':
         return <WeatherWidget id={id} defaultWidth={width} defaultHeight={height} {...params} />;
+      case 'telemetry':
+        return <TelemetryWidget id={id} defaultWidth={width} defaultHeight={height} {...params} />;
       default:
         return <div>Unknown widget type: {widget}</div>;
     }

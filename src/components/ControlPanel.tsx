@@ -5,7 +5,7 @@ import { WidgetContainer } from './WidgetContainer';
 
 interface WidgetConfig {
   id: string;
-  type: 'clock' | 'weather';
+  type: 'clock' | 'weather' | 'telemetry';
   name: string;
   params?: Record<string, any>;
   isLaunched: boolean;
@@ -13,12 +13,34 @@ interface WidgetConfig {
   opacity: number;
 }
 
+// For getting available telemetry metrics
+const defaultTelemetryMetrics = [
+  { value: 'speed_kph', label: 'Speed (KPH)' },
+  { value: 'speed_mph', label: 'Speed (MPH)' },
+  { value: 'rpm', label: 'RPM' },
+  { value: 'gear', label: 'Gear' },
+  { value: 'throttle_pct', label: 'Throttle' },
+  { value: 'brake_pct', label: 'Brake' },
+  { value: 'clutch_pct', label: 'Clutch' },
+  { value: 'g_force_lat', label: 'Lateral G' },
+  { value: 'g_force_lon', label: 'Longitudinal G' },
+  { value: 'fuel_level', label: 'Fuel Level' },
+  { value: 'fuel_pct', label: 'Fuel Percentage' },
+  { value: 'current_lap_time', label: 'Current Lap' },
+  { value: 'last_lap_time', label: 'Last Lap' },
+  { value: 'best_lap_time', label: 'Best Lap' },
+  { value: 'position', label: 'Position' },
+  { value: 'lap_completed', label: 'Lap' }
+];
+
 export const ControlPanel: React.FC = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
-    { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false }, isLaunched: false, isVisible: true, opacity: 1 },
-    { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1 }
+    { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false, showTelemetry: true }, isLaunched: false, isVisible: true, opacity: 1 },
+    { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1 },
+    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1 }
   ]);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
+  const [availableTelemetryMetrics, setAvailableTelemetryMetrics] = useState(defaultTelemetryMetrics);
   const isElectron = window.electronAPI !== undefined;
 
   useEffect(() => {
@@ -42,7 +64,85 @@ export const ControlPanel: React.FC = () => {
       
       checkRunningWidgets();
     }
+    
+    // Attempt to connect to telemetry service to get actual available fields
+    // This is optional - we'll use the default list if connection fails
+    fetchTelemetryFields();
   }, [isElectron]);
+  
+  // Function to fetch available telemetry fields from the backend
+  const fetchTelemetryFields = () => {
+    try {
+      const ws = new WebSocket('ws://localhost:8080');
+      
+      ws.onopen = () => {
+        console.log('Connected to telemetry service to fetch fields');
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Get actual available metrics from the telemetry data
+          const metrics = Object.keys(data)
+            .filter(key => 
+              typeof data[key] !== 'object' && 
+              !Array.isArray(data[key]) &&
+              key !== 'raw_values' &&
+              key !== 'warnings' &&
+              key !== 'active_flags' &&
+              key !== 'session_flags'
+            )
+            .map(key => ({
+              value: key,
+              label: getMetricLabel(key)
+            }));
+          
+          setAvailableTelemetryMetrics(metrics);
+          // Close the connection after we get the data
+          ws.close();
+        } catch (error) {
+          console.error('Failed to parse telemetry data:', error);
+        }
+      };
+      
+      ws.onerror = () => {
+        console.log('Failed to connect to telemetry service, using default metrics');
+      };
+      
+      // Set a timeout to close the connection if we don't get a response
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      }, 5000);
+    } catch (error) {
+      console.error('Failed to connect to telemetry service:', error);
+    }
+  };
+  
+  // Helper function to get a user-friendly label for a metric
+  const getMetricLabel = (metric: string): string => {
+    const metricNames: Record<string, string> = {
+      'speed_kph': 'Speed (KPH)',
+      'speed_mph': 'Speed (MPH)',
+      'rpm': 'RPM',
+      'gear': 'Gear',
+      'throttle_pct': 'Throttle',
+      'brake_pct': 'Brake',
+      'clutch_pct': 'Clutch',
+      'g_force_lat': 'Lateral G',
+      'g_force_lon': 'Longitudinal G',
+      'fuel_level': 'Fuel Level',
+      'fuel_pct': 'Fuel Percentage',
+      'current_lap_time': 'Current Lap',
+      'last_lap_time': 'Last Lap',
+      'best_lap_time': 'Best Lap',
+      'position': 'Position',
+      'lap_completed': 'Lap'
+    };
+    
+    return metricNames[metric] || metric;
+  };
 
   const handleSelect = (id: string) => {
     setActiveWidgetId(id === activeWidgetId ? null : id);
@@ -152,10 +252,54 @@ export const ControlPanel: React.FC = () => {
       console.error('Failed to set widget always-on-top:', error);
     }
   };
+  
+  const updateWidgetParams = async (widgetId: string, params: Record<string, any>) => {
+    if (!isElectron) return;
+    
+    setWidgets(prevWidgets => 
+      prevWidgets.map(w => {
+        if (w.id === widgetId) {
+          const updatedParams = { ...w.params, ...params };
+          
+          // If the widget is already launched, update it
+          if (w.isLaunched && window.electronAPI) {
+            window.electronAPI.widgets.updateParams(widgetId, updatedParams)
+              .catch(error => console.error('Failed to update widget params:', error));
+          }
+          
+          return { ...w, params: updatedParams };
+        }
+        return w;
+      })
+    );
+  };
+
+  // Add quit application function
+  const quitApplication = async () => {
+    if (!isElectron) return;
+    
+    try {
+      // Ask for confirmation before quitting
+      if (window.confirm('Are you sure you want to quit SpeedForge?')) {
+        console.log('Quitting application...');
+        await window.electronAPI.app.quit();
+      }
+    } catch (error) {
+      console.error('Failed to quit application:', error);
+    }
+  };
 
   return (
     <div className="control-panel bg-gray-100 p-4 rounded-lg shadow-md">
-      <h2 className="text-xl font-bold mb-4">Widget Control Panel</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Widget Control Panel</h2>
+        <button 
+          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+          onClick={quitApplication}
+        >
+          Quit Application
+        </button>
+      </div>
       
       <div className="widget-list mb-6">
         <h3 className="text-lg font-semibold mb-2">Available Widgets</h3>
@@ -234,6 +378,28 @@ export const ControlPanel: React.FC = () => {
                       }}
                     />
                   </div>
+                  
+                  {/* Add metric selector for telemetry widgets */}
+                  {widget.type === 'telemetry' && widget.isLaunched && (
+                    <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Telemetry Metric:
+                      </label>
+                      <select
+                        value={widget.params?.metric || 'speed_kph'}
+                        onChange={(e) => {
+                          updateWidgetParams(widget.id, { metric: e.target.value });
+                        }}
+                        className="w-full p-2 border border-gray-300 rounded text-sm"
+                      >
+                        {availableTelemetryMetrics.map((metric) => (
+                          <option key={metric.value} value={metric.value}>
+                            {metric.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -279,6 +445,54 @@ export const ControlPanel: React.FC = () => {
               </span>
             </div>
           </div>
+          
+          {/* Widget-specific controls */}
+          {activeWidget.type === 'telemetry' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Telemetry Metric:
+              </label>
+              <select
+                value={activeWidget.params?.metric || 'speed_kph'}
+                onChange={(e) => {
+                  updateWidgetParams(activeWidget.id, { metric: e.target.value });
+                }}
+                className="w-full p-2 border border-gray-300 rounded"
+              >
+                {availableTelemetryMetrics.map((metric) => (
+                  <option key={metric.value} value={metric.value}>
+                    {metric.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {activeWidget.type === 'clock' && (
+            <div className="mb-4">
+              <label className="flex items-center space-x-2 mb-3">
+                <input 
+                  type="checkbox" 
+                  checked={activeWidget.params?.format24h || false}
+                  onChange={(e) => {
+                    updateWidgetParams(activeWidget.id, { format24h: e.target.checked });
+                  }}
+                />
+                <span className="text-sm font-medium text-gray-700">24-hour format</span>
+              </label>
+              
+              <label className="flex items-center space-x-2">
+                <input 
+                  type="checkbox" 
+                  checked={activeWidget.params?.showTelemetry || false}
+                  onChange={(e) => {
+                    updateWidgetParams(activeWidget.id, { showTelemetry: e.target.checked });
+                  }}
+                />
+                <span className="text-sm font-medium text-gray-700">Show telemetry data</span>
+              </label>
+            </div>
+          )}
           
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>

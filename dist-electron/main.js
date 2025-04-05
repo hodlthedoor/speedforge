@@ -204,6 +204,14 @@ function setupIpcListeners() {
     const success = widgetManager.setWidgetVisible(widgetId, visible);
     return { success };
   });
+  ipcMain.handle("widget:updateParams", (_, { widgetId, params }) => {
+    const win = widgetManager.getWidgetWindow(widgetId);
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("widget:params", params);
+      return { success: true };
+    }
+    return { success: false };
+  });
   ipcMain.on("widget:closeByEscape", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) {
@@ -212,9 +220,45 @@ function setupIpcListeners() {
   });
 }
 app.whenReady().then(createWindow);
+app.on("before-quit", () => {
+  console.log("Application is shutting down, closing all widgets...");
+  if (widgetManager) {
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [widgetId, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        console.log(`Closing widget: ${widgetId}`);
+        window.close();
+      }
+    }
+  }
+  console.log("Removing all IPC handlers...");
+  ipcMain.removeHandler("widget:create");
+  ipcMain.removeHandler("widget:close");
+  ipcMain.removeHandler("widget:getAll");
+  ipcMain.removeHandler("widget:setPosition");
+  ipcMain.removeHandler("widget:setSize");
+  ipcMain.removeHandler("widget:setAlwaysOnTop");
+  ipcMain.removeHandler("widget:setOpacity");
+  ipcMain.removeHandler("widget:setVisible");
+  ipcMain.removeHandler("widget:updateParams");
+  ipcMain.removeHandler("app:quit");
+  ipcMain.removeAllListeners("widget:closeByEscape");
+});
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
   mainWindow = null;
+});
+ipcMain.handle("app:quit", () => {
+  if (widgetManager) {
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [widgetId, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.close();
+      }
+    }
+  }
+  app.quit();
+  return { success: true };
 });
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

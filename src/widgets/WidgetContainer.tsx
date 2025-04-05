@@ -1,6 +1,9 @@
 /// <reference path="../types/electron.d.ts" />
 import React, { useEffect, useState } from 'react';
 
+// Import the TelemetryWidget
+import { TelemetryWidget } from './TelemetryWidget';
+
 // Direct widget components for testing
 const ClockWidgetComponent = (props: any) => {
   const [time, setTime] = useState(new Date());
@@ -35,6 +38,176 @@ const WeatherWidgetComponent = (props: any) => {
       <div className="text-5xl">☀️</div>
       <div className="text-3xl font-bold mt-2">23°C</div>
       <div className="text-gray-600">Sunny</div>
+    </div>
+  );
+};
+
+// Add the TelemetryWidgetComponent
+const TelemetryWidgetComponent = (props: any) => {
+  const [telemetryData, setTelemetryData] = useState<any>(null);
+  const [connected, setConnected] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState(props.metric || 'speed_kph');
+  const wsRef = React.useRef<WebSocket | null>(null);
+  
+  useEffect(() => {
+    // Connect to WebSocket
+    const connectWebSocket = () => {
+      const wsUrl = 'ws://localhost:8080';
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('Connected to telemetry WebSocket');
+        setConnected(true);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setTelemetryData(data);
+        } catch (error) {
+          console.error('Failed to parse telemetry data:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('Disconnected from telemetry WebSocket');
+        setConnected(false);
+        
+        // Try to reconnect after a delay
+        setTimeout(() => {
+          connectWebSocket();
+        }, 3000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        ws.close();
+      };
+      
+      wsRef.current = ws;
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+  
+  // Format the metric value for display
+  const formatMetricValue = (metric: string, value: any): string => {
+    if (value === undefined || value === null) {
+      return 'N/A';
+    }
+    
+    // Format based on metric type
+    switch (metric) {
+      case 'speed_kph':
+        return `${value.toFixed(1)} km/h`;
+      case 'speed_mph':
+        return `${value.toFixed(1)} mph`;
+      case 'rpm':
+        return `${value.toFixed(0)} RPM`;
+      case 'throttle_pct':
+      case 'brake_pct':
+      case 'clutch_pct':
+      case 'fuel_pct':
+        return `${value.toFixed(1)}%`;
+      case 'gear':
+        return value;
+      case 'g_force_lat':
+      case 'g_force_lon':
+        return `${value.toFixed(2)}G`;
+      case 'current_lap_time':
+      case 'last_lap_time':
+      case 'best_lap_time':
+        // Format time as mm:ss.ms
+        const minutes = Math.floor(value / 60);
+        const seconds = value % 60;
+        return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
+      default:
+        return `${value}`;
+    }
+  };
+  
+  // Get a user-friendly name for the metric
+  const getMetricName = (metric: string): string => {
+    const metricNames: Record<string, string> = {
+      'speed_kph': 'Speed (KPH)',
+      'speed_mph': 'Speed (MPH)',
+      'rpm': 'RPM',
+      'gear': 'Gear',
+      'throttle_pct': 'Throttle',
+      'brake_pct': 'Brake',
+      'clutch_pct': 'Clutch',
+      'g_force_lat': 'Lateral G',
+      'g_force_lon': 'Longitudinal G',
+      'fuel_level': 'Fuel Level',
+      'fuel_pct': 'Fuel Percentage',
+      'current_lap_time': 'Current Lap',
+      'last_lap_time': 'Last Lap',
+      'best_lap_time': 'Best Lap',
+      'position': 'Position',
+      'lap_completed': 'Lap'
+    };
+    
+    return metricNames[metric] || metric;
+  };
+  
+  if (!connected) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center h-full">
+        <div className="text-red-500 font-bold mb-2">Disconnected</div>
+        <div className="text-sm">Attempting to connect...</div>
+      </div>
+    );
+  }
+  
+  if (!telemetryData) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center h-full">
+        <div className="text-blue-500 font-bold mb-2">Connected</div>
+        <div className="text-sm">Waiting for data...</div>
+      </div>
+    );
+  }
+  
+  // Get available metrics from the telemetry data
+  const metrics = Object.keys(telemetryData).filter(key => 
+    typeof telemetryData[key] !== 'object' && 
+    !Array.isArray(telemetryData[key]) &&
+    key !== 'raw_values' &&
+    key !== 'warnings' &&
+    key !== 'active_flags' &&
+    key !== 'session_flags'
+  );
+  
+  return (
+    <div className="p-4 flex flex-col h-full">
+      <div className="mb-3">
+        <select 
+          value={selectedMetric}
+          onChange={(e) => setSelectedMetric(e.target.value)}
+          className="w-full p-2 border border-gray-300 rounded text-sm"
+        >
+          {metrics.map((metric) => (
+            <option key={metric} value={metric}>
+              {getMetricName(metric)}
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      <div className="flex-grow flex flex-col items-center justify-center">
+        <div className="text-lg font-semibold">
+          {getMetricName(selectedMetric)}
+        </div>
+        <div className="text-4xl font-bold mt-2">
+          {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
+        </div>
+      </div>
     </div>
   );
 };
@@ -171,7 +344,12 @@ export const WidgetContainer: React.FC = () => {
           <WeatherWidgetComponent {...widgetProps} />
         </div>
       )}
-      {widgetType !== 'clock' && widgetType !== 'weather' && (
+      {widgetType === 'telemetry' && (
+        <div className="p-4 flex flex-col items-center justify-center h-full">
+          <TelemetryWidgetComponent {...widgetProps} />
+        </div>
+      )}
+      {widgetType !== 'clock' && widgetType !== 'weather' && widgetType !== 'telemetry' && (
         <div className="error-container p-4 bg-red-100 text-red-800 rounded">
           <h3 className="font-bold mb-2">Unknown Widget Type</h3>
           <p>Widget type "{widgetType}" is not supported.</p>
@@ -179,6 +357,7 @@ export const WidgetContainer: React.FC = () => {
           <ul className="list-disc ml-5 non-draggable">
             <li>clock</li>
             <li>weather</li>
+            <li>telemetry</li>
           </ul>
         </div>
       )}

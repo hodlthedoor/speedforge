@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     setVisible: (widgetId, visible) => {
       return ipcRenderer.invoke("widget:setVisible", { widgetId, visible });
+    },
+    updateParams: (widgetId, params) => {
+      return ipcRenderer.invoke("widget:updateParams", { widgetId, params });
+    }
+  },
+  // Add app-level methods
+  app: {
+    quit: () => {
+      return ipcRenderer.invoke("app:quit");
     }
   }
 });

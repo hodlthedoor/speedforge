@@ -104,6 +104,17 @@ function setupIpcListeners() {
     return { success };
   });
   
+  // Update widget parameters
+  ipcMain.handle('widget:updateParams', (_, { widgetId, params }: { widgetId: string, params: Record<string, any> }) => {
+    const win = widgetManager.getWidgetWindow(widgetId);
+    if (win && !win.isDestroyed()) {
+      // Send the updated parameters to the renderer process
+      win.webContents.send('widget:params', params);
+      return { success: true };
+    }
+    return { success: false };
+  });
+  
   // Handle Escape key to close widgets
   ipcMain.on('widget:closeByEscape', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -115,9 +126,56 @@ function setupIpcListeners() {
 
 app.whenReady().then(createWindow);
 
+// Add a 'before-quit' handler to ensure all widgets are closed properly
+app.on('before-quit', () => {
+  console.log('Application is shutting down, closing all widgets...');
+  // Close all open widget windows to prevent orphaned processes
+  if (widgetManager) {
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [widgetId, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        console.log(`Closing widget: ${widgetId}`);
+        window.close();
+      }
+    }
+  }
+  
+  // Clean up all IPC handlers
+  console.log('Removing all IPC handlers...');
+  ipcMain.removeHandler('widget:create');
+  ipcMain.removeHandler('widget:close');
+  ipcMain.removeHandler('widget:getAll');
+  ipcMain.removeHandler('widget:setPosition');
+  ipcMain.removeHandler('widget:setSize');
+  ipcMain.removeHandler('widget:setAlwaysOnTop');
+  ipcMain.removeHandler('widget:setOpacity');
+  ipcMain.removeHandler('widget:setVisible');
+  ipcMain.removeHandler('widget:updateParams');
+  ipcMain.removeHandler('app:quit');
+  
+  // Remove all listeners
+  ipcMain.removeAllListeners('widget:closeByEscape');
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
   mainWindow = null;
+});
+
+// Add shutdown handler for main window to close all widgets
+ipcMain.handle('app:quit', () => {
+  // Close all widget windows first
+  if (widgetManager) {
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [widgetId, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.close();
+      }
+    }
+  }
+  // Then quit the application
+  app.quit();
+  return { success: true };
 });
 
 app.on('activate', () => {
