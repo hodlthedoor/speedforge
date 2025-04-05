@@ -263,6 +263,10 @@
                     <span class="data-label">Status:</span>
                     <span class="data-value" id="pit-status">ON TRACK</span>
                 </div>
+                <div class="data-row">
+                    <span class="data-label">Surface:</span>
+                    <span class="data-value" id="track-surface">Unknown</span>
+                </div>
             </div>
             
             <div class="panel">
@@ -421,7 +425,7 @@
         function connectWebSocket() {
             // Get the current hostname and use it for the WebSocket connection
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.hostname}:8080`;
+            const wsUrl = `${protocol}//localhost:8080`;
             
             ws = new WebSocket(wsUrl);
             
@@ -467,6 +471,20 @@
             document.getElementById('rpm').textContent = data.rpm.toFixed(0);
             document.getElementById('gear').textContent = data.gear;
             document.getElementById('pit-status').textContent = data.on_pit_road ? "IN PITS" : "ON TRACK";
+            document.getElementById('track-surface').textContent = data.track_surface || "Unknown";
+            
+            // Add styling based on track surface
+            const trackSurfaceElement = document.getElementById('track-surface');
+            
+            // Reset classes
+            trackSurfaceElement.classList.remove('highlight', 'warning', 'danger');
+            
+            // Add appropriate class
+            if (data.track_surface === "Off track" || data.track_surface === "Grass/dirt" || data.track_surface === "Gravel/sand") {
+                trackSurfaceElement.classList.add('warning');
+            } else if (data.track_surface === "Not in world") {
+                trackSurfaceElement.classList.add('danger');
+            }
             
             // RPM bar
             const maxRpm = 8000; // Adjust based on car - could be dynamic

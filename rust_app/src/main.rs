@@ -127,8 +127,8 @@ async fn main() {
         let display = telemetry_fields::format_telemetry_display(&telemetry_data);
         
         // Print the display buffer
-        print!("{}", display);
-        io::stdout().flush().unwrap();
+        // print!("{}", display);
+        // io::stdout().flush().unwrap();
         
         // Broadcast telemetry data to WebSocket clients
         ws_server.broadcast_telemetry(&telemetry_data);

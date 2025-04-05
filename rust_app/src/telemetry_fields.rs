@@ -16,6 +16,7 @@ pub struct TelemetryData {
     pub velocity_ms: f32,
     pub shift_indicator_pct: f32,
     pub on_pit_road: bool,
+    pub track_surface: String,
     
     // Driver Inputs
     pub throttle_pct: f32,
@@ -154,13 +155,7 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     }
     
     // On Pit Road
-    if let Ok(pit) = telem.get("OnPitRoad") {
-        if let Ok(pit_val) = TryInto::<bool>::try_into(pit) {
-            let pit_bool: bool = pit_val;
-            raw_values.insert("OnPitRoad".to_string(), serde_json::json!(pit_bool));
-            data.on_pit_road = pit_bool;
-        }
-    }
+    data.on_pit_road = TryInto::<bool>::try_into(telem.get("OnPitRoad").unwrap_or(Value::BOOL(false))).unwrap_or(false);
     
     // Calculate 3D velocity magnitude
     let mut vx: f32 = 0.0;
@@ -253,10 +248,10 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     ];
     
     data.tire_pressures_kpa = [
-        TryInto::<f32>::try_into(telem.get("LFpressure").unwrap_or(Value::FLOAT(0.0))).unwrap(),
-        TryInto::<f32>::try_into(telem.get("RFpressure").unwrap_or(Value::FLOAT(0.0))).unwrap(),
-        TryInto::<f32>::try_into(telem.get("LRpressure").unwrap_or(Value::FLOAT(0.0))).unwrap(),
-        TryInto::<f32>::try_into(telem.get("RRpressure").unwrap_or(Value::FLOAT(0.0))).unwrap()
+        TryInto::<f32>::try_into(telem.get("LFpress").unwrap_or(Value::FLOAT(0.0))).unwrap(),
+        TryInto::<f32>::try_into(telem.get("RFpress").unwrap_or(Value::FLOAT(0.0))).unwrap(),
+        TryInto::<f32>::try_into(telem.get("LRpress").unwrap_or(Value::FLOAT(0.0))).unwrap(),
+        TryInto::<f32>::try_into(telem.get("RRpress").unwrap_or(Value::FLOAT(0.0))).unwrap()
     ];
     
     data.ride_height_mm = [
@@ -306,6 +301,47 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     if data.session_flags & FLAG_BLACK != 0 { data.active_flags.push("BLACK FLAG".to_string()); }
     if data.session_flags & FLAG_BLACK_WHITE != 0 { data.active_flags.push("BLACK/WHITE FLAG".to_string()); }
     
+    // Track Surface - This information shows if you're off-track
+    let track_surf_val = TryInto::<i32>::try_into(telem.get("PlayerTrackSurface").unwrap_or(Value::INT(0))).unwrap_or(0);
+    
+    // Updated mapping based on actual observed values:
+    // 0 = off road (grass), 1 = pit stall, 2 = pit lane, 3 = on track (road)
+    data.track_surface = match track_surf_val {
+        0 => "Off track".to_string(),
+        1 => "In pit stall".to_string(),
+        2 => "Pit lane".to_string(),
+        3 => "On track".to_string(),
+        4 => "Not in world".to_string(),
+        _ => format!("Unknown ({})", track_surf_val),
+    };
+    raw_values.insert("PlayerTrackSurface".to_string(), serde_json::json!(track_surf_val));
+    
+    // Get material value if available
+    if let Ok(material) = telem.get("PlayerTrackSurfaceMaterial") {
+        if let Ok(material_val) = TryInto::<i32>::try_into(material) {
+            raw_values.insert("PlayerTrackSurfaceMaterial".to_string(), serde_json::json!(material_val));
+            
+            // Only use material info if we're off track (value = 0)
+            if track_surf_val == 0 {  // When off track
+                data.track_surface = match material_val {
+                    0 => "Asphalt (off track)".to_string(),
+                    1 => "Concrete (off track)".to_string(),
+                    2 => "Dirt".to_string(),
+                    3 => "Grass".to_string(),
+                    4 => "Sand".to_string(),
+                    5 => "Gravel".to_string(),
+                    6 => "Rumble Strip".to_string(),
+                    7 => "Water".to_string(),
+                    15 => "Grass".to_string(), 
+                    16 => "Grass".to_string(),
+                    19 => "Sand".to_string(),
+                    24 => "Gravel".to_string(), // As observed - common off-track value
+                    _ => format!("Surface Material {}", material_val),
+                };
+            }
+        }
+    }
+    
     // Store the raw values
     data.raw_values = raw_values;
     
@@ -321,6 +357,7 @@ pub fn format_telemetry_display(data: &TelemetryData) -> String {
     display.push_str(&format!("Speed: {:.2} km/h\n", data.speed_kph));
     display.push_str(&format!("RPM: {:.0}\n", data.rpm));
     display.push_str(&format!("Gear: {}\n", data.gear));
+    display.push_str(&format!("Surface: {}\n", data.track_surface));
     
     if data.shift_indicator_pct > 0.0 {
         display.push_str(&format!("Shift Indicator: {:.0}%\n", data.shift_indicator_pct));
