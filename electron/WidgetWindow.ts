@@ -82,6 +82,7 @@ export class WidgetWindowManager {
     // Add any additional parameters
     Object.entries(params).forEach(([key, value]) => {
       queryParams.append(key, String(value));
+      console.log(`Setting param for widget ${widgetId}: ${key}=${value}`);
     });
     
     // Load the widget URL - use a direct approach to ensure parameters are passed correctly
@@ -163,6 +164,32 @@ export class WidgetWindowManager {
       } else {
         win.hide();
       }
+      return true;
+    }
+    return false;
+  }
+  
+  // Update widget parameters by reloading the window with new URL parameters
+  updateWidgetParams(widgetId: string, params: Record<string, any>): boolean {
+    const win = this.windows.get(widgetId);
+    if (win && !win.isDestroyed()) {
+      // Build URL with new parameters
+      const currentUrl = new URL(win.webContents.getURL());
+      const searchParams = new URLSearchParams(currentUrl.search);
+      
+      // Add/update parameters
+      Object.entries(params).forEach(([key, value]) => {
+        searchParams.set(key, String(value));
+        console.log(`Setting param for widget ${widgetId}: ${key}=${value}`);
+      });
+      
+      // Create new URL with updated parameters
+      const newUrl = `${this.mainUrl}?${searchParams.toString()}#/widget`;
+      console.log(`Reloading widget ${widgetId} with URL:`, newUrl);
+      
+      // Reload window with new URL
+      win.loadURL(newUrl);
+      
       return true;
     }
     return false;

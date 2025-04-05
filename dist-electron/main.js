@@ -64,6 +64,7 @@ class WidgetWindowManager {
     queryParams.append("widgetType", widgetType);
     Object.entries(params).forEach(([key, value]) => {
       queryParams.append(key, String(value));
+      console.log(`Setting param for widget ${widgetId}: ${key}=${value}`);
     });
     const widgetUrl = `${this.mainUrl}?${queryParams.toString()}#/widget`;
     console.log("Loading widget URL:", widgetUrl);
@@ -129,6 +130,23 @@ class WidgetWindowManager {
       } else {
         win.hide();
       }
+      return true;
+    }
+    return false;
+  }
+  // Update widget parameters by reloading the window with new URL parameters
+  updateWidgetParams(widgetId, params) {
+    const win = this.windows.get(widgetId);
+    if (win && !win.isDestroyed()) {
+      const currentUrl = new URL(win.webContents.getURL());
+      const searchParams = new URLSearchParams(currentUrl.search);
+      Object.entries(params).forEach(([key, value]) => {
+        searchParams.set(key, String(value));
+        console.log(`Setting param for widget ${widgetId}: ${key}=${value}`);
+      });
+      const newUrl = `${this.mainUrl}?${searchParams.toString()}#/widget`;
+      console.log(`Reloading widget ${widgetId} with URL:`, newUrl);
+      win.loadURL(newUrl);
       return true;
     }
     return false;
@@ -205,12 +223,12 @@ function setupIpcListeners() {
     return { success };
   });
   ipcMain.handle("widget:updateParams", (_, { widgetId, params }) => {
-    const win = widgetManager.getWidgetWindow(widgetId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("widget:params", params);
+    console.log(`Main process received updateParams request for widget ${widgetId}:`, params);
+    if (widgetManager.updateWidgetParams(widgetId, params)) {
       return { success: true };
+    } else {
+      return { success: false, error: "Failed to update widget parameters" };
     }
-    return { success: false };
   });
   ipcMain.on("widget:closeByEscape", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);

@@ -1,6 +1,6 @@
 /// <reference path="../types/electron.d.ts" />
-import React from 'react';
-import { BaseWidget, BaseWidgetProps } from './BaseWidget';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BaseWidgetProps } from './BaseWidget';
 import { withWidgetRegistration } from './WidgetManager';
 
 // Extend WidgetState to include telemetry-specific properties
@@ -14,37 +14,129 @@ interface TelemetryWidgetProps extends BaseWidgetProps {
   metric?: string; // Default metric to display
 }
 
-class TelemetryWidgetBase extends BaseWidget<TelemetryWidgetProps> {
-  constructor(props: TelemetryWidgetProps) {
-    super(props);
+// Telemetry widget as a function component with hooks
+function TelemetryWidgetBase(props: TelemetryWidgetProps) {
+  // Get initial metric from URL or props
+  const getInitialMetric = () => {
+    // Check URL parameters first (highest priority)
+    let initialMetric = props.metric || 'speed_kph';
     
-    // Initialize state with telemetry-specific properties
-    this.state = {
-      ...this.state,
-      selectedMetric: props.metric || 'speed_kph', // Default to speed if not specified
+    // When in Electron, check URL parameters
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const metricParam = searchParams.get('metric');
+      if (metricParam) {
+        console.log(`Found metric in URL parameters: ${metricParam}`);
+        initialMetric = metricParam;
+      }
+    }
+    
+    console.log(`TelemetryWidget initialized with metric: ${initialMetric}`);
+    return initialMetric;
+  };
+
+  // State hooks
+  const [selectedMetric, setSelectedMetric] = useState<string>(getInitialMetric());
+  const [telemetryData, setTelemetryData] = useState<any>(null);
+  const [connected, setConnected] = useState<boolean>(false);
+  
+  // WebSocket reference
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+
+  // Connect to WebSocket for telemetry data
+  const connectWebSocket = useCallback(() => {
+    const wsUrl = 'ws://localhost:8080';
+    
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        console.log('Connected to telemetry WebSocket');
+        setConnected(true);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setTelemetryData(data);
+        } catch (error) {
+          console.error('Failed to parse telemetry data:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('Disconnected from telemetry WebSocket');
+        setConnected(false);
+        
+        // Try to reconnect after a delay
+        reconnectTimerRef.current = window.setTimeout(() => {
+          connectWebSocket();
+        }, 3000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        ws.close();
+      };
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error);
+    }
+  }, []);
+
+  // Disconnect WebSocket
+  const disconnectWebSocket = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
+
+  // Initial setup
+  useEffect(() => {
+    // Connect to WebSocket
+    connectWebSocket();
+    
+    // Set up listener for parameter updates
+    if (window.electronAPI) {
+      console.log(`Widget ${props.id}: Setting up widget:params listener`);
+      window.electronAPI.on('widget:params', (params) => {
+        console.log(`Widget ${props.id}: Received widget:params event:`, params);
+        
+        // Update metric if provided
+        if (params.metric && params.metric !== selectedMetric) {
+          console.log(`Updating metric from ${selectedMetric} to ${params.metric}`);
+          setSelectedMetric(params.metric);
+        }
+      });
+    }
+    
+    // Cleanup function
+    return () => {
+      console.log(`Widget ${props.id} unmounting`);
+      disconnectWebSocket();
+      
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
+      
+      if (window.electronAPI) {
+        window.electronAPI.removeAllListeners('widget:params');
+      }
     };
-  }
+  }, [props.id, connectWebSocket, disconnectWebSocket, selectedMetric]);
 
-  // Handle param updates from the main process
-  handleParamsUpdate = (params: Record<string, any>) => {
-    console.log('TelemetryWidget received params update:', params);
-    
-    // Check if metric parameter is included in the update
-    if (params.metric && params.metric !== this.state.selectedMetric) {
-      this.setState({ selectedMetric: params.metric });
+  // Update based on prop changes
+  useEffect(() => {
+    if (props.metric && props.metric !== selectedMetric) {
+      console.log(`Metric prop changed to ${props.metric}`);
+      setSelectedMetric(props.metric);
     }
-  }
-
-  // When the component receives new props (like a new metric from the control panel)
-  componentDidUpdate(prevProps: TelemetryWidgetProps) {
-    // Check if the metric prop has changed
-    if (prevProps.metric !== this.props.metric && this.props.metric) {
-      this.setState({ selectedMetric: this.props.metric });
-    }
-  }
+  }, [props.metric, selectedMetric]);
 
   // Format the metric value for display
-  formatMetricValue = (metric: string, value: any): string => {
+  const formatMetricValue = useCallback((metric: string, value: any): string => {
     if (value === undefined || value === null) {
       return 'N/A';
     }
@@ -74,13 +166,18 @@ class TelemetryWidgetBase extends BaseWidget<TelemetryWidgetProps> {
         const minutes = Math.floor(value / 60);
         const seconds = value % 60;
         return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
+      case 'fuel_level':
+        return `${value.toFixed(1)}L`;
+      case 'position':
+      case 'lap_completed':
+        return `${value}`;
       default:
         return `${value}`;
     }
-  };
+  }, []);
 
   // Get a user-friendly name for the metric
-  getMetricName = (metric: string): string => {
+  const getMetricName = useCallback((metric: string): string => {
     const metricNames: Record<string, string> = {
       'speed_kph': 'Speed (KPH)',
       'speed_mph': 'Speed (MPH)',
@@ -101,11 +198,10 @@ class TelemetryWidgetBase extends BaseWidget<TelemetryWidgetProps> {
     };
     
     return metricNames[metric] || metric;
-  };
+  }, []);
 
-  renderContent() {
-    const { telemetryData, connected, selectedMetric } = this.state;
-    
+  // Render telemetry content
+  const renderTelemetryContent = () => {
     if (!connected) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-4">
@@ -127,14 +223,29 @@ class TelemetryWidgetBase extends BaseWidget<TelemetryWidgetProps> {
     return (
       <div className="flex flex-col items-center justify-center h-full p-4">
         <div className="text-lg font-semibold">
-          {this.getMetricName(selectedMetric)}
+          {getMetricName(selectedMetric)}
         </div>
         <div className="text-4xl font-bold mt-2">
-          {this.formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
+          {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
         </div>
       </div>
     );
-  }
+  };
+
+  // Render the component
+  return (
+    <div className="widget-container rounded-lg overflow-hidden bg-gray-800 text-white draggable relative"
+         style={{ 
+           width: `${props.defaultWidth || 300}px`, 
+           height: `${props.defaultHeight || 200}px`,
+         }}>
+      {renderTelemetryContent()}
+    </div>
+  );
 }
 
-export const TelemetryWidget = withWidgetRegistration<TelemetryWidgetProps>(TelemetryWidgetBase, 'telemetry'); 
+// Use a simple wrapper to make the function component look like a class component for withWidgetRegistration
+// Create a higher-order component for widget registration
+export const TelemetryWidget = withWidgetRegistration<TelemetryWidgetProps>(
+  TelemetryWidgetBase as any, 'telemetry'
+); 

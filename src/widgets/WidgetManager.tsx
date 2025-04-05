@@ -1,14 +1,14 @@
-import React, { createContext, useContext, useState, useRef } from 'react';
+import React, { createContext, useContext, useState, useRef, forwardRef } from 'react';
 import { BaseWidget, BaseWidgetProps } from './BaseWidget';
 
 interface WidgetRegistration {
   id: string;
   name: string;
-  ref: React.RefObject<BaseWidget>;
+  ref: React.RefObject<BaseWidget | any>;
 }
 
 interface WidgetManagerContextType {
-  registerWidget: (id: string, name: string, ref: React.RefObject<BaseWidget>) => void;
+  registerWidget: (id: string, name: string, ref: React.RefObject<BaseWidget | any>) => void;
   unregisterWidget: (id: string) => void;
   getWidget: (id: string) => WidgetRegistration | undefined;
   getAllWidgets: () => WidgetRegistration[];
@@ -27,7 +27,7 @@ export const useWidgetManager = () => {
 export const WidgetManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [widgets, setWidgets] = useState<WidgetRegistration[]>([]);
 
-  const registerWidget = (id: string, name: string, ref: React.RefObject<BaseWidget>) => {
+  const registerWidget = (id: string, name: string, ref: React.RefObject<BaseWidget | any>) => {
     setWidgets(prevWidgets => {
       const existingWidgetIndex = prevWidgets.findIndex(w => w.id === id);
       if (existingWidgetIndex >= 0) {
@@ -61,33 +61,59 @@ export const WidgetManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
+// Updated to support both class and function components
 export function withWidgetRegistration<P extends BaseWidgetProps>(
-  WrappedWidget: new (props: P) => BaseWidget<P>,
+  WrappedComponent: React.ComponentType<P> | React.FC<P>,
   widgetName: string
 ) {
-  return class WithRegistration extends React.Component<P> {
-    private widgetRef = React.createRef<BaseWidget>();
-    
-    componentDidMount() {
-      const context = this.context as WidgetManagerContextType;
-      if (context) {
-        context.registerWidget(this.props.id, widgetName, this.widgetRef);
+  // For class components that extend BaseWidget
+  const isClassComponent = (WrappedComponent as any).prototype?.isReactComponent;
+  
+  if (isClassComponent) {
+    return class WithRegistration extends React.Component<P> {
+      private widgetRef = React.createRef<BaseWidget>();
+      
+      componentDidMount() {
+        const context = this.context as WidgetManagerContextType;
+        if (context) {
+          context.registerWidget(this.props.id, widgetName, this.widgetRef);
+        }
       }
-    }
-    
-    componentWillUnmount() {
-      const context = this.context as WidgetManagerContextType;
-      if (context) {
-        context.unregisterWidget(this.props.id);
+      
+      componentWillUnmount() {
+        const context = this.context as WidgetManagerContextType;
+        if (context) {
+          context.unregisterWidget(this.props.id);
+        }
       }
-    }
-    
-    render() {
-      return <WrappedWidget ref={this.widgetRef} {...this.props} />;
-    }
-    
-    static contextType = WidgetManagerContext;
-  };
+      
+      render() {
+        return <WrappedComponent ref={this.widgetRef} {...this.props} />;
+      }
+      
+      static contextType = WidgetManagerContext;
+    };
+  } else {
+    // For function components
+    return forwardRef<any, P>((props, ref) => {
+      const widgetRef = useRef<any>(null);
+      const managerContext = useContext(WidgetManagerContext);
+      
+      React.useEffect(() => {
+        if (managerContext) {
+          managerContext.registerWidget(props.id, widgetName, widgetRef);
+        }
+        
+        return () => {
+          if (managerContext) {
+            managerContext.unregisterWidget(props.id);
+          }
+        };
+      }, [props.id, managerContext]);
+      
+      return <WrappedComponent {...(props as any)} />;
+    });
+  }
 }
 
 // Custom hook to create a widget ref

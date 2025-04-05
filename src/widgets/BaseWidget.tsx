@@ -63,7 +63,13 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
     
     // Listen for parameter updates from the main process
     if (window.electronAPI) {
-      window.electronAPI.on('widget:params', this.handleParamsUpdate);
+      console.log(`Widget ${this.props.id}: Setting up widget:params listener`);
+      window.electronAPI.on('widget:params', (params) => {
+        console.log(`Widget ${this.props.id}: Received widget:params event:`, params);
+        this.handleParamsUpdate(params);
+      });
+    } else {
+      console.warn(`Widget ${this.props.id}: electronAPI not available`);
     }
   }
   
@@ -87,7 +93,8 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
   // Handle parameter updates from the main process
   handleParamsUpdate = (params: Record<string, any>) => {
     // This method can be overridden by child widgets to handle specific parameters
-    console.log('Widget received parameter update:', params);
+    console.log(`BaseWidget ${this.props.id} received parameter update:`, params);
+    console.log(`BaseWidget instance:`, this);
     
     // The base implementation does nothing with the params
     // Child widgets can use componentDidUpdate to respond to prop changes
@@ -191,7 +198,7 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
 
     return (
       <div 
-        className="widget-container rounded-lg overflow-hidden bg-white draggable relative"
+        className="widget-container rounded-lg overflow-hidden bg-gray-800 text-white draggable relative"
         style={{ 
           opacity, 
           width: `${width}px`, 

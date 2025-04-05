@@ -19,11 +19,11 @@ const ClockWidgetComponent = (props: any) => {
   }, []);
   
   return (
-    <div className="p-4 flex flex-col items-center justify-center h-full">
+    <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
       <div className="text-4xl font-bold">
         {time.toLocaleTimeString()}
       </div>
-      <div className="text-md mt-2">
+      <div className="text-md mt-2 text-gray-300">
         {time.toDateString()}
       </div>
     </div>
@@ -32,22 +32,30 @@ const ClockWidgetComponent = (props: any) => {
 
 const WeatherWidgetComponent = (props: any) => {
   return (
-    <div className="p-4 flex flex-col items-center justify-center h-full">
+    <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
       <div className="text-xl font-semibold mb-2">Weather</div>
-      <div className="text-sm text-gray-600 mb-4">{props.location || 'Current Location'}</div>
+      <div className="text-sm text-gray-300 mb-4">{props.location || 'Current Location'}</div>
       <div className="text-5xl">☀️</div>
       <div className="text-3xl font-bold mt-2">23°C</div>
-      <div className="text-gray-600">Sunny</div>
+      <div className="text-gray-300">Sunny</div>
     </div>
   );
 };
 
-// Add the TelemetryWidgetComponent
+// Add the TelemetryWidgetComponent - WITHOUT dropdown
 const TelemetryWidgetComponent = (props: any) => {
   const [telemetryData, setTelemetryData] = useState<any>(null);
   const [connected, setConnected] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState(props.metric || 'speed_kph');
   const wsRef = React.useRef<WebSocket | null>(null);
+  
+  // Update metric when props change
+  useEffect(() => {
+    if (props.metric && props.metric !== selectedMetric) {
+      console.log(`Setting metric from props: ${props.metric}`);
+      setSelectedMetric(props.metric);
+    }
+  }, [props.metric, selectedMetric]);
   
   useEffect(() => {
     // Connect to WebSocket
@@ -127,6 +135,11 @@ const TelemetryWidgetComponent = (props: any) => {
         const minutes = Math.floor(value / 60);
         const seconds = value % 60;
         return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
+      case 'fuel_level':
+        return `${value.toFixed(1)}L`;
+      case 'position':
+      case 'lap_completed':
+        return `${value}`;
       default:
         return `${value}`;
     }
@@ -158,50 +171,27 @@ const TelemetryWidgetComponent = (props: any) => {
   
   if (!connected) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center h-full">
-        <div className="text-red-500 font-bold mb-2">Disconnected</div>
-        <div className="text-sm">Attempting to connect...</div>
+      <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
+        <div className="text-red-400 font-bold mb-2">Disconnected</div>
+        <div className="text-sm text-gray-300">Attempting to connect...</div>
       </div>
     );
   }
   
   if (!telemetryData) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center h-full">
-        <div className="text-blue-500 font-bold mb-2">Connected</div>
-        <div className="text-sm">Waiting for data...</div>
+      <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
+        <div className="text-blue-400 font-bold mb-2">Connected</div>
+        <div className="text-sm text-gray-300">Waiting for data...</div>
       </div>
     );
   }
   
-  // Get available metrics from the telemetry data
-  const metrics = Object.keys(telemetryData).filter(key => 
-    typeof telemetryData[key] !== 'object' && 
-    !Array.isArray(telemetryData[key]) &&
-    key !== 'raw_values' &&
-    key !== 'warnings' &&
-    key !== 'active_flags' &&
-    key !== 'session_flags'
-  );
-  
+  // Display the single selected metric
   return (
-    <div className="p-4 flex flex-col h-full">
-      <div className="mb-3">
-        <select 
-          value={selectedMetric}
-          onChange={(e) => setSelectedMetric(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded text-sm"
-        >
-          {metrics.map((metric) => (
-            <option key={metric} value={metric}>
-              {getMetricName(metric)}
-            </option>
-          ))}
-        </select>
-      </div>
-      
+    <div className="p-4 flex flex-col h-full bg-gray-800 text-white">
       <div className="flex-grow flex flex-col items-center justify-center">
-        <div className="text-lg font-semibold">
+        <div className="text-lg font-semibold text-gray-300">
           {getMetricName(selectedMetric)}
         </div>
         <div className="text-4xl font-bold mt-2">
@@ -248,119 +238,82 @@ export const WidgetContainer: React.FC = () => {
         // Parse additional parameters
         const params: Record<string, any> = {};
         searchParams.forEach((value, key) => {
+          // Skip the widget ID and type
           if (key !== 'widgetId' && key !== 'widgetType') {
-            // Convert boolean strings
-            if (value === 'true') params[key] = true;
-            else if (value === 'false') params[key] = false;
-            // Convert numbers
-            else if (!isNaN(Number(value))) params[key] = Number(value);
-            else params[key] = value;
+            params[key] = value;
           }
         });
         
         setWidgetId(id);
         setWidgetType(type);
         setWidgetParams(params);
+        
+        console.log('Widget parameters:', params);
+        
+        // Listen for messages from the main process
+        if (window.electronAPI) {
+          // Set up event listeners
+          window.electronAPI.on('widget:opacity', (opacity: number) => {
+            console.log(`Setting widget opacity to ${opacity}`);
+            setOpacity(opacity);
+          });
+          
+          // Listen for widget:params events
+          window.electronAPI.on('widget:params', (params: Record<string, any>) => {
+            console.log('Received widget params update:', params);
+            setWidgetParams(prev => ({ ...prev, ...params }));
+          });
+        }
       } catch (error) {
-        console.error('Failed to get window parameters:', error);
+        console.error('Error getting window parameters:', error);
       }
     };
     
     getWindowParams();
     
-    // Listen for opacity changes
-    const handleOpacityChange = (newOpacity: number) => {
-      console.log('Received opacity change:', newOpacity);
-      setOpacity(newOpacity);
-    };
-    
-    window.electronAPI.on('widget:opacity', handleOpacityChange);
-    
-    // Add keyboard handler for Escape key to close widget
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && window.electronAPI) {
-        console.log('Escape key pressed - closing widget');
-        window.electronAPI.send('widget:closeByEscape');
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    
     return () => {
-      window.electronAPI.removeAllListeners('widget:opacity');
-      window.removeEventListener('keydown', handleKeyDown);
+      // Cleanup event listeners
+      if (window.electronAPI) {
+        window.electronAPI.removeAllListeners('widget:opacity');
+        window.electronAPI.removeAllListeners('widget:params');
+      }
     };
   }, []);
   
-  // Debug output
-  console.log('Widget container state:', { widgetId, widgetType, params: widgetParams, opacity });
-  
-  const widgetProps = {
-    id: widgetId,
-    ...widgetParams
+  // Render based on widget type
+  const renderWidget = () => {
+    console.log(`Rendering widget of type ${widgetType} with params:`, widgetParams);
+    
+    switch (widgetType) {
+      case 'clock':
+        return <ClockWidgetComponent {...widgetParams} />;
+      case 'weather':
+        return <WeatherWidgetComponent {...widgetParams} />;
+      case 'telemetry':
+        return <TelemetryWidgetComponent {...widgetParams} />;
+      default:
+        return (
+          <div className="p-4">
+            <h2>Unknown Widget Type: {widgetType}</h2>
+            <div>ID: {widgetId}</div>
+            <pre>{JSON.stringify(widgetParams, null, 2)}</pre>
+          </div>
+        );
+    }
   };
   
-  // Setup CSS for the container
-  const containerStyle = {
-    opacity,
-    height: '100%',
-    width: '100%',
-    cursor: 'default', // Show default cursor for draggable area
-  };
-  
-  // CSS for areas we don't want draggable (like buttons)
-  const noDragStyle = {
-    WebkitAppRegion: 'no-drag' as any,
-  };
-  
-  // Basic error checking
-  if (!widgetId || !widgetType) {
-    return (
-      <div className="error-container p-4 bg-red-100 text-red-800 rounded draggable" style={containerStyle}>
-        <h3 className="font-bold mb-2">Widget Parameters Missing</h3>
-        <p>Required URL parameters missing:</p>
-        <ul className="list-disc ml-5 mt-2 non-draggable">
-          {!widgetId && <li>widgetId</li>}
-          {!widgetType && <li>widgetType</li>}
-        </ul>
-        <p className="mt-2 text-sm">URL Parameters:</p>
-        <pre className="mt-1 p-2 bg-gray-100 text-xs rounded non-draggable">
-          {JSON.stringify({ search: window.location.search }, null, 2)}
-        </pre>
-      </div>
-    );
-  }
-  
-  // Render widget based on type
   return (
-    <div className="widget-container h-full draggable" style={containerStyle}>
-      {widgetType === 'clock' && (
-        <div className="p-4 flex flex-col items-center justify-center h-full">
-          <ClockWidgetComponent {...widgetProps} />
-        </div>
-      )}
-      {widgetType === 'weather' && (
-        <div className="p-4 flex flex-col items-center justify-center h-full">
-          <WeatherWidgetComponent {...widgetProps} />
-        </div>
-      )}
-      {widgetType === 'telemetry' && (
-        <div className="p-4 flex flex-col items-center justify-center h-full">
-          <TelemetryWidgetComponent {...widgetProps} />
-        </div>
-      )}
-      {widgetType !== 'clock' && widgetType !== 'weather' && widgetType !== 'telemetry' && (
-        <div className="error-container p-4 bg-red-100 text-red-800 rounded">
-          <h3 className="font-bold mb-2">Unknown Widget Type</h3>
-          <p>Widget type "{widgetType}" is not supported.</p>
-          <p className="mt-2">Supported types:</p>
-          <ul className="list-disc ml-5 non-draggable">
-            <li>clock</li>
-            <li>weather</li>
-            <li>telemetry</li>
-          </ul>
-        </div>
-      )}
+    <div className="widget-window" style={{ opacity }}>
+      <div 
+        className="h-screen w-screen overflow-hidden bg-transparent cursor-move"
+        style={{ 
+          // For Electron drag support
+          // @ts-ignore
+          WebkitAppRegion: 'drag'
+        }}
+      >
+        {renderWidget()}
+      </div>
     </div>
   );
 }; 

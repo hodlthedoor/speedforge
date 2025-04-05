@@ -3,20 +3,7 @@ import { ClockWidget } from '../widgets/ClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { TelemetryWidget } from '../widgets/TelemetryWidget';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      widgets: {
-        create: (options: any) => Promise<{ success: boolean, id: string }>;
-        close: (widgetId: string) => Promise<{ success: boolean }>;
-        getAll: () => Promise<{ success: boolean, widgets: string[] }>;
-        setPosition: (widgetId: string, x: number, y: number) => Promise<{ success: boolean }>;
-        setSize: (widgetId: string, width: number, height: number) => Promise<{ success: boolean }>;
-        setAlwaysOnTop: (widgetId: string, alwaysOnTop: boolean) => Promise<{ success: boolean }>;
-      };
-    };
-  }
-}
+/// <reference path="../types/electron.d.ts" />
 
 interface WidgetContainerProps {
   id: string;
@@ -108,7 +95,11 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({
     return (
       <div 
         className="h-screen w-screen overflow-hidden bg-transparent cursor-move"
-        style={{ WebkitAppRegion: 'drag' }}
+        style={{ 
+          // For Electron drag support
+          // @ts-ignore
+          WebkitAppRegion: 'drag'
+        }}
       >
         <div className="widget-content">
           {renderWidget()}

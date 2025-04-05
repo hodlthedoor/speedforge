@@ -256,15 +256,27 @@ export const ControlPanel: React.FC = () => {
   const updateWidgetParams = async (widgetId: string, params: Record<string, any>) => {
     if (!isElectron) return;
     
+    console.log(`Updating widget ${widgetId} with params:`, params);
+    
+    // Update params in our React state
     setWidgets(prevWidgets => 
       prevWidgets.map(w => {
         if (w.id === widgetId) {
           const updatedParams = { ...w.params, ...params };
           
-          // If the widget is already launched, update it
+          // If the widget is already launched, update it via IPC
           if (w.isLaunched && window.electronAPI) {
+            console.log(`Sending params update to widget ${widgetId}:`, updatedParams);
             window.electronAPI.widgets.updateParams(widgetId, updatedParams)
+              .then(result => {
+                console.log(`Update result for ${widgetId}:`, result);
+                if (!result.success) {
+                  console.error(`Failed to update widget ${widgetId}`);
+                }
+              })
               .catch(error => console.error('Failed to update widget params:', error));
+          } else {
+            console.log(`Widget ${widgetId} not launched, only updating local state`);
           }
           
           return { ...w, params: updatedParams };

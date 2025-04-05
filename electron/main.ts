@@ -106,13 +106,14 @@ function setupIpcListeners() {
   
   // Update widget parameters
   ipcMain.handle('widget:updateParams', (_, { widgetId, params }: { widgetId: string, params: Record<string, any> }) => {
-    const win = widgetManager.getWidgetWindow(widgetId);
-    if (win && !win.isDestroyed()) {
-      // Send the updated parameters to the renderer process
-      win.webContents.send('widget:params', params);
+    console.log(`Main process received updateParams request for widget ${widgetId}:`, params);
+    
+    // Use the new method to reload the widget with updated parameters
+    if (widgetManager.updateWidgetParams(widgetId, params)) {
       return { success: true };
+    } else {
+      return { success: false, error: 'Failed to update widget parameters' };
     }
-    return { success: false };
   });
   
   // Handle Escape key to close widgets
