@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Rust build output
+/target/
+**/target/
+rust_app/target/
+Cargo.lock
+**/*.rs.bk
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

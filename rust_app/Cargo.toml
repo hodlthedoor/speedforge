@@ -5,3 +5,9 @@ edition = "2024"
 
 [dependencies]
 iracing = "0.4.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.20"
+futures-util = "0.3"
+futures = "0.3"
