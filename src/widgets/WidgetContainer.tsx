@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 
 // Import the TelemetryWidget
 import { TelemetryWidget } from './TelemetryWidget';
+import { TraceWidget } from '../widgets/TraceWidget';
 
 // Direct widget components for testing
 const ClockWidgetComponent = (props: any) => {
@@ -200,6 +201,187 @@ const TelemetryWidgetComponent = (props: any) => {
   );
 };
 
+const TraceWidgetComponent = (props: any) => {
+  const [telemetryData, setTelemetryData] = useState<any>(null);
+  const [connected, setConnected] = useState(false);
+  const [throttleHistory, setThrottleHistory] = useState<number[]>([]);
+  const [brakeHistory, setBrakeHistory] = useState<number[]>([]);
+  const wsRef = React.useRef<WebSocket | null>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  
+  // Get trace length from props or use default
+  const traceLength = props.traceLength || 75;
+  
+  useEffect(() => {
+    // Connect to WebSocket
+    const connectWebSocket = () => {
+      const wsUrl = 'ws://localhost:8080';
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('Connected to telemetry WebSocket');
+        setConnected(true);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setTelemetryData(data);
+          
+          // Update throttle and brake history
+          if (data && typeof data.throttle_pct === 'number' && typeof data.brake_pct === 'number') {
+            setThrottleHistory(prev => {
+              const newHistory = [...prev, data.throttle_pct];
+              return newHistory.slice(-traceLength);
+            });
+            
+            setBrakeHistory(prev => {
+              const newHistory = [...prev, data.brake_pct];
+              return newHistory.slice(-traceLength);
+            });
+          }
+        } catch (error) {
+          console.error('Failed to parse telemetry data:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('Disconnected from telemetry WebSocket');
+        setConnected(false);
+        
+        // Try to reconnect after a delay
+        setTimeout(() => {
+          connectWebSocket();
+        }, 3000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        ws.close();
+      };
+      
+      wsRef.current = ws;
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [traceLength]);
+  
+  // Draw function for the canvas
+  const drawTrace = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Get canvas dimensions
+    const { width, height } = canvas;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Set background
+    ctx.fillStyle = '#1f2937';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Set line styles
+    ctx.lineWidth = 2;
+    
+    // Only draw if we have data
+    if (throttleHistory.length > 0 && brakeHistory.length > 0) {
+      // Calculate x step
+      const xStep = width / (traceLength - 1);
+      
+      // Apply padding at top and bottom (5% of height)
+      const paddingY = height * 0.05;
+      const graphHeight = height - (paddingY * 2);
+      
+      // Draw throttle trace
+      ctx.strokeStyle = '#34d399'; // Green
+      ctx.beginPath();
+      throttleHistory.forEach((value, index) => {
+        const x = index * xStep;
+        // Apply padding to keep values from touching top and bottom
+        const y = paddingY + (graphHeight - (value / 100 * graphHeight));
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+      
+      // Draw brake trace
+      ctx.strokeStyle = '#ef4444'; // Red
+      ctx.beginPath();
+      brakeHistory.forEach((value, index) => {
+        const x = index * xStep;
+        // Apply padding to keep values from touching top and bottom
+        const y = paddingY + (graphHeight - (value / 100 * graphHeight));
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    }
+  };
+  
+  // Draw trace whenever data changes
+  useEffect(() => {
+    drawTrace();
+  }, [throttleHistory, brakeHistory, telemetryData]);
+  
+  // Resize handling
+  useEffect(() => {
+    const handleResize = () => {
+      if (canvasRef.current) {
+        const container = canvasRef.current.parentElement;
+        if (container) {
+          canvasRef.current.width = container.clientWidth;
+          canvasRef.current.height = container.clientHeight;
+          drawTrace();
+        }
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    // Initial sizing
+    handleResize();
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+  
+  if (!connected) {
+    return (
+      <div className="widget-content" style={{ backgroundColor: '#1f2937', height: '100%', width: '100%', padding: 0, margin: 0 }}>
+        <div className="status-disconnected">Disconnected</div>
+        <div className="status-message">Attempting to connect...</div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="widget-content" style={{ backgroundColor: '#1f2937', height: '100%', width: '100%', padding: 0, margin: 0 }}>
+      <canvas 
+        ref={canvasRef} 
+        width="300" 
+        height="200"
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  );
+};
+
 export const WidgetContainer: React.FC = () => {
   const [opacity, setOpacity] = useState(1);
   const [widgetId, setWidgetId] = useState('');
@@ -319,6 +501,12 @@ export const WidgetContainer: React.FC = () => {
       return (
         <div className="widget" style={{ width: '100%', height: '100%' }}>
           <TelemetryWidgetComponent metric={widgetParams.metric} />
+        </div>
+      );
+    } else if (widgetType === 'trace') {
+      return (
+        <div className="widget" style={{ width: '100%', height: '100%' }}>
+          <TraceWidgetComponent traceLength={widgetParams.traceLength} />
         </div>
       );
     } else {

@@ -5,12 +5,14 @@ import { WidgetContainer } from './WidgetContainer';
 
 interface WidgetConfig {
   id: string;
-  type: 'clock' | 'weather' | 'telemetry';
+  type: 'clock' | 'weather' | 'telemetry' | 'trace';
   name: string;
   params?: Record<string, any>;
   isLaunched: boolean;
   isVisible: boolean;
   opacity: number;
+  width: number;
+  height: number;
 }
 
 // For getting available telemetry metrics
@@ -33,11 +35,19 @@ const defaultTelemetryMetrics = [
   { value: 'lap_completed', label: 'Lap' }
 ];
 
+// Define available widget types
+const availableWidgets = [
+  { id: 'clock', type: 'clock', name: 'Clock' },
+  { id: 'weather', type: 'weather', name: 'Weather' },
+  { id: 'telemetry', type: 'telemetry', name: 'Telemetry' },
+  { id: 'trace', type: 'trace', name: 'Throttle/Brake Trace' },
+];
+
 export const ControlPanel: React.FC = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
-    { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false, showTelemetry: true }, isLaunched: false, isVisible: true, opacity: 1 },
-    { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1 },
-    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1 }
+    { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false, showTelemetry: true }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
+    { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
+    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 }
   ]);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
   const [availableTelemetryMetrics, setAvailableTelemetryMetrics] = useState(defaultTelemetryMetrics);
@@ -163,8 +173,8 @@ export const ControlPanel: React.FC = () => {
       const result = await window.electronAPI.widgets.create({
         widgetId: widget.id,
         widgetType: widget.type.toLowerCase(),
-        width: 300,
-        height: 200,
+        width: widget.width,
+        height: widget.height,
         params: widget.params,
       });
       
@@ -175,6 +185,11 @@ export const ControlPanel: React.FC = () => {
             w.id === widget.id ? { ...w, isLaunched: true } : w
           )
         );
+        
+        // Apply the stored opacity to the newly launched widget
+        if (widget.opacity !== 1.0) {
+          await window.electronAPI.widgets.setOpacity(widget.id, widget.opacity);
+        }
       }
     } catch (error) {
       console.error('Failed to launch widget:', error);
@@ -238,6 +253,13 @@ export const ControlPanel: React.FC = () => {
     
     try {
       await window.electronAPI.widgets.setSize(widgetId, width, height);
+      
+      // Update the widget state to reflect size change
+      setWidgets(prevWidgets => 
+        prevWidgets.map(w => 
+          w.id === widgetId ? { ...w, width, height } : w
+        )
+      );
     } catch (error) {
       console.error('Failed to set widget size:', error);
     }
@@ -299,6 +321,86 @@ export const ControlPanel: React.FC = () => {
     } catch (error) {
       console.error('Failed to quit application:', error);
     }
+  };
+
+  // Create a new widget
+  const createWidget = async (type: string) => {
+    // Find the widget configuration from available widgets
+    const widgetConfig = availableWidgets.find(w => w.type === type);
+    if (!widgetConfig) {
+      console.error(`Unknown widget type: ${type}`);
+      return;
+    }
+
+    // Generate a unique ID
+    const id = `${type}-${Date.now()}`;
+    
+    // Set default parameters based on widget type
+    let params: Record<string, any> = {};
+    let width = 300;
+    let height = 200;
+    
+    if (type === 'clock') {
+      params = { format24h: false, showTelemetry: false };
+    } else if (type === 'weather') {
+      params = { location: 'New York' };
+    } else if (type === 'telemetry') {
+      params = { metric: 'speed_kph' };
+    } else if (type === 'trace') {
+      params = { traceLength: 75 };
+      width = 500;
+      height = 160;
+    }
+    
+    // Create widget through Electron
+    try {
+      const result = await window.electronAPI.widgets.create({
+        widgetId: id,
+        widgetType: type,
+        width,
+        height,
+        params
+      });
+      
+      if (result.success) {
+        // Add widget to local state
+        setWidgets(prev => [...prev, {
+          id,
+          type: type as any,
+          name: widgetConfig.name,
+          params,
+          isLaunched: true,
+          isVisible: true,
+          opacity: 1.0,
+          width,
+          height
+        }]);
+      } else {
+        console.error('Failed to create widget');
+      }
+    } catch (error) {
+      console.error('Error creating widget:', error);
+    }
+  };
+
+  // Button to add a new widget section
+  const renderAddWidgetSection = () => {
+    return (
+      <div className="bg-white shadow-md rounded-lg p-4 mb-4">
+        <h2 className="text-lg font-semibold mb-3">Add Widget</h2>
+        <div className="flex flex-wrap gap-2">
+          {availableWidgets.map((widget) => (
+            <button
+              key={widget.type}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+              onClick={() => createWidget(widget.type)}
+            >
+              {widget.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -412,6 +514,31 @@ export const ControlPanel: React.FC = () => {
                       </select>
                     </div>
                   )}
+
+                  {/* Add trace length slider for trace widgets */}
+                  {widget.type === 'trace' && widget.isLaunched && (
+                    <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Trace Length: {widget.params?.traceLength || 75} points
+                      </label>
+                      <input 
+                        type="range" 
+                        min="25" 
+                        max="200" 
+                        step="25"
+                        value={widget.params?.traceLength || 75}
+                        className="w-full"
+                        onChange={(e) => {
+                          const traceLength = parseInt(e.target.value);
+                          updateWidgetParams(widget.id, { traceLength });
+                        }}
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Faster</span>
+                        <span>Slower</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -480,6 +607,32 @@ export const ControlPanel: React.FC = () => {
             </div>
           )}
           
+          {activeWidget.type === 'trace' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Trace Length: {activeWidget.params?.traceLength || 75} points
+              </label>
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="range" 
+                  min="25" 
+                  max="200" 
+                  step="25"
+                  value={activeWidget.params?.traceLength || 75}
+                  className="w-full"
+                  onChange={(e) => {
+                    const traceLength = parseInt(e.target.value);
+                    updateWidgetParams(activeWidget.id, { traceLength });
+                  }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Faster</span>
+                <span>Slower</span>
+              </div>
+            </div>
+          )}
+          
           {activeWidget.type === 'clock' && (
             <div className="mb-4">
               <label className="flex items-center space-x-2 mb-3">
@@ -515,13 +668,12 @@ export const ControlPanel: React.FC = () => {
                 type="number" 
                 min="50" 
                 max="800" 
-                defaultValue="300"
+                value={activeWidget.width}
                 className="border border-gray-300 rounded px-2 py-1 w-full"
                 onChange={(e) => {
                   const width = parseInt(e.target.value);
-                  const height = 200; // You would get this from the widget
                   if (!isNaN(width)) {
-                    setWidgetSize(activeWidget.id, width, height);
+                    setWidgetSize(activeWidget.id, width, activeWidget.height);
                   }
                 }}
               />
@@ -534,13 +686,12 @@ export const ControlPanel: React.FC = () => {
                 type="number" 
                 min="50" 
                 max="800" 
-                defaultValue="200"
+                value={activeWidget.height}
                 className="border border-gray-300 rounded px-2 py-1 w-full"
                 onChange={(e) => {
                   const height = parseInt(e.target.value);
-                  const width = 300; // You would get this from the widget
                   if (!isNaN(height)) {
-                    setWidgetSize(activeWidget.id, width, height);
+                    setWidgetSize(activeWidget.id, activeWidget.width, height);
                   }
                 }}
               />
@@ -561,6 +712,8 @@ export const ControlPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {renderAddWidgetSection()}
     </div>
   );
 }; 
