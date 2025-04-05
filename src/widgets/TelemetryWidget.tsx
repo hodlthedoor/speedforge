@@ -204,28 +204,28 @@ function TelemetryWidgetBase(props: TelemetryWidgetProps) {
   const renderTelemetryContent = () => {
     if (!connected) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-4">
-          <div className="text-red-500 font-bold mb-2">Disconnected</div>
-          <div className="text-sm">Attempting to connect...</div>
+        <div className="widget-content">
+          <div className="status-disconnected">Disconnected</div>
+          <div className="status-message">Attempting to connect...</div>
         </div>
       );
     }
     
     if (!telemetryData) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-4">
-          <div className="text-blue-500 font-bold mb-2">Connected</div>
-          <div className="text-sm">Waiting for data...</div>
+        <div className="widget-content">
+          <div className="status-connected">Connected</div>
+          <div className="status-message">Waiting for data...</div>
         </div>
       );
     }
     
     return (
-      <div className="flex flex-col items-center justify-center h-full p-4">
-        <div className="text-lg font-semibold">
+      <div className="widget-content">
+        <div className="widget-label">
           {getMetricName(selectedMetric)}
         </div>
-        <div className="text-4xl font-bold mt-2">
+        <div className="widget-value">
           {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
         </div>
       </div>
@@ -234,10 +234,10 @@ function TelemetryWidgetBase(props: TelemetryWidgetProps) {
 
   // Render the component
   return (
-    <div className="widget-container rounded-lg overflow-hidden bg-gray-800 text-white draggable relative"
+    <div className="widget telemetry-widget"
          style={{ 
            width: `${props.defaultWidth || 300}px`, 
-           height: `${props.defaultHeight || 200}px`,
+           height: `${props.defaultHeight || 200}px`
          }}>
       {renderTelemetryContent()}
     </div>

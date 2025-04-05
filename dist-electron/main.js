@@ -24,12 +24,14 @@ class WidgetWindowManager {
       // No window frame
       transparent: true,
       // Transparent background
-      backgroundColor: "#00000000",
-      // Fully transparent
+      backgroundColor: "#1f2937",
+      // Match the dark background color
       webPreferences: {
         preload: path.join(__dirname$1, "preload.js"),
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        webSecurity: false
+        // Allow loading of local resources
       },
       alwaysOnTop,
       skipTaskbar: true,
@@ -165,7 +167,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false
     },
     // Standard window with controls
     frame: true,

@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -40,11 +40,12 @@ export class WidgetWindowManager {
       y,
       frame: false,                   // No window frame
       transparent: true,              // Transparent background
-      backgroundColor: '#00000000',   // Fully transparent
+      backgroundColor: '#1f2937',     // Match the dark background color
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
+        webSecurity: false            // Allow loading of local resources
       },
       alwaysOnTop,
       skipTaskbar: true,

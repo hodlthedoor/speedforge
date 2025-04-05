@@ -171,32 +171,30 @@ const TelemetryWidgetComponent = (props: any) => {
   
   if (!connected) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
-        <div className="text-red-400 font-bold mb-2">Disconnected</div>
-        <div className="text-sm text-gray-300">Attempting to connect...</div>
+      <div className="widget-content" style={{ backgroundColor: '#1f2937', height: '100%', width: '100%', padding: 0, margin: 0 }}>
+        <div className="status-disconnected">Disconnected</div>
+        <div className="status-message">Attempting to connect...</div>
       </div>
     );
   }
   
   if (!telemetryData) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
-        <div className="text-blue-400 font-bold mb-2">Connected</div>
-        <div className="text-sm text-gray-300">Waiting for data...</div>
+      <div className="widget-content" style={{ backgroundColor: '#1f2937', height: '100%', width: '100%', padding: 0, margin: 0 }}>
+        <div className="status-connected">Connected</div>
+        <div className="status-message">Waiting for data...</div>
       </div>
     );
   }
   
   // Display the single selected metric
   return (
-    <div className="p-4 flex flex-col h-full bg-gray-800 text-white">
-      <div className="flex-grow flex flex-col items-center justify-center">
-        <div className="text-lg font-semibold text-gray-300">
-          {getMetricName(selectedMetric)}
-        </div>
-        <div className="text-4xl font-bold mt-2">
-          {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
-        </div>
+    <div className="widget-content" style={{ backgroundColor: '#1f2937', height: '100%', width: '100%', padding: 0, margin: 0 }}>
+      <div className="widget-label">
+        {getMetricName(selectedMetric)}
+      </div>
+      <div className="widget-value">
+        {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
       </div>
     </div>
   );
@@ -280,40 +278,79 @@ export const WidgetContainer: React.FC = () => {
     };
   }, []);
   
+  // Make sure to apply styles to html and body as well
+  useEffect(() => {
+    // Apply styles to HTML and body elements to ensure full coverage
+    document.documentElement.style.backgroundColor = '#1f2937';
+    document.documentElement.style.margin = '0';
+    document.documentElement.style.padding = '0';
+    document.documentElement.style.height = '100%';
+    document.documentElement.style.width = '100%';
+    document.documentElement.style.overflow = 'hidden';
+    
+    document.body.style.backgroundColor = '#1f2937';
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.height = '100%';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }, []);
+  
   // Render based on widget type
   const renderWidget = () => {
-    console.log(`Rendering widget of type ${widgetType} with params:`, widgetParams);
+    console.log(`Rendering widget: ${widgetType} with params:`, widgetParams);
     
-    switch (widgetType) {
-      case 'clock':
-        return <ClockWidgetComponent {...widgetParams} />;
-      case 'weather':
-        return <WeatherWidgetComponent {...widgetParams} />;
-      case 'telemetry':
-        return <TelemetryWidgetComponent {...widgetParams} />;
-      default:
-        return (
-          <div className="p-4">
-            <h2>Unknown Widget Type: {widgetType}</h2>
-            <div>ID: {widgetId}</div>
-            <pre>{JSON.stringify(widgetParams, null, 2)}</pre>
+    if (widgetType === 'clock') {
+      return (
+        <div className="widget" style={{ width: '100%', height: '100%' }}>
+          <ClockWidgetComponent 
+            format24h={widgetParams.format24h} 
+            showTelemetry={widgetParams.showTelemetry}
+          />
+        </div>
+      );
+    } else if (widgetType === 'weather') {
+      return (
+        <div className="widget" style={{ width: '100%', height: '100%' }}>
+          <WeatherWidgetComponent location={widgetParams.location} />
+        </div>
+      );
+    } else if (widgetType === 'telemetry') {
+      return (
+        <div className="widget" style={{ width: '100%', height: '100%' }}>
+          <TelemetryWidgetComponent metric={widgetParams.metric} />
+        </div>
+      );
+    } else {
+      return (
+        <div className="widget" style={{ width: '100%', height: '100%' }}>
+          <div className="widget-content">
+            <div className="status-message">Unknown widget type: {widgetType}</div>
           </div>
-        );
+        </div>
+      );
     }
   };
   
   return (
-    <div className="widget-window" style={{ opacity }}>
-      <div 
-        className="h-screen w-screen overflow-hidden bg-transparent cursor-move"
-        style={{ 
-          // For Electron drag support
-          // @ts-ignore
-          WebkitAppRegion: 'drag'
-        }}
-      >
-        {renderWidget()}
-      </div>
+    <div style={{ 
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: '100vh', 
+      width: '100vw', 
+      opacity,
+      backgroundColor: '#1f2937',
+      padding: 0,
+      margin: 0,
+      border: 'none',
+      overflow: 'hidden',
+      // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron but not recognized by TypeScript
+      WebkitAppRegion: 'drag' // Add this to make the widget draggable
+    }}>
+      {renderWidget()}
     </div>
   );
 }; 
