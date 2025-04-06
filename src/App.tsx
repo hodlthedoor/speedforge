@@ -41,8 +41,8 @@ function App() {
           <WidgetContainer />
         </div>
       ) : (
-        // Main control panel mode
-        <div className="min-h-screen bg-gray-200 p-8">
+        // Main control panel mode with explicit scrolling enabled
+        <div className="min-h-screen bg-gray-200 p-8 overflow-y-auto">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold mb-6">Widget Dashboard</h1>
             <ControlPanel />

@@ -30,8 +30,10 @@ class WidgetWindowManager {
         preload: path.join(__dirname$1, "preload.js"),
         nodeIntegration: false,
         contextIsolation: true,
-        webSecurity: false
+        webSecurity: false,
         // Allow loading of local resources
+        scrollBounce: false
+        // Improves scrollbar behavior
       },
       alwaysOnTop,
       skipTaskbar: true,
@@ -168,7 +170,8 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false
+      webSecurity: false,
+      scrollBounce: false
     },
     // Standard window with controls
     frame: true,

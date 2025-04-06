@@ -23,12 +23,13 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false
+      webSecurity: false,
+      scrollBounce: false
     },
     // Standard window with controls
     frame: true,
     transparent: false,
-    titleBarStyle: 'default',
+    titleBarStyle: 'default'
   });
 
   // Test active push message to Renderer

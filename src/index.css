@@ -19,7 +19,7 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: #1f2937;
-  overflow: hidden;
+  overflow: auto;
   height: 100%;
   width: 100%;
 }
@@ -40,6 +40,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: #1f2937;
+  overflow: auto;
 }
 
 #root {
@@ -86,6 +87,8 @@ button:focus-visible {
   padding: 1rem;
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  overflow-y: auto; /* Enable vertical scrolling */
+  max-height: calc(100vh - 6rem); /* Allow room for margins and headers */
 }
 
 @media (prefers-color-scheme: light) {

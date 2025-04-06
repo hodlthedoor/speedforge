@@ -45,7 +45,8 @@ export class WidgetWindowManager {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
-        webSecurity: false            // Allow loading of local resources
+        webSecurity: false,            // Allow loading of local resources
+        scrollBounce: false            // Improves scrollbar behavior
       },
       alwaysOnTop,
       skipTaskbar: true,
