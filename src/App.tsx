@@ -191,13 +191,13 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       console.log(`Key pressed: ${e.key}, metaKey: ${e.metaKey}, ctrlKey: ${e.ctrlKey}`);
       
-      // Toggle click-through on Escape key
-      if (e.key === 'Escape') {
-        e.preventDefault(); // Prevent default Escape behavior
+      // Toggle click-through on Ctrl+Space
+      if (e.key === ' ' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); // Prevent default space behavior
         
         // Use the ref for the current value
         const newState = !clickThroughRef.current;
-        console.log(`Toggling click-through from ${clickThroughRef.current} to ${newState} (via ESC key)`);
+        console.log(`Toggling click-through from ${clickThroughRef.current} to ${newState} (via Ctrl+Space)`);
         
         // Update state using the ref value to ensure we're toggling correctly
         setIsClickThrough(prevState => !prevState);
@@ -205,7 +205,7 @@ function App() {
         // Update debug info for toggling
         setDebugInfo(prev => ({
           ...prev,
-          lastToggle: new Date().toISOString() + ' (ESC key)'
+          lastToggle: new Date().toISOString() + ' (Ctrl+Space)'
         }));
       }
       
@@ -250,9 +250,11 @@ function App() {
         <button 
           onClick={toggleClickThrough}
           className="toggle-button"
+          title="Shortcut: Ctrl+Space"
         >
           Toggle
         </button>
+        <span className="shortcut-hint">(Ctrl+Space)</span>
       </div>
       
       {/* Render click indicators */}

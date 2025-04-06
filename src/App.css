@@ -33,10 +33,12 @@ body.click-through-mode {
 .app-container.click-through .debug-panel,
 .app-container.click-through .click-status,
 .app-container.click-through .toggle-button,
+.app-container.click-through .shortcut-hint,
 .app-container.click-through .quit-button,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
+body.click-through-mode .shortcut-hint,
 body.click-through-mode .quit-button {
   pointer-events: auto !important;
 }
@@ -72,6 +74,14 @@ body.click-through-mode .quit-button {
 
 .toggle-button:hover {
   background-color: #2563eb;
+}
+
+/* Shortcut hint */
+.shortcut-hint {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-left: 5px;
+  font-style: italic;
 }
 
 /* Click indicator styling */

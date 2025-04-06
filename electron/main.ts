@@ -172,8 +172,8 @@ app.whenReady().then(() => {
   
   // Register global shortcut for ESC to toggle click-through
   // This ensures ESC works even when the window isn't focused or click-through is enabled
-  globalShortcut.register('Escape', () => {
-    console.log('Global ESC shortcut triggered');
+  globalShortcut.register('CommandOrControl+Space', () => {
+    console.log('Global Ctrl+Space shortcut triggered');
     
     // Toggle click-through for all windows
     for (const win of windows) {
