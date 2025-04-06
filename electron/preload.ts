@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Add event listener to receive messages from main process
   on: (channel: string, callback: (data: any) => void) => {
-    const validChannels = ['main-process-message'];
+    const validChannels = ['main-process-message', 'app:toggle-click-through'];
     if (validChannels.includes(channel)) {
       // Deliberately strip event as it includes `sender` 
       const subscription = (_event: any, data: any) => callback(data);
@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Remove all listeners for a channel
   removeAllListeners: (channel: string) => {
-    const validChannels = ['main-process-message'];
+    const validChannels = ['main-process-message', 'app:toggle-click-through'];
     if (validChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }

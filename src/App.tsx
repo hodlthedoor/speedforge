@@ -162,6 +162,30 @@ function App() {
     return () => window.removeEventListener('click', handleWindowClick, { capture: true });
   }, [handleWindowClick]);
   
+  // Listen for toggle events from main process
+  useEffect(() => {
+    if (window.electronAPI?.on) {
+      console.log('Setting up listener for toggle events from main process');
+      
+      // Add listener for global shortcut toggling
+      const removeListener = window.electronAPI.on('app:toggle-click-through', (newState: boolean) => {
+        console.log(`Received toggle event from main process, new state: ${newState}`);
+        setIsClickThrough(newState);
+        
+        // Update debug info
+        setDebugInfo(prev => ({
+          ...prev,
+          lastToggle: new Date().toISOString() + ' (global shortcut)'
+        }));
+      });
+      
+      // Clean up listener on unmount
+      return () => {
+        if (removeListener) removeListener();
+      };
+    }
+  }, []);
+  
   // Handle key presses to toggle click-through mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

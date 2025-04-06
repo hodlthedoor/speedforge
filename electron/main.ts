@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -170,6 +170,27 @@ app.whenReady().then(() => {
   createWindows();
   setupIpcListeners();
   
+  // Register global shortcut for ESC to toggle click-through
+  // This ensures ESC works even when the window isn't focused or click-through is enabled
+  globalShortcut.register('Escape', () => {
+    console.log('Global ESC shortcut triggered');
+    
+    // Toggle click-through for all windows
+    for (const win of windows) {
+      // Get current click-through state from window
+      const isCurrentlyClickThrough = win.getTitle().includes('click-through:true');
+      const newState = !isCurrentlyClickThrough;
+      
+      console.log(`Global shortcut toggling click-through from ${isCurrentlyClickThrough} to ${newState}`);
+      
+      // Send message to renderer
+      win.webContents.send('app:toggle-click-through', newState);
+      
+      // Update window title with state for tracking
+      win.setTitle(`SpeedForge (click-through:${newState})`);
+    }
+  });
+  
   // Log display information for debugging
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
@@ -179,6 +200,9 @@ app.whenReady().then(() => {
 
 // Clean up when all windows are closed
 app.on('window-all-closed', () => {
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
+  
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -189,6 +213,9 @@ app.on('activate', () => {
 
 // Clean up before quitting
 app.on('before-quit', () => {
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
+  
   // Remove all IPC handlers
   ipcMain.removeHandler('app:quit');
   ipcMain.removeHandler('app:toggleClickThrough');
