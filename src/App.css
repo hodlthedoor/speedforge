@@ -35,11 +35,13 @@ body.click-through-mode {
 .app-container.click-through .toggle-button,
 .app-container.click-through .shortcut-hint,
 .app-container.click-through .quit-button,
+.app-container.click-through .control-panel-container,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
 body.click-through-mode .shortcut-hint,
-body.click-through-mode .quit-button {
+body.click-through-mode .quit-button,
+body.click-through-mode .control-panel-container {
   pointer-events: auto !important;
 }
 
@@ -168,4 +170,18 @@ body, html {
   background-color: transparent !important;
   background: transparent !important;
   overflow: hidden; /* Prevent scrolling */
+}
+
+/* Control Panel Container */
+.control-panel-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  z-index: 1000;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }

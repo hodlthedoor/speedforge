@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
+import { ControlPanel } from './components/ControlPanel';
 
 interface ClickIndicator {
   id: number;
@@ -293,6 +294,13 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* Show Control Panel only when click-through is OFF */}
+      {!isClickThrough && (
+        <div className="control-panel-container">
+          <ControlPanel />
+        </div>
+      )}
     </div>
   );
 }
