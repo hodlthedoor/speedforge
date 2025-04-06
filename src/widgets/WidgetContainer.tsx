@@ -6,6 +6,7 @@ import { TelemetryWidget } from './TelemetryWidget';
 import { TraceWidget } from '../widgets/TraceWidget';
 import { PedalTraceWidget } from '../widgets/PedalTraceWidget';
 import { WebSocketService } from '../services/WebSocketService';
+import { IpcWidget } from './IpcWidget';
 
 // Main Widget Container component
 export const WidgetContainer: React.FC = () => {
@@ -69,14 +70,20 @@ export const WidgetContainer: React.FC = () => {
     
     console.log(`Rendering widget: ${widgetType} with ID: ${widgetId}`);
     
-    // Pass the WebSocketService to all widgets
+    // Render the appropriate widget based on type
     switch (widgetType.toLowerCase()) {
       case 'telemetry': 
         return (
           <TelemetryWidget 
             id={widgetId}
             metric={params.metric || 'speed_kph'}
-            webSocketService={webSocketService}
+          />
+        );
+      case 'ipc':
+        return (
+          <IpcWidget
+            id={widgetId}
+            metric={params.metric || 'speed_kph'}
           />
         );
       case 'trace':
@@ -84,7 +91,6 @@ export const WidgetContainer: React.FC = () => {
           <TraceWidget
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
-            webSocketService={webSocketService}
           />
         );
       case 'pedaltrace':
@@ -92,7 +98,6 @@ export const WidgetContainer: React.FC = () => {
           <PedalTraceWidget
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
-            webSocketService={webSocketService}
             defaultWidth={500}
             defaultHeight={160}
           />

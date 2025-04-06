@@ -9,7 +9,7 @@ export interface BaseWidgetProps {
   defaultWidth?: number;
   defaultHeight?: number;
   showControls?: boolean;
-  webSocketService?: WebSocketService;
+  useSharedWebSocket?: boolean;
 }
 
 export interface WidgetState {
@@ -41,14 +41,15 @@ const WidgetControls: React.FC<WidgetControls> = ({ onClose }) => {
 };
 
 export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> extends React.Component<P, any> {
-  // Use the WebSocketService instead of creating a new WebSocket
-  private webSocketService: WebSocketService;
+  private webSocketService: WebSocketService | null = null;
+  private isWidgetWindow: boolean = false;
   
   constructor(props: P) {
     super(props);
     
-    // Get or create the WebSocketService instance
-    this.webSocketService = props.webSocketService || WebSocketService.getInstance();
+    // Check if running in a widget window by looking for URL parameters
+    const isWidgetWindow = window.location.search.includes('widgetId=') && 
+                         window.location.search.includes('widgetType=');
     
     // Initialize the base state
     this.state = {
@@ -60,13 +61,38 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
       telemetryData: null,
       connected: false
     };
+
+    // Get or create the WebSocketService instance
+    // In widget windows, we don't need a WebSocketService instance - we'll use IPC
+    if (isWidgetWindow) {
+      console.log(`Widget ${props.id}: Running in widget window, using IPC communication`);
+      this.webSocketService = null;
+      
+      // Set up IPC listeners for telemetry data and connection status
+      if (window.electronAPI) {
+        // Request initial data
+        window.electronAPI.invoke('telemetry:getData')
+          .then(data => {
+            if (data) this.handleTelemetryData(data);
+          })
+          .catch(err => console.error('Failed to get initial telemetry data:', err));
+        
+        // Request initial connection status
+        window.electronAPI.invoke('telemetry:getConnectionStatus')
+          .then(status => this.handleConnectionChange(status))
+          .catch(err => console.error('Failed to get connection status:', err));
+        
+        // Listen for updates
+        window.electronAPI.on('telemetry:update', this.handleTelemetryData);
+        window.electronAPI.on('telemetry:connectionChange', this.handleConnectionChange);
+      }
+    } else {
+      console.log(`Widget ${props.id}: Running in main window, using WebSocketService`);
+      this.webSocketService = props.webSocketService || WebSocketService.getInstance();
+    }
   }
   
   componentDidMount() {
-    // Register listeners with the WebSocketService
-    this.webSocketService.addDataListener(this.props.id, this.handleTelemetryData);
-    this.webSocketService.addConnectionListener(this.props.id, this.handleConnectionChange);
-    
     // Listen for parameter updates from the main process
     if (window.electronAPI) {
       console.log(`Widget ${this.props.id}: Setting up widget:params listener`);
@@ -77,38 +103,89 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
     } else {
       console.warn(`Widget ${this.props.id}: electronAPI not available`);
     }
+    
+    // In main window, register data and connection listeners
+    if (!this.isWidgetWindow && this.webSocketService) {
+      this.webSocketService.addDataListener(this.props.id, this.handleTelemetryData);
+      this.webSocketService.addConnectionListener(this.props.id, this.handleConnectionChange);
+    }
   }
   
   componentWillUnmount() {
-    // Remove listeners from the WebSocketService
-    this.webSocketService.removeListeners(this.props.id);
-    
     // Remove parameter update listener
     if (window.electronAPI) {
       window.electronAPI.removeAllListeners('widget:params');
+      
+      // Remove IPC listeners if in widget window
+      if (this.isWidgetWindow) {
+        window.electronAPI.removeAllListeners('telemetry:update');
+        window.electronAPI.removeAllListeners('telemetry:connectionChange');
+      }
+    }
+    
+    // In main window, remove WebSocketService listeners
+    if (!this.isWidgetWindow && this.webSocketService) {
+      this.webSocketService.removeListeners(this.props.id);
     }
     
     // Log widget unmounting for debugging
     console.log(`Widget ${this.props.id} unmounting and cleaning up resources`);
   }
   
+  /**
+   * Set up IPC listeners for telemetry data and connection status
+   * This is only used in widget windows
+   */
+  private setupIPCListeners(): void {
+    if (!window.electronAPI) return;
+
+    // Request initial data from main process
+    window.electronAPI.invoke('telemetry:getData')
+      .then((data) => {
+        if (data) {
+          this.handleTelemetryData(data);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to get initial telemetry data:', err);
+      });
+
+    // Request initial connection status
+    window.electronAPI.invoke('telemetry:getConnectionStatus')
+      .then((status) => {
+        this.handleConnectionChange(status);
+      })
+      .catch(err => {
+        console.error('Failed to get connection status:', err);
+      });
+
+    // Listen for telemetry data updates
+    window.electronAPI.on('telemetry:update', (data) => {
+      this.handleTelemetryData(data);
+    });
+
+    // Listen for connection status updates
+    window.electronAPI.on('telemetry:connectionChange', (status) => {
+      this.handleConnectionChange(status);
+    });
+  }
+  
   // Handle parameter updates from the main process
   handleParamsUpdate = (params: Record<string, any>) => {
     // This method can be overridden by child widgets to handle specific parameters
     console.log(`BaseWidget ${this.props.id} received parameter update:`, params);
-    console.log(`BaseWidget instance:`, this);
     
     // The base implementation does nothing with the params
     // Child widgets can use componentDidUpdate to respond to prop changes
   }
 
-  // Handle telemetry data from the WebSocketService
+  // Handle telemetry data
   handleTelemetryData = (data: any) => {
     this.setState({ telemetryData: data });
     this.onTelemetryDataReceived(data);
   }
   
-  // Handle connection status changes from the WebSocketService
+  // Handle connection status changes
   handleConnectionChange = (connected: boolean) => {
     this.setState({ connected });
   }

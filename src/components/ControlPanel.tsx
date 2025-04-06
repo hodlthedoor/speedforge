@@ -6,7 +6,7 @@ import { WebSocketService } from '../services/WebSocketService';
 
 interface WidgetConfig {
   id: string;
-  type: 'clock' | 'weather' | 'telemetry' | 'trace' | 'pedaltrace';
+  type: 'clock' | 'weather' | 'telemetry' | 'trace' | 'pedaltrace' | 'ipc';
   name: string;
   params?: Record<string, any>;
   isLaunched: boolean;
@@ -41,6 +41,7 @@ const availableWidgets = [
   { id: 'clock', type: 'clock', name: 'Clock' },
   { id: 'weather', type: 'weather', name: 'Weather' },
   { id: 'telemetry', type: 'telemetry', name: 'Telemetry' },
+  { id: 'ipc', type: 'ipc', name: 'IPC Telemetry' },
   { id: 'trace', type: 'trace', name: 'Throttle/Brake Trace' },
   { id: 'pedaltrace', type: 'pedaltrace', name: 'Pedal Trace' },
 ];
@@ -49,7 +50,8 @@ export const ControlPanel: React.FC = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
     { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false, showTelemetry: true }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
     { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
-    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 }
+    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
+    { id: 'ipc-widget-1', type: 'ipc', name: 'IPC Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 }
   ]);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
   const [availableTelemetryMetrics, setAvailableTelemetryMetrics] = useState(defaultTelemetryMetrics);
@@ -57,6 +59,35 @@ export const ControlPanel: React.FC = () => {
   
   // Create a single WebSocketService instance for all widgets
   const [webSocketService] = useState(() => WebSocketService.getInstance());
+
+  useEffect(() => {
+    // Set up IPC handlers for widget windows to get telemetry data
+    if (isElectron && window.electronAPI) {
+      // Set up handler for telemetry data requests
+      window.electronAPI.on('telemetry:getData', (data: { requestId: string }) => {
+        console.log('Main window received telemetry:getData request:', data);
+        const response = {
+          data: webSocketService.getLastData()
+        };
+        window.electronAPI.send(`telemetry:getData:response:${data.requestId}`, response);
+      });
+
+      // Set up handler for connection status requests
+      window.electronAPI.on('telemetry:getConnectionStatus', (data: { requestId: string }) => {
+        console.log('Main window received telemetry:getConnectionStatus request:', data);
+        const response = {
+          data: webSocketService.isConnected()
+        };
+        window.electronAPI.send(`telemetry:getConnectionStatus:response:${data.requestId}`, response);
+      });
+
+      // Clean up the handlers when the component unmounts
+      return () => {
+        window.electronAPI.removeAllListeners('telemetry:getData');
+        window.electronAPI.removeAllListeners('telemetry:getConnectionStatus');
+      };
+    }
+  }, [isElectron, webSocketService]);
 
   useEffect(() => {
     // On component mount, check for already running widgets

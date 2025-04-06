@@ -8,6 +8,7 @@ export class WebSocketService {
   private listeners: Map<string, ((data: any) => void)[]> = new Map();
   private connectionListeners: Map<string, ((connected: boolean) => void)[]> = new Map();
   private connected: boolean = false;
+  private lastReceivedData: any = null;
   private url: string;
 
   private constructor(url: string = 'ws://localhost:8080') {
@@ -37,12 +38,23 @@ export class WebSocketService {
         console.log('WebSocketService: Connected');
         this.connected = true;
         this.notifyConnectionListeners(true);
+        
+        // Broadcast connection status to widget windows
+        if (window.electronAPI) {
+          window.electronAPI.send('telemetry:connectionChange', true);
+        }
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          this.lastReceivedData = data;
           this.notifyDataListeners(data);
+          
+          // Broadcast to widget windows via IPC
+          if (window.electronAPI) {
+            window.electronAPI.send('telemetry:update', data);
+          }
         } catch (error) {
           console.error('WebSocketService: Failed to parse data:', error);
         }
@@ -52,6 +64,11 @@ export class WebSocketService {
         console.log('WebSocketService: Disconnected');
         this.connected = false;
         this.notifyConnectionListeners(false);
+        
+        // Broadcast connection status to widget windows
+        if (window.electronAPI) {
+          window.electronAPI.send('telemetry:connectionChange', false);
+        }
 
         // Try to reconnect after a delay
         this.reconnectTimer = window.setTimeout(() => {
@@ -80,6 +97,11 @@ export class WebSocketService {
     }
     this.listeners.get(id)?.push(callback);
     console.log(`WebSocketService: Added data listener for ${id}`);
+    
+    // If we already have data, immediately notify the new listener
+    if (this.lastReceivedData) {
+      callback(this.lastReceivedData);
+    }
   }
 
   /**
@@ -137,6 +159,13 @@ export class WebSocketService {
    */
   public isConnected(): boolean {
     return this.connected;
+  }
+  
+  /**
+   * Get the last received telemetry data
+   */
+  public getLastData(): any {
+    return this.lastReceivedData;
   }
 
   /**
