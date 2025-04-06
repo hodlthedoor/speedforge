@@ -6,6 +6,10 @@ echo.
 REM Set UTF-8 code page for better console output
 chcp 65001 > nul
 
+REM Enable ANSI color support in Windows 10+
+REM This uses PowerShell to enable virtual terminal processing
+powershell -Command "&{$PHOST = Get-Host; $PWINDOW = $PHOST.UI.RawUI; $BSIZE = $PWINDOW.BufferSize; $CSI = [char]0x1B + '['; echo \"$CSI?25h\"; Add-Type -AssemblyName System.Console; $null = [System.Console]::SetBufferSize($BSIZE.Width, $BSIZE.Height)}"
+
 REM Define colors for console output (Windows 10+)
 set "GREEN=[92m"
 set "YELLOW=[93m"

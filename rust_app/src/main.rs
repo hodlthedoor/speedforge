@@ -96,8 +96,7 @@ async fn main() {
     };
 
     println!("\nMonitoring telemetry data. Press Ctrl+C to exit.");
-    println!("Press any key to start monitoring...");
-    let _ = std::io::stdin().read_line(&mut String::new());
+    println!("Starting monitoring automatically...");
     
     // Give user time to switch to iRacing
     for i in (1..=3).rev() {
