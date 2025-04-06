@@ -70,7 +70,24 @@ export class WidgetWindowManager {
         // Set the window to have no title bar
         win.setWindowButtonVisibility(false);
       }
+      
       win.show();
+    });
+    
+    // Inject CSS to hide scrollbars when window content is loaded
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.insertCSS(`
+        html, body {
+          overflow: hidden !important;
+        }
+        ::-webkit-scrollbar {
+          display: none !important;
+        }
+        * {
+          -ms-overflow-style: none !important;
+          scrollbar-width: none !important;
+        }
+      `);
     });
     
     // Add window to tracking

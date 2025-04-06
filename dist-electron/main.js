@@ -62,6 +62,20 @@ class WidgetWindowManager {
       }
       win.show();
     });
+    win.webContents.on("did-finish-load", () => {
+      win.webContents.insertCSS(`
+        html, body {
+          overflow: hidden !important;
+        }
+        ::-webkit-scrollbar {
+          display: none !important;
+        }
+        * {
+          -ms-overflow-style: none !important;
+          scrollbar-width: none !important;
+        }
+      `);
+    });
     this.windows.set(widgetId, win);
     const queryParams = new URLSearchParams();
     queryParams.append("widgetId", widgetId);
