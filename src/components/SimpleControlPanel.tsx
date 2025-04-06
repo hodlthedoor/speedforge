@@ -105,6 +105,43 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     return () => window.removeEventListener('app:toggle-click-through', handleToggleFromApp);
   }, []);
 
+  // Debug: Monitor focus-related events
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('DEBUG: Window focus event');
+    };
+    
+    const handleBlur = () => {
+      console.log('DEBUG: Window blur event');
+    };
+    
+    const handleFocusin = (e: FocusEvent) => {
+      console.log(`DEBUG: Focus-in event on: ${(e.target as any)?.tagName || 'unknown'}`);
+    };
+    
+    const handleFocusout = (e: FocusEvent) => {
+      console.log(`DEBUG: Focus-out event from: ${(e.target as any)?.tagName || 'unknown'}`);
+    };
+    
+    const handleMousedown = (e: MouseEvent) => {
+      console.log(`DEBUG: Mouse down on: ${(e.target as any)?.className || 'unknown'}`);
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('focusin', handleFocusin);
+    document.addEventListener('focusout', handleFocusout);
+    document.addEventListener('mousedown', handleMousedown);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('focusin', handleFocusin);
+      document.removeEventListener('focusout', handleFocusout);
+      document.removeEventListener('mousedown', handleMousedown);
+    };
+  }, []);
+
   const toggleClickThrough = () => {
     const newValue = !clickThrough;
     setClickThrough(newValue);
@@ -126,6 +163,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
           console.error('Error toggling click-through via Electron:', error);
         });
     }
+  };
+
+  // Add telemetry widget options toggle with debug
+  const toggleTelemetryOptions = () => {
+    console.log(`Telemetry options toggle: ${!showTelemetryOptions}`);
+    setShowTelemetryOptions(!showTelemetryOptions);
   };
 
   const quitApplication = () => {
@@ -161,12 +204,25 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             Add Widget
           </button>
           
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowTelemetryOptions(!showTelemetryOptions)}
-          >
-            {showTelemetryOptions ? 'Hide Telemetry Options' : 'Add Telemetry Widget'}
-          </button>
+          <details className="telemetry-details">
+            <summary className="btn btn-primary telemetry-summary">
+              Add Telemetry Widget
+            </summary>
+            <div className="telemetry-options">
+              <h3>Select Telemetry Metric</h3>
+              <div className="metric-buttons">
+                {availableMetrics.map(metric => (
+                  <button 
+                    key={metric.id}
+                    className="btn btn-sm btn-secondary metric-btn"
+                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                  >
+                    {metric.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </details>
           
           <button 
             className="btn btn-danger"
@@ -175,23 +231,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             Quit Application
           </button>
         </div>
-        
-        {showTelemetryOptions && (
-          <div className="telemetry-options">
-            <h3>Select Telemetry Metric</h3>
-            <div className="metric-buttons">
-              {availableMetrics.map(metric => (
-                <button 
-                  key={metric.id}
-                  className="btn btn-sm btn-secondary metric-btn"
-                  onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                >
-                  {metric.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </BaseDraggableComponent>
   );

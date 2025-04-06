@@ -734,3 +734,51 @@ body, html {
   backdrop-filter: blur(5px);
   cursor: move;
 }
+
+/* Details/Summary Dropdown Styles */
+.telemetry-details {
+  margin: 10px 0;
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.telemetry-summary {
+  width: 100%;
+  text-align: left;
+  list-style: none;
+  cursor: pointer;
+}
+
+/* Remove the default arrow */
+.telemetry-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Add a custom arrow */
+.telemetry-summary::after {
+  content: '▼';
+  float: right;
+  font-size: 12px;
+  margin-top: 3px;
+  transform: rotate(0deg);
+  transition: transform 0.2s;
+}
+
+.telemetry-details[open] .telemetry-summary::after {
+  transform: rotate(180deg);
+}
+
+.telemetry-details .telemetry-options {
+  margin-top: 8px;
+  border-radius: 4px;
+}
+
+/* Add pointer-events for click-through mode */
+.app-container.click-through .telemetry-details,
+.app-container.click-through .telemetry-summary,
+.app-container.click-through .telemetry-options,
+body.click-through-mode .telemetry-details,
+body.click-through-mode .telemetry-summary, 
+body.click-through-mode .telemetry-options {
+  pointer-events: auto !important;
+}
