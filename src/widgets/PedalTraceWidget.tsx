@@ -127,8 +127,14 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     // Set up resize handler
     window.addEventListener('resize', this.handleResize);
     
-    // Initial canvas setup
+    // Initialize the canvas with proper dimensions
+    // Try immediate initialization first
     this.handleResize();
+    
+    // Also try with a delay to ensure the DOM is fully rendered
+    setTimeout(() => {
+      this.handleResize();
+    }, 50);
   }
   
   componentWillUnmount() {
@@ -152,12 +158,12 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     const container = canvas.parentElement;
     if (!container) return;
     
-    // Get the exact dimensions from the container
-    const rect = container.getBoundingClientRect();
+    console.log('Resizing canvas to match container:', container.offsetWidth, container.offsetHeight);
     
-    // Set the canvas to match exactly the container size
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    // Set the canvas dimensions to match the container exactly
+    // Use offsetWidth/offsetHeight for more accurate dimensions
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight; 
     
     // Trigger redraw with new dimensions
     this.drawTrace();
@@ -171,42 +177,42 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Get the absolute width and height
+    const width = canvas.width;
+    const height = canvas.height;
+    
     // Clear the entire canvas with the background
     ctx.fillStyle = '#1f2937'; // Dark gray background
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, width, height);
     
     // Draw the grid lines first
-    this.drawGrid(ctx, canvas.width, canvas.height);
+    this.drawGrid(ctx, width, height);
     
     const { throttleHistory, brakeHistory, clutchHistory } = this.state;
     
     // Nothing to draw if no data yet
     if (throttleHistory.length === 0) {
-      this.drawNoDataMessage(ctx, canvas.width, canvas.height);
+      this.drawNoDataMessage(ctx, width, height);
       return;
     }
     
-    // Calculate the usable area for the trace lines
+    // Use zero padding for horizontal, minimal for vertical
     const padding = {
-      top: 5,
-      right: 0, // No right padding
-      bottom: 5, // Reduced bottom padding since we removed the legend
-      left: 0    // No left padding
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0
     };
     
-    // Calculate drawable area
-    const drawableWidth = canvas.width - padding.left - padding.right;
-    const drawableHeight = canvas.height - padding.top - padding.bottom;
-    
-    // Draw the traces
-    this.drawPedalTrace(ctx, throttleHistory, drawableWidth, drawableHeight, padding, '#34d399', 2); // Green for throttle
-    this.drawPedalTrace(ctx, brakeHistory, drawableWidth, drawableHeight, padding, '#ef4444', 2);    // Red for brake
-    this.drawPedalTrace(ctx, clutchHistory, drawableWidth, drawableHeight, padding, '#3b82f6', 2);   // Blue for clutch
+    // Draw the traces using the full canvas
+    this.drawPedalTrace(ctx, throttleHistory, width, height, padding, '#34d399', 2); // Green for throttle
+    this.drawPedalTrace(ctx, brakeHistory, width, height, padding, '#ef4444', 2);    // Red for brake
+    this.drawPedalTrace(ctx, clutchHistory, width, height, padding, '#3b82f6', 2);   // Blue for clutch
   }
   
   // Draw the grid background
   drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    // Draw the grid border
+    // Draw the grid border - draw this exactly at the edge
     ctx.strokeStyle = '#4b5563'; // Medium gray
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 0, width, height);
@@ -266,15 +272,14 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     // Iterate through each data point
     for (let i = 0; i < dataPoints.length; i++) {
-      // Calculate the x-coordinate across the full canvas width
-      // This gives us 0 to width values across the entire canvas
-      const xPos = (i / (dataPoints.length - 1)) * width;
+      // Calculate x position from 0 to full width
+      // Important: Start exactly at 0 and end exactly at width
+      const xPos = i * (width / (dataPoints.length - 1));
       
-      // Calculate the y-coordinate (0% = bottom, 100% = top)
+      // Calculate y position (0-100% maps to full height)
       const value = Math.max(0, Math.min(100, dataPoints[i]));
-      // Map the value (0-100) to the vertical space, accounting for top/bottom padding
-      const usableHeight = height - padding.top - padding.bottom;
-      const yPos = padding.top + (usableHeight - ((value / 100) * usableHeight));
+      // Map from data value (0-100) to canvas coordinates (height-0)
+      const yPos = height - (value / 100 * height);
       
       // Draw the point
       if (i === 0) {
@@ -294,7 +299,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     if (!connected) {
       return (
-        <div className="widget-content p-0 flex flex-col items-center justify-center h-full">
+        <div className="widget-content p-0 flex flex-col items-center justify-center h-full w-full">
           <div className="status-disconnected">Disconnected</div>
           <div className="status-message">Attempting to connect...</div>
         </div>
@@ -303,7 +308,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     if (!telemetryData) {
       return (
-        <div className="widget-content p-0 flex flex-col items-center justify-center h-full">
+        <div className="widget-content p-0 flex flex-col items-center justify-center h-full w-full">
           <div className="status-connected">Connected</div>
           <div className="status-message">Waiting for data...</div>
         </div>
@@ -311,11 +316,16 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     }
     
     return (
-      <div className="widget-content p-0 h-full w-full">
+      <div className="widget-content p-0 m-0 h-full w-full">
         <canvas 
           ref={this.canvasRef}
-          className="w-full h-full"
-          style={{ display: 'block' }} /* Ensure no extra space */
+          className="w-full h-full border-0 p-0 m-0"
+          style={{ 
+            display: 'block', 
+            padding: 0, 
+            margin: 0, 
+            border: 'none' 
+          }}
         />
       </div>
     );
