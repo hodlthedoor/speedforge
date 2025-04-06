@@ -6,7 +6,7 @@ import { WebSocketService } from '../services/WebSocketService';
 
 interface WidgetConfig {
   id: string;
-  type: 'clock' | 'weather' | 'telemetry' | 'trace';
+  type: 'clock' | 'weather' | 'telemetry' | 'trace' | 'pedaltrace';
   name: string;
   params?: Record<string, any>;
   isLaunched: boolean;
@@ -42,6 +42,7 @@ const availableWidgets = [
   { id: 'weather', type: 'weather', name: 'Weather' },
   { id: 'telemetry', type: 'telemetry', name: 'Telemetry' },
   { id: 'trace', type: 'trace', name: 'Throttle/Brake Trace' },
+  { id: 'pedaltrace', type: 'pedaltrace', name: 'Pedal Trace' },
 ];
 
 export const ControlPanel: React.FC = () => {
@@ -330,7 +331,7 @@ export const ControlPanel: React.FC = () => {
       params = { location: 'New York' };
     } else if (type === 'telemetry') {
       params = { metric: 'speed_kph' };
-    } else if (type === 'trace') {
+    } else if (type === 'trace' || type === 'pedaltrace') {
       params = { traceLength: 75 };
       width = 500;
       height = 160;
@@ -480,7 +481,7 @@ export const ControlPanel: React.FC = () => {
                   )}
 
                   {/* Add trace length slider for trace widgets */}
-                  {widget.type === 'trace' && widget.isLaunched && (
+                  {(widget.type === 'trace' || widget.type === 'pedaltrace') && widget.isLaunched && (
                     <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                       <label className="text-sm font-medium text-gray-700 block mb-1">
                         Trace Length: {widget.params?.traceLength || 75} points
@@ -572,6 +573,32 @@ export const ControlPanel: React.FC = () => {
           )}
           
           {activeWidget.type === 'trace' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Trace Length: {activeWidget.params?.traceLength || 75} points
+              </label>
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="range" 
+                  min="25" 
+                  max="200" 
+                  step="25"
+                  value={activeWidget.params?.traceLength || 75}
+                  className="w-full"
+                  onChange={(e) => {
+                    const traceLength = parseInt(e.target.value);
+                    updateWidgetParams(activeWidget.id, { traceLength });
+                  }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Faster</span>
+                <span>Slower</span>
+              </div>
+            </div>
+          )}
+          
+          {activeWidget.type === 'pedaltrace' && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Trace Length: {activeWidget.params?.traceLength || 75} points

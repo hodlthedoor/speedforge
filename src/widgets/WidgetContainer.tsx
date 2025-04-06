@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 // Import the TelemetryWidget
 import { TelemetryWidget } from './TelemetryWidget';
 import { TraceWidget } from '../widgets/TraceWidget';
+import { PedalTraceWidget } from '../widgets/PedalTraceWidget';
 import { WebSocketService } from '../services/WebSocketService';
 
 // Main Widget Container component
@@ -81,6 +82,14 @@ export const WidgetContainer: React.FC = () => {
       case 'trace':
         return (
           <TraceWidget
+            id={widgetId}
+            traceLength={parseInt(params.traceLength) || 75}
+            webSocketService={webSocketService}
+          />
+        );
+      case 'pedaltrace':
+        return (
+          <PedalTraceWidget
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
             webSocketService={webSocketService}
