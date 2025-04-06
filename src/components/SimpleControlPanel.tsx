@@ -29,8 +29,6 @@ export const SimpleControlPanel: React.FC = () => {
     }
   };
 
-  console.log('SimpleControlPanel rendering');
-
   return (
     <div className="simple-control-panel visible-panel">
       <div className="panel-header visible-header">
