@@ -295,10 +295,8 @@ function App() {
         </div>
       </div>
 
-      {/* Show Control Panel only when click-through is OFF */}
-      <div className={isClickThrough ? 'hidden' : ''}>
-        <SimpleControlPanel />
-      </div>
+      {/* SimpleControlPanel with widgets always visible */}
+      <SimpleControlPanel showControlPanel={!isClickThrough} />
     </div>
   );
 }
