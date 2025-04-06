@@ -60,7 +60,6 @@ function createWindow() {
 function setupIpcListeners() {
   // Create a new widget window
   ipcMain.handle('widget:create', (_, options: WidgetWindowOptions) => {
-    console.log('Creating widget window:', options);
     try {
       const window = widgetManager.createWidgetWindow(options);
       
@@ -69,7 +68,6 @@ function setupIpcListeners() {
       
       // Listen for window closed event to unregister
       window.on('closed', () => {
-        console.log(`Widget ${options.widgetId} closed, removing from handlers`);
         widgetWindowHandlers.delete(options.widgetId);
       });
       
@@ -141,11 +139,9 @@ function setupIpcListeners() {
     // Get the sender window to determine which widget is making the request
     const sender = BrowserWindow.fromWebContents(event.sender);
     if (!sender) {
-      console.log('IPC Request: telemetry:getData from unknown window');
       return {};
     }
     
-    console.log('IPC Request: telemetry:getData, returning:', telemetryData || {});
     return telemetryData || {}; 
   });
   
@@ -153,13 +149,11 @@ function setupIpcListeners() {
     // Get the sender window to determine which widget is making the request
     const sender = BrowserWindow.fromWebContents(event.sender);
     if (!sender) {
-      console.log('IPC Request: telemetry:getConnectionStatus from unknown window');
       return true;
     }
     
     // Always return true for connection status to widgets
     // This prevents the "Disconnected" message in widgets
-    console.log('IPC Request: telemetry:getConnectionStatus, returning: true');
     return true; 
   });
   
@@ -194,11 +188,8 @@ function setupIpcListeners() {
   ipcMain.on('widget:registerForUpdates', (event, { widgetId }) => {
     const sender = BrowserWindow.fromWebContents(event.sender);
     if (!sender) {
-      console.log(`Widget ${widgetId} tried to register but couldn't find sender window`);
       return;
     }
-    
-    console.log(`Widget ${widgetId} registered for updates explicitly`);
     
     // Store in our tracking map
     widgetWindowHandlers.set(widgetId, sender);
@@ -207,7 +198,6 @@ function setupIpcListeners() {
     if (telemetryData) {
       try {
         sender.webContents.send('telemetry:update', telemetryData);
-        console.log(`Sent initial telemetry data to newly registered widget ${widgetId}`);
       } catch (error) {
         console.error(`Failed to send initial data to widget ${widgetId}:`, error);
       }
@@ -216,7 +206,6 @@ function setupIpcListeners() {
     // Send current connection status
     try {
       sender.webContents.send('telemetry:connectionChange', true);
-      console.log(`Sent initial connection status to newly registered widget ${widgetId}`);
     } catch (error) {
       console.error(`Failed to send connection status to widget ${widgetId}:`, error);
     }
@@ -227,16 +216,12 @@ function setupIpcListeners() {
 function broadcastToAllWidgets(channel: string, data: any) {
   // Use both the widgets from the widget manager and our explicit handler map
   const windows = widgetManager.getAllWidgetWindows();
-  const windowCount = windows.size;
-  
-  console.log(`Broadcasting ${channel} to ${windowCount} widget windows`);
   
   // First broadcast to all windows from the widget manager
   for (const [widgetId, window] of windows.entries()) {
     if (!window.isDestroyed()) {
       try {
         window.webContents.send(channel, data);
-        console.log(`Sent ${channel} to widget ${widgetId}`);
       } catch (error) {
         console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
       }
@@ -250,7 +235,6 @@ function broadcastToAllWidgets(channel: string, data: any) {
         // Don't send duplicate messages to windows we've already sent to
         if (!windows.has(widgetId)) {
           window.webContents.send(channel, data);
-          console.log(`Sent ${channel} to explicitly registered widget ${widgetId}`);
         }
       } catch (error) {
         console.error(`Failed to send ${channel} to explicitly registered widget ${widgetId}:`, error);
