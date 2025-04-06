@@ -1,5 +1,6 @@
 /// <reference path="../types/electron.d.ts" />
 import React from 'react';
+import { WebSocketService } from '../services/WebSocketService';
 
 export interface BaseWidgetProps {
   id: string;
@@ -8,6 +9,7 @@ export interface BaseWidgetProps {
   defaultWidth?: number;
   defaultHeight?: number;
   showControls?: boolean;
+  webSocketService?: WebSocketService;
 }
 
 export interface WidgetState {
@@ -39,11 +41,14 @@ const WidgetControls: React.FC<WidgetControls> = ({ onClose }) => {
 };
 
 export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> extends React.Component<P, any> {
-  private ws: WebSocket | null = null;
-  private reconnectTimer: number | null = null;
+  // Use the WebSocketService instead of creating a new WebSocket
+  private webSocketService: WebSocketService;
   
   constructor(props: P) {
     super(props);
+    
+    // Get or create the WebSocketService instance
+    this.webSocketService = props.webSocketService || WebSocketService.getInstance();
     
     // Initialize the base state
     this.state = {
@@ -58,8 +63,9 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
   }
   
   componentDidMount() {
-    // Connect to telemetry WebSocket
-    this.connectWebSocket();
+    // Register listeners with the WebSocketService
+    this.webSocketService.addDataListener(this.props.id, this.handleTelemetryData);
+    this.webSocketService.addConnectionListener(this.props.id, this.handleConnectionChange);
     
     // Listen for parameter updates from the main process
     if (window.electronAPI) {
@@ -74,12 +80,8 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
   }
   
   componentWillUnmount() {
-    this.disconnectWebSocket();
-    // Clear any reconnect timer
-    if (this.reconnectTimer) {
-      window.clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    // Remove listeners from the WebSocketService
+    this.webSocketService.removeListeners(this.props.id);
     
     // Remove parameter update listener
     if (window.electronAPI) {
@@ -100,52 +102,16 @@ export abstract class BaseWidget<P extends BaseWidgetProps = BaseWidgetProps> ex
     // Child widgets can use componentDidUpdate to respond to prop changes
   }
 
-  connectWebSocket = () => {
-    const wsUrl = 'ws://localhost:8080';
-    
-    try {
-      this.ws = new WebSocket(wsUrl);
-      
-      this.ws.onopen = () => {
-        console.log('Connected to telemetry WebSocket');
-        this.setState({ connected: true });
-      };
-      
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.setState({ telemetryData: data });
-          this.onTelemetryDataReceived(data);
-        } catch (error) {
-          console.error('Failed to parse telemetry data:', error);
-        }
-      };
-      
-      this.ws.onclose = () => {
-        console.log('Disconnected from telemetry WebSocket');
-        this.setState({ connected: false });
-        
-        // Try to reconnect after a delay
-        this.reconnectTimer = window.setTimeout(() => {
-          this.connectWebSocket();
-        }, 3000);
-      };
-      
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.ws?.close();
-      };
-    } catch (error) {
-      console.error('Failed to create WebSocket:', error);
-    }
-  };
-
-  disconnectWebSocket = () => {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-  };
+  // Handle telemetry data from the WebSocketService
+  handleTelemetryData = (data: any) => {
+    this.setState({ telemetryData: data });
+    this.onTelemetryDataReceived(data);
+  }
+  
+  // Handle connection status changes from the WebSocketService
+  handleConnectionChange = (connected: boolean) => {
+    this.setState({ connected });
+  }
   
   // Method that can be overridden by widgets to handle new telemetry data
   protected onTelemetryDataReceived(data: any) {

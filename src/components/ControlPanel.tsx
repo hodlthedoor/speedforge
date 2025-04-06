@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWidgetManager } from '../widgets/WidgetManager';
 import { WidgetContainer } from './WidgetContainer';
+import { WebSocketService } from '../services/WebSocketService';
 
 interface WidgetConfig {
   id: string;
@@ -52,6 +53,9 @@ export const ControlPanel: React.FC = () => {
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
   const [availableTelemetryMetrics, setAvailableTelemetryMetrics] = useState(defaultTelemetryMetrics);
   const isElectron = window.electronAPI !== undefined;
+  
+  // Create a single WebSocketService instance for all widgets
+  const [webSocketService] = useState(() => WebSocketService.getInstance());
 
   useEffect(() => {
     // On component mount, check for already running widgets
@@ -75,60 +79,35 @@ export const ControlPanel: React.FC = () => {
       checkRunningWidgets();
     }
     
-    // Attempt to connect to telemetry service to get actual available fields
-    // This is optional - we'll use the default list if connection fails
-    fetchTelemetryFields();
-  }, [isElectron]);
+    // Setup listener for telemetry fields from the WebSocketService instead of creating a new connection
+    webSocketService.addDataListener('control-panel', (data) => {
+      if (data) {
+        // Extract available metrics from the telemetry data
+        const metrics = Object.keys(data)
+          .filter(key => 
+            typeof data[key] !== 'object' && 
+            !Array.isArray(data[key]) &&
+            key !== 'raw_values' &&
+            key !== 'warnings' &&
+            key !== 'active_flags' &&
+            key !== 'session_flags'
+          )
+          .map(key => ({
+            value: key,
+            label: getMetricLabel(key)
+          }));
+        
+        setAvailableTelemetryMetrics(metrics);
+      }
+    });
+    
+    // Cleanup
+    return () => {
+      webSocketService.removeListeners('control-panel');
+    };
+  }, [isElectron, webSocketService]);
   
-  // Function to fetch available telemetry fields from the backend
-  const fetchTelemetryFields = () => {
-    try {
-      const ws = new WebSocket('ws://localhost:8080');
-      
-      ws.onopen = () => {
-        console.log('Connected to telemetry service to fetch fields');
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          // Get actual available metrics from the telemetry data
-          const metrics = Object.keys(data)
-            .filter(key => 
-              typeof data[key] !== 'object' && 
-              !Array.isArray(data[key]) &&
-              key !== 'raw_values' &&
-              key !== 'warnings' &&
-              key !== 'active_flags' &&
-              key !== 'session_flags'
-            )
-            .map(key => ({
-              value: key,
-              label: getMetricLabel(key)
-            }));
-          
-          setAvailableTelemetryMetrics(metrics);
-          // Close the connection after we get the data
-          ws.close();
-        } catch (error) {
-          console.error('Failed to parse telemetry data:', error);
-        }
-      };
-      
-      ws.onerror = () => {
-        console.log('Failed to connect to telemetry service, using default metrics');
-      };
-      
-      // Set a timeout to close the connection if we don't get a response
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 5000);
-    } catch (error) {
-      console.error('Failed to connect to telemetry service:', error);
-    }
-  };
+  // Function to fetch available telemetry fields from the backend is removed since we're using the WebSocketService
   
   // Helper function to get a user-friendly label for a metric
   const getMetricLabel = (metric: string): string => {
@@ -169,13 +148,18 @@ export const ControlPanel: React.FC = () => {
     if (!isElectron) return;
     
     try {
-      // Create the widget window using Electron API
+      // Pass the WebSocketService instance to the widget via params
       const result = await window.electronAPI.widgets.create({
         widgetId: widget.id,
         widgetType: widget.type.toLowerCase(),
         width: widget.width,
         height: widget.height,
-        params: widget.params,
+        params: {
+          ...widget.params,
+          // Add the WebSocketService reference as a special param
+          // This will be handled in the widget component to get the WebSocketService instance
+          useSharedWebSocket: true
+        },
       });
       
       if (result.success) {

@@ -46,8 +46,8 @@ export class TelemetryWidget extends BaseWidget<TelemetryWidgetProps> {
   
   // Override parent method to handle parameter updates
   handleParamsUpdate = (params: Record<string, any>) => {
-    // Call parent implementation first
-    super.handleParamsUpdate(params);
+    // Log the parameters instead of calling parent implementation
+    console.log(`TelemetryWidget ${this.props.id} received parameter update:`, params);
     
     // Update metric if provided
     if (params.metric && params.metric !== this.state.selectedMetric) {
