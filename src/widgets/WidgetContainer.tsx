@@ -14,8 +14,8 @@ export const WidgetContainer: React.FC = () => {
   const [widgetId, setWidgetId] = useState<string>('');
   const [widgetType, setWidgetType] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  // Initialize WebSocketService as a singleton
-  const [webSocketService] = useState(() => WebSocketService.getInstance());
+  // Initialize WebSocketService lazily only when needed
+  const [webSocketService, setWebSocketService] = useState<WebSocketService | null>(null);
 
   useEffect(() => {
     // Get widget parameters from URL
@@ -37,6 +37,11 @@ export const WidgetContainer: React.FC = () => {
       
       setParams(widgetParams);
       console.log('Widget parameters:', { id, type, params: widgetParams });
+      
+      // Only initialize WebSocketService for widgets that need it
+      if (type.toLowerCase() !== 'ipc') {
+        setWebSocketService(WebSocketService.getInstance());
+      }
     } else {
       console.error('Missing required widget parameters');
     }
@@ -73,12 +78,12 @@ export const WidgetContainer: React.FC = () => {
     // Render the appropriate widget based on type
     switch (widgetType.toLowerCase()) {
       case 'telemetry': 
-        return (
+        return webSocketService ? (
           <TelemetryWidget 
             id={widgetId}
             metric={params.metric || 'speed_kph'}
           />
-        );
+        ) : <div>Loading WebSocket service...</div>;
       case 'ipc':
         return (
           <IpcWidget
@@ -87,25 +92,38 @@ export const WidgetContainer: React.FC = () => {
           />
         );
       case 'trace':
-        return (
+        return webSocketService ? (
           <TraceWidget
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
           />
-        );
+        ) : <div>Loading WebSocket service...</div>;
       case 'pedaltrace':
-        return (
+        return webSocketService ? (
           <PedalTraceWidget
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
             defaultWidth={500}
             defaultHeight={160}
           />
-        );
+        ) : <div>Loading WebSocket service...</div>;
       case 'clock':
-        return <ClockWidget id={widgetId} format24h={params.format24h === 'true'} showTelemetry={params.showTelemetry === 'true'} webSocketService={webSocketService} />;
+        return webSocketService ? (
+          <ClockWidget 
+            id={widgetId} 
+            format24h={params.format24h === 'true'} 
+            showTelemetry={params.showTelemetry === 'true'} 
+            webSocketService={webSocketService} 
+          />
+        ) : <div>Loading WebSocket service...</div>;
       case 'weather':
-        return <WeatherWidget id={widgetId} location={params.location} webSocketService={webSocketService} />;
+        return webSocketService ? (
+          <WeatherWidget 
+            id={widgetId} 
+            location={params.location} 
+            webSocketService={webSocketService} 
+          />
+        ) : <div>Loading WebSocket service...</div>;
       default:
         return <div>Unknown widget type: {widgetType}</div>;
     }

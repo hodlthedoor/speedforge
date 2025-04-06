@@ -81,8 +81,21 @@ export const ControlPanel: React.FC = () => {
         window.electronAPI.send(`telemetry:getConnectionStatus:response:${data.requestId}`, response);
       });
 
+      // Forward telemetry data to the main process for IPC widgets
+      webSocketService.addDataListener('control-panel-main', (data) => {
+        // Send to main process via IPC
+        window.electronAPI.send('telemetry:update', data);
+      });
+      
+      // Forward connection status to the main process for IPC widgets
+      webSocketService.addConnectionListener('control-panel-main', (connected) => {
+        // Send to main process via IPC
+        window.electronAPI.send('telemetry:connectionChange', connected);
+      });
+
       // Clean up the handlers when the component unmounts
       return () => {
+        webSocketService.removeListeners('control-panel-main');
         window.electronAPI.removeAllListeners('telemetry:getData');
         window.electronAPI.removeAllListeners('telemetry:getConnectionStatus');
       };

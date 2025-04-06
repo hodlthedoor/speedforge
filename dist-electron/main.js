@@ -176,6 +176,8 @@ process.env.DIST = path.join(__dirname, "../dist");
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, "../public");
 let mainWindow = null;
 let widgetManager;
+let telemetryData = null;
+let telemetryConnected = false;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1e3,
@@ -250,6 +252,32 @@ function setupIpcListeners() {
       return { success: false, error: "Failed to update widget parameters" };
     }
   });
+  ipcMain.handle("telemetry:getData", () => {
+    console.log("IPC Request: telemetry:getData, returning:", telemetryData);
+    return telemetryData;
+  });
+  ipcMain.handle("telemetry:getConnectionStatus", () => {
+    console.log("IPC Request: telemetry:getConnectionStatus, returning:", telemetryConnected);
+    return telemetryConnected;
+  });
+  ipcMain.on("telemetry:update", (_, data) => {
+    telemetryData = data;
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [_2, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send("telemetry:update", data);
+      }
+    }
+  });
+  ipcMain.on("telemetry:connectionChange", (_, connected) => {
+    telemetryConnected = connected;
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [_2, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send("telemetry:connectionChange", connected);
+      }
+    }
+  });
   ipcMain.on("widget:closeByEscape", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) {
@@ -280,7 +308,11 @@ app.on("before-quit", () => {
   ipcMain.removeHandler("widget:setVisible");
   ipcMain.removeHandler("widget:updateParams");
   ipcMain.removeHandler("app:quit");
+  ipcMain.removeHandler("telemetry:getData");
+  ipcMain.removeHandler("telemetry:getConnectionStatus");
   ipcMain.removeAllListeners("widget:closeByEscape");
+  ipcMain.removeAllListeners("telemetry:update");
+  ipcMain.removeAllListeners("telemetry:connectionChange");
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

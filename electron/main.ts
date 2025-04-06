@@ -14,6 +14,9 @@ process.env.VITE_PUBLIC = app.isPackaged
 
 let mainWindow: BrowserWindow | null = null;
 let widgetManager: WidgetWindowManager;
+// Store telemetry data and connection status in the main process
+let telemetryData: any = null;
+let telemetryConnected: boolean = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -118,6 +121,41 @@ function setupIpcListeners() {
     }
   });
   
+  // Add handlers for telemetry data access from IPC widgets
+  ipcMain.handle('telemetry:getData', () => {
+    console.log('IPC Request: telemetry:getData, returning:', telemetryData);
+    return telemetryData;
+  });
+  
+  ipcMain.handle('telemetry:getConnectionStatus', () => {
+    console.log('IPC Request: telemetry:getConnectionStatus, returning:', telemetryConnected);
+    return telemetryConnected;
+  });
+  
+  // Listen for telemetry updates from the renderer process
+  ipcMain.on('telemetry:update', (_, data) => {
+    telemetryData = data;
+    // Forward to all widget windows
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [_, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('telemetry:update', data);
+      }
+    }
+  });
+  
+  // Listen for connection status changes
+  ipcMain.on('telemetry:connectionChange', (_, connected) => {
+    telemetryConnected = connected;
+    // Forward to all widget windows
+    const windows = widgetManager.getAllWidgetWindows();
+    for (const [_, window] of windows.entries()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('telemetry:connectionChange', connected);
+      }
+    }
+  });
+  
   // Handle Escape key to close widgets
   ipcMain.on('widget:closeByEscape', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -155,9 +193,13 @@ app.on('before-quit', () => {
   ipcMain.removeHandler('widget:setVisible');
   ipcMain.removeHandler('widget:updateParams');
   ipcMain.removeHandler('app:quit');
+  ipcMain.removeHandler('telemetry:getData');
+  ipcMain.removeHandler('telemetry:getConnectionStatus');
   
   // Remove all listeners
   ipcMain.removeAllListeners('widget:closeByEscape');
+  ipcMain.removeAllListeners('telemetry:update');
+  ipcMain.removeAllListeners('telemetry:connectionChange');
 });
 
 app.on('window-all-closed', () => {
