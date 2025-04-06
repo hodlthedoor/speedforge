@@ -383,32 +383,12 @@ export const ControlPanel: React.FC = () => {
     }
   };
 
-  // Button to add a new widget section
-  const renderAddWidgetSection = () => {
-    return (
-      <div className="bg-white shadow-md rounded-lg p-4 mb-4">
-        <h2 className="text-lg font-semibold mb-3">Add Widget</h2>
-        <div className="flex flex-wrap gap-2">
-          {availableWidgets.map((widget) => (
-            <button
-              key={widget.type}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-              onClick={() => createWidget(widget.type)}
-            >
-              {widget.name}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="control-panel bg-gray-100 p-4 rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Widget Control Panel</h2>
+      <div className="flex justify-between items-center mb-4 border-b pb-3 border-indigo-200">
+        <h2 className="text-xl font-bold text-indigo-950">Widget Control Panel</h2>
         <button 
-          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+          className="px-3 py-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition duration-300 shadow-sm"
           onClick={quitApplication}
         >
           Quit Application
@@ -416,13 +396,13 @@ export const ControlPanel: React.FC = () => {
       </div>
       
       <div className="widget-list mb-6">
-        <h3 className="text-lg font-semibold mb-2">Available Widgets</h3>
+        <h3 className="text-lg font-semibold mb-2 text-indigo-800">Available Widgets</h3>
         <div className="space-y-2">
           {widgets.map(widget => (
             <div 
               key={widget.id}
-              className={`p-3 rounded cursor-pointer ${activeWidgetId === widget.id 
-                ? 'bg-blue-200 border-blue-400 border' 
+              className={`p-3 rounded-xl cursor-pointer transition-all duration-200 ${activeWidgetId === widget.id 
+                ? 'bg-indigo-100 border-indigo-400 border shadow-md' 
                 : 'bg-white border border-gray-300 hover:bg-gray-50'}`}
               onClick={() => handleSelect(widget.id)}
             >
@@ -434,7 +414,7 @@ export const ControlPanel: React.FC = () => {
                 <div className="flex space-x-2">
                   {widget.isLaunched ? (
                     <button 
-                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+                      className="px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs transition duration-200 shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         closeWidget(widget.id);
@@ -444,7 +424,7 @@ export const ControlPanel: React.FC = () => {
                     </button>
                   ) : (
                     <button 
-                      className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                      className="px-2 py-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-xs transition duration-200 shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         launchWidget(widget);
@@ -547,8 +527,8 @@ export const ControlPanel: React.FC = () => {
       </div>
 
       {activeWidget && activeWidget.isLaunched && (
-        <div className="widget-controls p-4 bg-white rounded border border-gray-300">
-          <h3 className="text-lg font-semibold mb-3">Control: {activeWidget.name}</h3>
+        <div className="widget-controls p-4 bg-white rounded-xl border border-indigo-200 shadow-lg">
+          <h3 className="text-lg font-semibold mb-3 text-indigo-700">Control: {activeWidget.name}</h3>
           
           <div className="mb-4">
             <label className="flex items-center space-x-2 mb-3">
@@ -713,7 +693,20 @@ export const ControlPanel: React.FC = () => {
         </div>
       )}
 
-      {renderAddWidgetSection()}
+      <div className="bg-white shadow-md rounded-xl p-4 mb-4 border border-indigo-100">
+        <h2 className="text-lg font-semibold mb-3 text-indigo-700">Add Widget</h2>
+        <div className="flex flex-wrap gap-2">
+          {availableWidgets.map((widget) => (
+            <button
+              key={widget.type}
+              className="px-4 py-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 text-sm transition duration-300 shadow-sm"
+              onClick={() => createWidget(widget.type)}
+            >
+              {widget.name}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }; 
