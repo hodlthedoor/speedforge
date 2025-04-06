@@ -189,9 +189,9 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     // Calculate the usable area for the trace lines
     const padding = {
       top: 5,
-      right: 5,
-      bottom: 20, // Extra space for the legend
-      left: 5
+      right: 0, // No right padding
+      bottom: 5, // Reduced bottom padding since we removed the legend
+      left: 0    // No left padding
     };
     
     // Calculate drawable area
@@ -202,9 +202,6 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     this.drawPedalTrace(ctx, throttleHistory, drawableWidth, drawableHeight, padding, '#34d399', 2); // Green for throttle
     this.drawPedalTrace(ctx, brakeHistory, drawableWidth, drawableHeight, padding, '#ef4444', 2);    // Red for brake
     this.drawPedalTrace(ctx, clutchHistory, drawableWidth, drawableHeight, padding, '#3b82f6', 2);   // Blue for clutch
-    
-    // Draw legend last so it's on top
-    this.drawLegend(ctx, canvas.width, canvas.height);
   }
   
   // Draw the grid background
@@ -269,14 +266,15 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     // Iterate through each data point
     for (let i = 0; i < dataPoints.length; i++) {
-      // Calculate the x-coordinate: map point index to pixel position across full width
-      // This ensures we utilize the entire width regardless of how many points we have
-      const xPos = padding.left + (i / (dataPoints.length - 1)) * width;
+      // Calculate the x-coordinate across the full canvas width
+      // This gives us 0 to width values across the entire canvas
+      const xPos = (i / (dataPoints.length - 1)) * width;
       
-      // Calculate the y-coordinate: map 0-100% to bottom-top of drawable area
+      // Calculate the y-coordinate (0% = bottom, 100% = top)
       const value = Math.max(0, Math.min(100, dataPoints[i]));
-      // Invert Y since canvas coordinates start at top-left (0 = bottom, 100 = top)
-      const yPos = (padding.top + height) - (value / 100) * height;
+      // Map the value (0-100) to the vertical space, accounting for top/bottom padding
+      const usableHeight = height - padding.top - padding.bottom;
+      const yPos = padding.top + (usableHeight - ((value / 100) * usableHeight));
       
       // Draw the point
       if (i === 0) {
@@ -290,61 +288,13 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     ctx.stroke();
   }
   
-  // Draw the legend showing what each color represents
-  drawLegend(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    const legendY = height - 15; // Position near bottom
-    const itemWidth = Math.min(width / 3, 80); // Space evenly, max 80px per item
-    const lineLength = 12;
-    
-    // Set text style
-    ctx.font = '10px sans-serif';
-    ctx.textBaseline = 'middle';
-    
-    // Start position for first item
-    let xPos = 10;
-    
-    // Throttle (green)
-    ctx.strokeStyle = '#34d399';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(xPos, legendY);
-    ctx.lineTo(xPos + lineLength, legendY);
-    ctx.stroke();
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    ctx.fillText('Throttle', xPos + lineLength + 4, legendY);
-    
-    // Brake (red)
-    xPos += itemWidth;
-    ctx.strokeStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.moveTo(xPos, legendY);
-    ctx.lineTo(xPos + lineLength, legendY);
-    ctx.stroke();
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('Brake', xPos + lineLength + 4, legendY);
-    
-    // Clutch (blue)
-    xPos += itemWidth;
-    ctx.strokeStyle = '#3b82f6';
-    ctx.beginPath();
-    ctx.moveTo(xPos, legendY);
-    ctx.lineTo(xPos + lineLength, legendY);
-    ctx.stroke();
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('Clutch', xPos + lineLength + 4, legendY);
-  }
-  
   // Required renderContent method from BaseWidget
   renderContent(): React.ReactNode {
     const { connected, telemetryData } = this.state;
     
     if (!connected) {
       return (
-        <div className="widget-content">
+        <div className="widget-content p-0 flex flex-col items-center justify-center h-full">
           <div className="status-disconnected">Disconnected</div>
           <div className="status-message">Attempting to connect...</div>
         </div>
@@ -353,7 +303,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     if (!telemetryData) {
       return (
-        <div className="widget-content">
+        <div className="widget-content p-0 flex flex-col items-center justify-center h-full">
           <div className="status-connected">Connected</div>
           <div className="status-message">Waiting for data...</div>
         </div>
@@ -361,10 +311,11 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     }
     
     return (
-      <div className="widget-content p-0 w-full h-full">
+      <div className="widget-content p-0 h-full w-full">
         <canvas 
           ref={this.canvasRef}
           className="w-full h-full"
+          style={{ display: 'block' }} /* Ensure no extra space */
         />
       </div>
     );
