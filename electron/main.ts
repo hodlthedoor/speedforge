@@ -14,6 +14,9 @@ process.env.VITE_PUBLIC = app.isPackaged
 // Store references to all windows
 const windows: BrowserWindow[] = [];
 
+// Create a variable to hold the interval ID
+let stayOnTopInterval: NodeJS.Timeout | null = null;
+
 // Create a window for each display
 function createWindows() {
   // Get all displays
@@ -65,13 +68,19 @@ function createWindows() {
     if (process.platform === 'darwin') {
       win.setWindowButtonVisibility(false);
       // Use level 'floating' for macOS to keep window above others
-      win.setAlwaysOnTop(true, 'floating', 1);
+      win.setAlwaysOnTop(true, 'screen-saver', 1); // Use screen-saver level which is higher than floating
       
       // Additional macOS configuration to ensure transparency
       win.setBackgroundColor('#00000000');
       
       // On macOS, we need to set opacity to ensure transparency
       win.setOpacity(1.0);
+    } else if (process.platform === 'win32') {
+      // For Windows, set a more aggressive always-on-top level
+      win.setAlwaysOnTop(true, 'screen-saver');
+    } else {
+      // For Linux and other platforms
+      win.setAlwaysOnTop(true);
     }
 
     // Start with click-through disabled for easier debugging
@@ -172,8 +181,14 @@ function setupIpcListeners() {
         // Ensure the window can still receive keyboard focus - needed for ESC key
         win.focusOnWebView();
         
-        // Ensure the window stays on top
-        win.setAlwaysOnTop(true);
+        // Ensure the window stays on top with the highest level
+        if (process.platform === 'darwin') {
+          win.setAlwaysOnTop(true, 'screen-saver', 1);
+        } else if (process.platform === 'win32') {
+          win.setAlwaysOnTop(true, 'screen-saver');
+        } else {
+          win.setAlwaysOnTop(true);
+        }
         
         // Using pointer-events CSS in the renderer will control which elements receive clicks
         // This approach allows renderer to decide which elements should get mouse events
@@ -183,8 +198,14 @@ function setupIpcListeners() {
         console.log('Disabling ignore mouse events');
         win.setIgnoreMouseEvents(false);
         
-        // Make sure window still stays on top
-        win.setAlwaysOnTop(true);
+        // Make sure window still stays on top with the highest level
+        if (process.platform === 'darwin') {
+          win.setAlwaysOnTop(true, 'screen-saver', 1);
+        } else if (process.platform === 'win32') {
+          win.setAlwaysOnTop(true, 'screen-saver');
+        } else {
+          win.setAlwaysOnTop(true);
+        }
         
         console.log('Click-through disabled');
       }
@@ -206,8 +227,22 @@ app.whenReady().then(() => {
   createWindows();
   setupIpcListeners();
   
-  // Register global shortcut for ESC to toggle click-through
-  // This ensures ESC works even when the window isn't focused or click-through is enabled
+  // Set up an interval to periodically ensure all windows stay on top
+  stayOnTopInterval = setInterval(() => {
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        if (process.platform === 'darwin') {
+          win.setAlwaysOnTop(true, 'screen-saver', 1);
+        } else if (process.platform === 'win32') {
+          win.setAlwaysOnTop(true, 'screen-saver');
+        } else {
+          win.setAlwaysOnTop(true);
+        }
+      }
+    }
+  }, 1000); // Check every second
+  
+  // Register global shortcut for Ctrl+Space to toggle click-through
   globalShortcut.register('CommandOrControl+Space', () => {
     console.log('Global Ctrl+Space shortcut triggered');
     
@@ -249,10 +284,34 @@ app.on('activate', () => {
 
 // Clean up before quitting
 app.on('before-quit', () => {
+  console.log('Performing cleanup before quit');
+  
+  // Clear the stay-on-top interval
+  if (stayOnTopInterval) {
+    clearInterval(stayOnTopInterval);
+    stayOnTopInterval = null;
+  }
+  
   // Unregister global shortcuts
   globalShortcut.unregisterAll();
   
   // Remove all IPC handlers
   ipcMain.removeHandler('app:quit');
   ipcMain.removeHandler('app:toggleClickThrough');
+  
+  // Close windows gracefully
+  for (const win of windows) {
+    try {
+      if (!win.isDestroyed()) {
+        win.removeAllListeners();
+        win.setClosable(true);
+        win.close();
+      }
+    } catch (error) {
+      console.error('Error closing window:', error);
+    }
+  }
+  
+  // Clear windows array
+  windows.length = 0;
 });
