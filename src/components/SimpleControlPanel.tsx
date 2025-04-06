@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
+import Widget from './Widget';
 
 interface WidgetConfig {
   id: string;
   name: string;
   enabled: boolean;
+  position?: { x: number, y: number };
 }
 
 export const SimpleControlPanel: React.FC = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
-    { id: 'speed', name: 'Speed Indicator', enabled: false },
-    { id: 'rpm', name: 'RPM Gauge', enabled: false },
-    { id: 'lap-time', name: 'Lap Timer', enabled: false }
+    { id: 'speed', name: 'Speed Indicator', enabled: false, position: { x: 100, y: 100 } },
+    { id: 'rpm', name: 'RPM Gauge', enabled: false, position: { x: 350, y: 100 } },
+    { id: 'lap-time', name: 'Lap Timer', enabled: false, position: { x: 600, y: 100 } }
   ]);
 
   const toggleWidget = (id: string) => {
@@ -21,6 +23,14 @@ export const SimpleControlPanel: React.FC = () => {
       )
     );
     console.log(`Toggled widget: ${id}`);
+  };
+
+  const updateWidgetPosition = (id: string, position: { x: number, y: number }) => {
+    setWidgets(prevWidgets => 
+      prevWidgets.map(widget => 
+        widget.id === id ? { ...widget, position } : widget
+      )
+    );
   };
 
   const quitApplication = () => {
@@ -46,41 +56,54 @@ export const SimpleControlPanel: React.FC = () => {
   };
 
   return (
-    <BaseDraggableComponent initialPosition={{ x: 100, y: 100 }} className="simple-control-panel-wrapper">
-      <div className="simple-control-panel visible-panel">
-        <div className="panel-header visible-header drag-handle">
-          <h2 className="visible-title">Widget Control Panel</h2>
-        </div>
-        
-        <div className="widget-list visible-list">
-          <h3 className="visible-subtitle">Available Widgets</h3>
-          <div className="widget-items visible-items">
-            {widgets.map(widget => (
-              <div 
-                key={widget.id}
-                className="widget-item visible-item"
-              >
-                <span className="widget-name visible-text">{widget.name}</span>
-                <button
-                  className={`widget-toggle visible-button ${widget.enabled ? 'enabled' : 'disabled'}`}
-                  onClick={() => toggleWidget(widget.id)}
+    <>
+      {/* Render active widgets */}
+      {widgets.filter(widget => widget.enabled).map(widget => (
+        <Widget 
+          key={widget.id}
+          id={widget.id}
+          name={widget.name}
+          initialPosition={widget.position}
+        />
+      ))}
+
+      {/* Control Panel */}
+      <BaseDraggableComponent initialPosition={{ x: 100, y: 400 }} className="simple-control-panel-wrapper">
+        <div className="simple-control-panel visible-panel">
+          <div className="panel-header visible-header drag-handle">
+            <h2 className="visible-title">Widget Control Panel</h2>
+          </div>
+          
+          <div className="widget-list visible-list">
+            <h3 className="visible-subtitle">Available Widgets</h3>
+            <div className="widget-items visible-items">
+              {widgets.map(widget => (
+                <div 
+                  key={widget.id}
+                  className="widget-item visible-item"
                 >
-                  {widget.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-            ))}
+                  <span className="widget-name visible-text">{widget.name}</span>
+                  <button
+                    className={`widget-toggle visible-button ${widget.enabled ? 'enabled' : 'disabled'}`}
+                    onClick={() => toggleWidget(widget.id)}
+                  >
+                    {widget.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="panel-footer visible-footer">
+            <button 
+              className="quit-app-button visible-quit-button"
+              onClick={quitApplication}
+            >
+              Quit Application
+            </button>
           </div>
         </div>
-        
-        <div className="panel-footer visible-footer">
-          <button 
-            className="quit-app-button visible-quit-button"
-            onClick={quitApplication}
-          >
-            Quit Application
-          </button>
-        </div>
-      </div>
-    </BaseDraggableComponent>
+      </BaseDraggableComponent>
+    </>
   );
 }; 
