@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import SimpleControlPanel from './components/SimpleControlPanel';
+import { WebSocketService } from './services/WebSocketService';
 
 interface ClickIndicator {
   id: number;
@@ -10,6 +11,18 @@ interface ClickIndicator {
 }
 
 function App() {
+  // Initialize WebSocketService
+  useEffect(() => {
+    const webSocketService = WebSocketService.getInstance();
+    console.log('WebSocketService initialized in App component');
+    
+    // Cleanup when component unmounts
+    return () => {
+      console.log('Closing WebSocketService connection');
+      webSocketService.close();
+    };
+  }, []);
+  
   // Start with click-through disabled for debugging
   const [isClickThrough, setIsClickThrough] = useState(false);
   const clickThroughRef = useRef(false);

@@ -80,8 +80,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const toggleClickThrough = () => {
     const newValue = !clickThrough;
     setClickThrough(newValue);
+    
+    // Call the parent component's handler with the new value
     if (onClickThrough) {
+      console.log(`SimpleControlPanel: toggle click-through to ${newValue}`);
       onClickThrough(newValue);
+    }
+    
+    // If running in Electron, also toggle via the API
+    if (window.electronAPI) {
+      console.log(`SimpleControlPanel: requesting Electron to set click-through to ${newValue}`);
+      window.electronAPI.app.toggleClickThrough(newValue)
+        .then(response => {
+          console.log('Electron click-through response:', response);
+        })
+        .catch(error => {
+          console.error('Error toggling click-through via Electron:', error);
+        });
     }
   };
 
