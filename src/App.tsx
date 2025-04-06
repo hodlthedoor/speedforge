@@ -23,6 +23,19 @@ function App() {
     };
   }, []);
   
+  // Track all active widgets
+  const [widgets, setWidgets] = useState<any[]>([]);
+  
+  // Callback for when SimpleControlPanel adds a widget
+  const handleAddWidget = useCallback((newWidget: any) => {
+    setWidgets(prev => [...prev, newWidget]);
+  }, []);
+  
+  // Callback for when a widget is closed
+  const handleCloseWidget = useCallback((id: string) => {
+    setWidgets(prev => prev.filter(widget => widget.id !== id));
+  }, []);
+  
   // Start with click-through disabled for debugging
   const [isClickThrough, setIsClickThrough] = useState(false);
   const clickThroughRef = useRef(false);
@@ -328,6 +341,7 @@ function App() {
         <SimpleControlPanel 
           initialPosition={{ x: 20, y: 20 }}
           onClickThrough={setIsClickThrough}
+          onAddWidget={handleAddWidget}
         />
       ) : null}
       
@@ -354,6 +368,13 @@ function App() {
           Show Control Panel
         </div>
       )}
+      
+      {/* Widgets are rendered at app level, separate from control panel */}
+      {widgets.map(widget => (
+        <React.Fragment key={widget.id}>
+          {widget.content}
+        </React.Fragment>
+      ))}
     </div>
   );
 }

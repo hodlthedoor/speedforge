@@ -4,7 +4,7 @@ import { Widget } from './Widget';
 import { SimpleTelemetryWidget } from './SimpleTelemetryWidget';
 import { v4 as uuidv4 } from 'uuid';
 
-interface Widget {
+interface WidgetData {
   id: string;
   type: 'default' | 'telemetry';
   title: string;
@@ -16,14 +16,15 @@ interface Widget {
 interface SimpleControlPanelProps {
   initialPosition?: { x: number, y: number };
   onClickThrough?: (enabled: boolean) => void;
+  onAddWidget?: (widget: any) => void;
 }
 
 const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ 
   initialPosition = { x: 20, y: 20 },
-  onClickThrough
+  onClickThrough,
+  onAddWidget
 }) => {
   const [clickThrough, setClickThrough] = useState(false);
-  const [widgets, setWidgets] = useState<Widget[]>([]);
   const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
   
   // Add metrics options
@@ -46,35 +47,50 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   ];
 
   const addWidget = () => {
-    const newWidget: Widget = {
-      id: uuidv4(),
-      type: 'default',
-      title: 'New Widget',
-      content: 'Widget content goes here',
-      enabled: true
-    };
-    setWidgets([...widgets, newWidget]);
+    if (!onAddWidget) return;
+    
+    const id = uuidv4();
+    const widgetContent = (
+      <Widget
+        key={id}
+        title="New Widget"
+        onClose={() => closeWidget(id)}
+      >
+        Widget content goes here
+      </Widget>
+    );
+    
+    onAddWidget({
+      id,
+      content: widgetContent
+    });
   };
 
   const addTelemetryWidget = (metric: string, name: string) => {
-    const newWidget: Widget = {
-      id: uuidv4(),
-      type: 'telemetry',
-      title: name,
-      metric: metric,
-      enabled: true
-    };
-    setWidgets([...widgets, newWidget]);
+    if (!onAddWidget) return;
+    
+    const id = uuidv4();
+    const widgetContent = (
+      <SimpleTelemetryWidget
+        key={id}
+        id={id}
+        name={name}
+        metric={metric}
+        onClose={() => closeWidget(id)}
+      />
+    );
+    
+    onAddWidget({
+      id,
+      content: widgetContent
+    });
+    
     setShowTelemetryOptions(false);
   };
 
   const closeWidget = (id: string) => {
     console.log(`Closing widget ${id}`);
-    setWidgets(widgets.map(widget => 
-      widget.id === id 
-        ? { ...widget, enabled: false } 
-        : widget
-    ));
+    // We don't need to update state here since widgets are managed in the parent
   };
 
   // Update local click-through state when App component changes it
@@ -113,81 +129,55 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   };
 
   return (
-    <>
-      <BaseDraggableComponent 
-        initialPosition={initialPosition}
-        className={`control-panel ${clickThrough ? 'click-through' : ''}`}
-      >
-        <div className="panel-header drag-handle">
-          <h2>Control Panel</h2>
-        </div>
-        <div className="panel-content">
-          <div className="control-buttons">
-            <button 
-              className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
-              onClick={toggleClickThrough}
-            >
-              {clickThrough ? 'Disable Click Through' : 'Enable Click Through'}
-            </button>
-            
-            <button 
-              className="btn btn-primary"
-              onClick={addWidget}
-            >
-              Add Widget
-            </button>
-            
-            <button 
-              className="btn btn-primary"
-              onClick={() => setShowTelemetryOptions(!showTelemetryOptions)}
-            >
-              {showTelemetryOptions ? 'Hide Telemetry Options' : 'Add Telemetry Widget'}
-            </button>
-          </div>
+    <BaseDraggableComponent 
+      initialPosition={initialPosition}
+      className={`control-panel ${clickThrough ? 'click-through' : ''}`}
+    >
+      <div className="panel-header drag-handle">
+        <h2>Control Panel</h2>
+      </div>
+      <div className="panel-content">
+        <div className="control-buttons">
+          <button 
+            className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
+            onClick={toggleClickThrough}
+          >
+            {clickThrough ? 'Disable Click Through' : 'Enable Click Through'}
+          </button>
           
-          {showTelemetryOptions && (
-            <div className="telemetry-options">
-              <h3>Select Telemetry Metric</h3>
-              <div className="metric-buttons">
-                {availableMetrics.map(metric => (
-                  <button 
-                    key={metric.id}
-                    className="btn btn-sm btn-secondary metric-btn"
-                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                  >
-                    {metric.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <button 
+            className="btn btn-primary"
+            onClick={addWidget}
+          >
+            Add Widget
+          </button>
+          
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowTelemetryOptions(!showTelemetryOptions)}
+          >
+            {showTelemetryOptions ? 'Hide Telemetry Options' : 'Add Telemetry Widget'}
+          </button>
         </div>
-      </BaseDraggableComponent>
-
-      {widgets.filter(widget => widget.enabled).map(widget => {
-        if (widget.type === 'telemetry' && widget.metric) {
-          return (
-            <SimpleTelemetryWidget
-              key={widget.id}
-              id={widget.id}
-              name={widget.title}
-              metric={widget.metric}
-              onClose={closeWidget}
-            />
-          );
-        } else {
-          return (
-            <Widget
-              key={widget.id}
-              title={widget.title}
-              onClose={() => closeWidget(widget.id)}
-            >
-              {widget.content || ''}
-            </Widget>
-          );
-        }
-      })}
-    </>
+        
+        {showTelemetryOptions && (
+          <div className="telemetry-options">
+            <h3>Select Telemetry Metric</h3>
+            <div className="metric-buttons">
+              {availableMetrics.map(metric => (
+                <button 
+                  key={metric.id}
+                  className="btn btn-sm btn-secondary metric-btn"
+                  onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                >
+                  {metric.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </BaseDraggableComponent>
   );
 };
 
