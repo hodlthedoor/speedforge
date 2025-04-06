@@ -6,7 +6,7 @@ import { WebSocketService } from '../services/WebSocketService';
 
 interface WidgetConfig {
   id: string;
-  type: 'clock' | 'weather' | 'telemetry' | 'trace' | 'pedaltrace' | 'ipc';
+  type: 'ipc';
   name: string;
   params?: Record<string, any>;
   isLaunched: boolean;
@@ -38,19 +38,11 @@ const defaultTelemetryMetrics = [
 
 // Define available widget types
 const availableWidgets = [
-  { id: 'clock', type: 'clock', name: 'Clock' },
-  { id: 'weather', type: 'weather', name: 'Weather' },
-  { id: 'telemetry', type: 'telemetry', name: 'Telemetry' },
   { id: 'ipc', type: 'ipc', name: 'IPC Telemetry' },
-  { id: 'trace', type: 'trace', name: 'Throttle/Brake Trace' },
-  { id: 'pedaltrace', type: 'pedaltrace', name: 'Pedal Trace' },
 ];
 
 export const ControlPanel: React.FC = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([
-    { id: 'clock-widget-1', type: 'clock', name: 'Clock Widget', params: { format24h: false, showTelemetry: true }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
-    { id: 'weather-widget-1', type: 'weather', name: 'Weather Widget', params: { location: 'New York' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
-    { id: 'telemetry-widget-1', type: 'telemetry', name: 'Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 },
     { id: 'ipc-widget-1', type: 'ipc', name: 'IPC Telemetry Widget', params: { metric: 'speed_kph' }, isLaunched: false, isVisible: true, opacity: 1, width: 300, height: 200 }
   ]);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
@@ -364,22 +356,10 @@ export const ControlPanel: React.FC = () => {
     // Generate a unique ID
     const id = `${type}-${Date.now()}`;
     
-    // Set default parameters based on widget type
-    let params: Record<string, any> = {};
+    // Set default parameters
+    let params: Record<string, any> = { metric: 'speed_kph' };
     let width = 300;
     let height = 200;
-    
-    if (type === 'clock') {
-      params = { format24h: false, showTelemetry: false };
-    } else if (type === 'weather') {
-      params = { location: 'New York' };
-    } else if (type === 'telemetry') {
-      params = { metric: 'speed_kph' };
-    } else if (type === 'trace' || type === 'pedaltrace') {
-      params = { traceLength: 75 };
-      width = 500;
-      height = 160;
-    }
     
     // Create widget through Electron
     try {
@@ -502,8 +482,8 @@ export const ControlPanel: React.FC = () => {
                     />
                   </div>
                   
-                  {/* Add metric selector for telemetry widgets */}
-                  {widget.type === 'telemetry' && widget.isLaunched && (
+                  {/* Add metric selector for IPC widget */}
+                  {widget.isLaunched && (
                     <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                       <label className="text-sm font-medium text-gray-700 block mb-1">
                         Telemetry Metric:
@@ -521,31 +501,6 @@ export const ControlPanel: React.FC = () => {
                           </option>
                         ))}
                       </select>
-                    </div>
-                  )}
-
-                  {/* Add trace length slider for trace widgets */}
-                  {(widget.type === 'trace' || widget.type === 'pedaltrace') && widget.isLaunched && (
-                    <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">
-                        Trace Length: {widget.params?.traceLength || 75} points
-                      </label>
-                      <input 
-                        type="range" 
-                        min="25" 
-                        max="200" 
-                        step="25"
-                        value={widget.params?.traceLength || 75}
-                        className="w-full"
-                        onChange={(e) => {
-                          const traceLength = parseInt(e.target.value);
-                          updateWidgetParams(widget.id, { traceLength });
-                        }}
-                      />
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>Faster</span>
-                        <span>Slower</span>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -594,105 +549,25 @@ export const ControlPanel: React.FC = () => {
             </div>
           </div>
           
-          {/* Widget-specific controls */}
-          {activeWidget.type === 'telemetry' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Telemetry Metric:
-              </label>
-              <select
-                value={activeWidget.params?.metric || 'speed_kph'}
-                onChange={(e) => {
-                  updateWidgetParams(activeWidget.id, { metric: e.target.value });
-                }}
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                {availableTelemetryMetrics.map((metric) => (
-                  <option key={metric.value} value={metric.value}>
-                    {metric.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          {activeWidget.type === 'trace' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Trace Length: {activeWidget.params?.traceLength || 75} points
-              </label>
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="range" 
-                  min="25" 
-                  max="200" 
-                  step="25"
-                  value={activeWidget.params?.traceLength || 75}
-                  className="w-full"
-                  onChange={(e) => {
-                    const traceLength = parseInt(e.target.value);
-                    updateWidgetParams(activeWidget.id, { traceLength });
-                  }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>Faster</span>
-                <span>Slower</span>
-              </div>
-            </div>
-          )}
-          
-          {activeWidget.type === 'pedaltrace' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Trace Length: {activeWidget.params?.traceLength || 75} points
-              </label>
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="range" 
-                  min="25" 
-                  max="200" 
-                  step="25"
-                  value={activeWidget.params?.traceLength || 75}
-                  className="w-full"
-                  onChange={(e) => {
-                    const traceLength = parseInt(e.target.value);
-                    updateWidgetParams(activeWidget.id, { traceLength });
-                  }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>Faster</span>
-                <span>Slower</span>
-              </div>
-            </div>
-          )}
-          
-          {activeWidget.type === 'clock' && (
-            <div className="mb-4">
-              <label className="flex items-center space-x-2 mb-3">
-                <input 
-                  type="checkbox" 
-                  checked={activeWidget.params?.format24h || false}
-                  onChange={(e) => {
-                    updateWidgetParams(activeWidget.id, { format24h: e.target.checked });
-                  }}
-                />
-                <span className="text-sm font-medium text-gray-700">24-hour format</span>
-              </label>
-              
-              <label className="flex items-center space-x-2">
-                <input 
-                  type="checkbox" 
-                  checked={activeWidget.params?.showTelemetry || false}
-                  onChange={(e) => {
-                    updateWidgetParams(activeWidget.id, { showTelemetry: e.target.checked });
-                  }}
-                />
-                <span className="text-sm font-medium text-gray-700">Show telemetry data</span>
-              </label>
-            </div>
-          )}
+          {/* IPC Widget specific controls */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Telemetry Metric:
+            </label>
+            <select
+              value={activeWidget.params?.metric || 'speed_kph'}
+              onChange={(e) => {
+                updateWidgetParams(activeWidget.id, { metric: e.target.value });
+              }}
+              className="w-full p-2 border border-gray-300 rounded"
+            >
+              {availableTelemetryMetrics.map((metric) => (
+                <option key={metric.value} value={metric.value}>
+                  {metric.label}
+                </option>
+              ))}
+            </select>
+          </div>
           
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>

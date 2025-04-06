@@ -1,11 +1,5 @@
 /// <reference path="../types/electron.d.ts" />
 import React, { useEffect, useState } from 'react';
-
-// Import the TelemetryWidget
-import { TelemetryWidget } from './TelemetryWidget';
-import { TraceWidget } from '../widgets/TraceWidget';
-import { PedalTraceWidget } from '../widgets/PedalTraceWidget';
-import { WebSocketService } from '../services/WebSocketService';
 import { IpcWidget } from './IpcWidget';
 
 // Main Widget Container component
@@ -14,8 +8,6 @@ export const WidgetContainer: React.FC = () => {
   const [widgetId, setWidgetId] = useState<string>('');
   const [widgetType, setWidgetType] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  // Initialize WebSocketService lazily only when needed
-  const [webSocketService, setWebSocketService] = useState<WebSocketService | null>(null);
 
   useEffect(() => {
     // Get widget parameters from URL
@@ -37,11 +29,6 @@ export const WidgetContainer: React.FC = () => {
       
       setParams(widgetParams);
       console.log('Widget parameters:', { id, type, params: widgetParams });
-      
-      // Only initialize WebSocketService for widgets that need it
-      if (type.toLowerCase() !== 'ipc') {
-        setWebSocketService(WebSocketService.getInstance());
-      }
     } else {
       console.error('Missing required widget parameters');
     }
@@ -75,145 +62,22 @@ export const WidgetContainer: React.FC = () => {
     
     console.log(`Rendering widget: ${widgetType} with ID: ${widgetId}`);
     
-    // Render the appropriate widget based on type
-    switch (widgetType.toLowerCase()) {
-      case 'telemetry': 
-        return webSocketService ? (
-          <TelemetryWidget 
-            id={widgetId}
-            metric={params.metric || 'speed_kph'}
-          />
-        ) : <div>Loading WebSocket service...</div>;
-      case 'ipc':
-        return (
-          <IpcWidget
-            id={widgetId}
-            metric={params.metric || 'speed_kph'}
-          />
-        );
-      case 'trace':
-        return webSocketService ? (
-          <TraceWidget
-            id={widgetId}
-            traceLength={parseInt(params.traceLength) || 75}
-          />
-        ) : <div>Loading WebSocket service...</div>;
-      case 'pedaltrace':
-        return webSocketService ? (
-          <PedalTraceWidget
-            id={widgetId}
-            traceLength={parseInt(params.traceLength) || 75}
-            defaultWidth={500}
-            defaultHeight={160}
-          />
-        ) : <div>Loading WebSocket service...</div>;
-      case 'clock':
-        return webSocketService ? (
-          <ClockWidget 
-            id={widgetId} 
-            format24h={params.format24h === 'true'} 
-            showTelemetry={params.showTelemetry === 'true'} 
-            webSocketService={webSocketService} 
-          />
-        ) : <div>Loading WebSocket service...</div>;
-      case 'weather':
-        return webSocketService ? (
-          <WeatherWidget 
-            id={widgetId} 
-            location={params.location} 
-            webSocketService={webSocketService} 
-          />
-        ) : <div>Loading WebSocket service...</div>;
-      default:
-        return <div>Unknown widget type: {widgetType}</div>;
+    // Only render IPC widget
+    if (widgetType.toLowerCase() === 'ipc') {
+      return (
+        <IpcWidget
+          id={widgetId}
+          metric={params.metric || 'speed_kph'}
+        />
+      );
+    } else {
+      return <div>Unsupported widget type: {widgetType}</div>;
     }
   };
 
   return (
     <div className="widget-wrapper">
       {renderWidget()}
-    </div>
-  );
-};
-
-// Individual widget components that use WebSocketService instead of creating their own connections
-// These would be moved to their own files in a real refactoring
-
-// Clock Widget
-interface ClockWidgetProps {
-  id: string;
-  format24h?: boolean;
-  showTelemetry?: boolean;
-  webSocketService: WebSocketService;
-}
-
-const ClockWidget: React.FC<ClockWidgetProps> = (props) => {
-  const [time, setTime] = useState(new Date());
-  const [telemetryData, setTelemetryData] = useState<any>(null);
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    // Update the clock every second
-    const timer = setInterval(() => {
-      setTime(new Date());
-    }, 1000);
-
-    // Register for telemetry data if needed
-    if (props.showTelemetry) {
-      props.webSocketService.addDataListener(props.id, setTelemetryData);
-      props.webSocketService.addConnectionListener(props.id, setConnected);
-    }
-    
-    return () => {
-      clearInterval(timer);
-      if (props.showTelemetry) {
-        props.webSocketService.removeListeners(props.id);
-      }
-    };
-  }, [props.id, props.showTelemetry, props.webSocketService]);
-
-  const formatTime = () => {
-    if (props.format24h) {
-      return time.toLocaleTimeString('en-US', { hour12: false });
-    }
-    return time.toLocaleTimeString();
-  };
-
-  return (
-    <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
-      <div className="text-4xl font-bold">
-        {formatTime()}
-      </div>
-      <div className="text-md mt-2 text-gray-300">
-        {time.toDateString()}
-      </div>
-      
-      {props.showTelemetry && connected && telemetryData && (
-        <div className="mt-4 text-sm">
-          <div>Speed: {telemetryData.speed_kph?.toFixed(1)} km/h</div>
-          <div>RPM: {telemetryData.rpm?.toFixed(0)}</div>
-          <div>Gear: {telemetryData.gear || 'N'}</div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Weather Widget
-interface WeatherWidgetProps {
-  id: string;
-  location?: string;
-  webSocketService: WebSocketService;
-}
-
-const WeatherWidget: React.FC<WeatherWidgetProps> = (props) => {
-  return (
-    <div className="p-4 flex flex-col items-center justify-center h-full bg-gray-800 text-white">
-      <div className="text-xl font-semibold mb-2">Weather</div>
-      <div className="text-sm text-gray-300 mb-4">{props.location || 'Current Location'}</div>
-      <div className="text-5xl">☀️</div>
-      <div className="text-3xl font-bold mt-2">23°C</div>
-      <div className="text-gray-300">Sunny</div>
     </div>
   );
 }; 
