@@ -175,8 +175,8 @@ function App() {
         const newState = !clickThroughRef.current;
         console.log(`Toggling click-through from ${clickThroughRef.current} to ${newState} (via ESC key)`);
         
-        // Update state
-        setIsClickThrough(newState);
+        // Update state using the ref value to ensure we're toggling correctly
+        setIsClickThrough(prevState => !prevState);
         
         // Update debug info for toggling
         setDebugInfo(prev => ({
@@ -199,7 +199,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, []); // Remove isClickThrough dependency to avoid recreating the handler
+  }, []); // Dependencies array is empty to avoid recreating the handler
   
   // Toggle click-through with a button for testing as an alternative to ESC key
   const toggleClickThrough = useCallback(() => {
