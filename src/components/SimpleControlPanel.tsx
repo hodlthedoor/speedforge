@@ -341,14 +341,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   <span className="detail-value">{selectedWidget.metric}</span>
                 </div>
               )}
-              <div className="widget-actions">
-                <button 
-                  className="btn btn-sm btn-warning"
-                  onClick={() => selectWidget(selectedWidget)}
-                >
-                  Highlight
-                </button>
-              </div>
             </div>
           </div>
         )}
