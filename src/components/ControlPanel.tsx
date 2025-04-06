@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWidgetManager } from '../widgets/WidgetManager';
 import { WidgetContainer } from './WidgetContainer';
-import { WebSocketService } from '../services/WebSocketService';
+import { useWebSocket } from '../services/WebSocketContext';
 
 interface WidgetConfig {
   id: string;
@@ -49,8 +49,8 @@ export const ControlPanel: React.FC = () => {
   const [availableTelemetryMetrics, setAvailableTelemetryMetrics] = useState(defaultTelemetryMetrics);
   const isElectron = window.electronAPI !== undefined;
   
-  // Create a single WebSocketService instance for all widgets
-  const [webSocketService] = useState(() => WebSocketService.getInstance());
+  // Use WebSocketService from context
+  const webSocketService = useWebSocket();
 
   useEffect(() => {
     // Set up IPC handlers for widget windows to get telemetry data
@@ -73,21 +73,8 @@ export const ControlPanel: React.FC = () => {
         window.electronAPI.send(`telemetry:getConnectionStatus:response:${data.requestId}`, response);
       });
 
-      // Forward telemetry data to the main process for IPC widgets
-      webSocketService.addDataListener('control-panel-main', (data) => {
-        // Send to main process via IPC
-        window.electronAPI.send('telemetry:update', data);
-      });
-      
-      // Forward connection status to the main process for IPC widgets
-      webSocketService.addConnectionListener('control-panel-main', (connected) => {
-        // Send to main process via IPC
-        window.electronAPI.send('telemetry:connectionChange', connected);
-      });
-
       // Clean up the handlers when the component unmounts
       return () => {
-        webSocketService.removeListeners('control-panel-main');
         window.electronAPI.removeAllListeners('telemetry:getData');
         window.electronAPI.removeAllListeners('telemetry:getConnectionStatus');
       };
@@ -116,8 +103,8 @@ export const ControlPanel: React.FC = () => {
       checkRunningWidgets();
     }
     
-    // Setup listener for telemetry fields from the WebSocketService instead of creating a new connection
-    webSocketService.addDataListener('control-panel', (data) => {
+    // Setup listener for telemetry fields from the WebSocketService
+    const telemetryDataHandler = (data: any) => {
       if (data) {
         // Extract available metrics from the telemetry data
         const metrics = Object.keys(data)
@@ -136,7 +123,9 @@ export const ControlPanel: React.FC = () => {
         
         setAvailableTelemetryMetrics(metrics);
       }
-    });
+    };
+    
+    webSocketService.addDataListener('control-panel', telemetryDataHandler);
     
     // Cleanup
     return () => {

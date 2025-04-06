@@ -3,6 +3,7 @@ import './App.css';
 import { WidgetManagerProvider } from './widgets/WidgetManager';
 import { ControlPanel } from './components/ControlPanel';
 import { WidgetContainer } from './widgets/WidgetContainer';
+import { WebSocketProvider } from './services/WebSocketContext';
 
 function App() {
   // Check if we're in widget mode based on URL hash
@@ -34,22 +35,24 @@ function App() {
   }, []);
   
   return (
-    <WidgetManagerProvider>
-      {isWidgetMode ? (
-        // Widget mode - show just the widget container
-        <div className="min-h-screen bg-transparent">
-          <WidgetContainer />
-        </div>
-      ) : (
-        // Main control panel mode with explicit scrolling enabled
-        <div className="min-h-screen bg-gray-200 p-8 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold mb-6">Widget Dashboard</h1>
-            <ControlPanel />
+    <WebSocketProvider>
+      <WidgetManagerProvider>
+        {isWidgetMode ? (
+          // Widget mode - show just the widget container
+          <div className="min-h-screen bg-transparent">
+            <WidgetContainer />
           </div>
-        </div>
-      )}
-    </WidgetManagerProvider>
+        ) : (
+          // Main control panel mode with explicit scrolling enabled
+          <div className="min-h-screen bg-gray-200 p-8 overflow-y-auto">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-2xl font-bold mb-6">Widget Dashboard</h1>
+              <ControlPanel />
+            </div>
+          </div>
+        )}
+      </WidgetManagerProvider>
+    </WebSocketProvider>
   );
 }
 
