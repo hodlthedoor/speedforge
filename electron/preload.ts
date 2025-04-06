@@ -7,6 +7,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
   
+  // Send message to main process
+  send: (channel: string, data?: any) => {
+    const validChannels = [
+      'telemetry:update',
+      'telemetry:connectionChange',
+      'widget:closeByEscape',
+      'widget:registerForUpdates'
+    ];
+    
+    if (validChannels.includes(channel)) {
+      ipcRenderer.send(channel, data);
+    } else {
+      console.warn(`Channel ${channel} is not allowed for sending`);
+    }
+  },
+  
   // Add event listener to receive messages from main process
   on: (channel: string, callback: (data: any) => void) => {
     const validChannels = ['main-process-message', 'app:toggle-click-through'];
