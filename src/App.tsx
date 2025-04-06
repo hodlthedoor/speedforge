@@ -34,23 +34,27 @@ function App() {
     };
   }, []);
   
+  // Widget windows don't need WebSocketProvider - they use IPC
+  if (isWidgetMode) {
+    return (
+      <WidgetManagerProvider>
+        <div className="min-h-screen bg-transparent">
+          <WidgetContainer />
+        </div>
+      </WidgetManagerProvider>
+    );
+  }
+  
+  // Main window with WebSocketProvider
   return (
     <WebSocketProvider>
       <WidgetManagerProvider>
-        {isWidgetMode ? (
-          // Widget mode - show just the widget container
-          <div className="min-h-screen bg-transparent">
-            <WidgetContainer />
+        <div className="min-h-screen bg-gray-200 p-8 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-2xl font-bold mb-6">Widget Dashboard</h1>
+            <ControlPanel />
           </div>
-        ) : (
-          // Main control panel mode with explicit scrolling enabled
-          <div className="min-h-screen bg-gray-200 p-8 overflow-y-auto">
-            <div className="max-w-4xl mx-auto">
-              <h1 className="text-2xl font-bold mb-6">Widget Dashboard</h1>
-              <ControlPanel />
-            </div>
-          </div>
-        )}
+        </div>
       </WidgetManagerProvider>
     </WebSocketProvider>
   );

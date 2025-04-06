@@ -57,7 +57,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       return;
     }
 
-    console.log(`IpcWidget ${id}: Setting up IPC listeners`);
+    console.log(`IpcWidget ${id}: Setting up IPC listeners (using pure IPC, no WebSocket)`);
 
     // Listen for parameter updates from the main process
     window.electronAPI.on('widget:params', (params: Record<string, any>) => {
@@ -65,38 +65,44 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       
       // Update metric if provided
       if (params.metric && params.metric !== selectedMetric) {
-        console.log(`Updating metric from ${selectedMetric} to ${params.metric}`);
+        console.log(`IpcWidget ${id}: Updating metric from ${selectedMetric} to ${params.metric}`);
         setSelectedMetric(params.metric);
       }
     });
 
     // Request initial data from main process
+    console.log(`IpcWidget ${id}: Requesting initial telemetry data via IPC`);
     window.electronAPI.invoke('telemetry:getData')
       .then((data: any) => {
+        console.log(`IpcWidget ${id}: Received initial telemetry data via IPC:`, data);
         if (data) {
           setTelemetryData(data);
         }
       })
       .catch((err: any) => {
-        console.error('Failed to get initial telemetry data:', err);
+        console.error(`IpcWidget ${id}: Failed to get initial telemetry data:`, err);
       });
 
     // Request initial connection status
+    console.log(`IpcWidget ${id}: Requesting connection status via IPC`);
     window.electronAPI.invoke('telemetry:getConnectionStatus')
       .then((status: boolean) => {
+        console.log(`IpcWidget ${id}: Received connection status via IPC:`, status);
         setConnected(status);
       })
       .catch((err: any) => {
-        console.error('Failed to get connection status:', err);
+        console.error(`IpcWidget ${id}: Failed to get connection status:`, err);
       });
 
     // Listen for telemetry data updates
     window.electronAPI.on('telemetry:update', (data: any) => {
+      console.log(`IpcWidget ${id}: Received telemetry update via IPC`);
       setTelemetryData(data);
     });
 
     // Listen for connection status updates
     window.electronAPI.on('telemetry:connectionChange', (status: boolean) => {
+      console.log(`IpcWidget ${id}: Received connection change via IPC:`, status);
       setConnected(status);
     });
 
@@ -114,6 +120,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       window.removeEventListener('keydown', handleKeyPress);
       
       if (window.electronAPI) {
+        console.log(`IpcWidget ${id}: Removing all IPC listeners`);
         window.electronAPI.removeAllListeners('widget:params');
         window.electronAPI.removeAllListeners('telemetry:update');
         window.electronAPI.removeAllListeners('telemetry:connectionChange');

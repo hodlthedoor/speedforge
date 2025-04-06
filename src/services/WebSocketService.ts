@@ -10,10 +10,22 @@ export class WebSocketService {
   private connected: boolean = false;
   private lastReceivedData: any = null;
   private url: string;
+  private isWidgetWindow: boolean;
 
   private constructor(url: string = 'ws://localhost:8080') {
     this.url = url;
-    this.connect();
+    
+    // Skip WebSocket connection in widget windows
+    this.isWidgetWindow = window.location.search.includes('widgetId=') && 
+                        window.location.search.includes('widgetType=');
+    
+    console.log(`WebSocketService initialized: ${this.isWidgetWindow ? 'Widget window - skipping connection' : 'Main window - connecting'}`);
+    
+    if (!this.isWidgetWindow) {
+      this.connect();
+    } else {
+      console.log('WebSocketService: Running in widget window, WebSocket connection skipped');
+    }
   }
 
   /**
@@ -30,6 +42,12 @@ export class WebSocketService {
    * Connect to the WebSocket server
    */
   private connect(): void {
+    // Skip creating a connection in widget windows
+    if (this.isWidgetWindow) {
+      console.log('WebSocketService: Not connecting in widget window mode');
+      return;
+    }
+    
     try {
       console.log('WebSocketService: Connecting to', this.url);
       this.ws = new WebSocket(this.url);
@@ -135,11 +153,21 @@ export class WebSocketService {
    * @param data The data received from the WebSocket
    */
   private notifyDataListeners(data: any): void {
-    for (const callbacks of this.listeners.values()) {
-      for (const callback of callbacks) {
-        callback(data);
-      }
+    // In widget windows, we don't notify listeners directly
+    // as data will come through IPC
+    if (this.isWidgetWindow) {
+      return;
     }
+    
+    this.listeners.forEach((callbacks, id) => {
+      callbacks.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`WebSocketService: Error notifying listener ${id}:`, error);
+        }
+      });
+    });
   }
 
   /**
@@ -147,11 +175,21 @@ export class WebSocketService {
    * @param connected Whether the WebSocket is connected
    */
   private notifyConnectionListeners(connected: boolean): void {
-    for (const callbacks of this.connectionListeners.values()) {
-      for (const callback of callbacks) {
-        callback(connected);
-      }
+    // In widget windows, we don't notify listeners directly
+    // as status will come through IPC
+    if (this.isWidgetWindow) {
+      return;
     }
+    
+    this.connectionListeners.forEach((callbacks, id) => {
+      callbacks.forEach(callback => {
+        try {
+          callback(connected);
+        } catch (error) {
+          console.error(`WebSocketService: Error notifying connection listener ${id}:`, error);
+        }
+      });
+    });
   }
 
   /**
@@ -184,6 +222,13 @@ export class WebSocketService {
 
     this.listeners.clear();
     this.connectionListeners.clear();
+  }
+
+  /**
+   * Check if we're running in a widget window
+   */
+  public runningInWidgetWindow(): boolean {
+    return this.isWidgetWindow;
   }
 }
 
