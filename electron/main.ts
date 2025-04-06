@@ -113,8 +113,35 @@ function setupIpcListeners() {
   // Quit the application
   ipcMain.handle('app:quit', () => {
     console.log('Quitting application');
-    app.quit();
-    return { success: true };
+    try {
+      // Try to close all windows first
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.close();
+        }
+      }
+      
+      // Clear out the windows array
+      windows.length = 0;
+      
+      // Schedule app quit to happen after current event loop
+      setTimeout(() => {
+        try {
+          app.quit();
+        } catch (error) {
+          console.log('Error during app.quit():', error);
+          // Force exit as a last resort
+          process.exit(0);
+        }
+      }, 100);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error during quit process:', error);
+      // Force exit as a last resort
+      process.exit(0);
+      return { success: false, error: String(error) };
+    }
   });
   
   // Toggle click-through mode
