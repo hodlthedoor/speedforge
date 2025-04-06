@@ -21,7 +21,31 @@ function App() {
   
   // Callback for when SimpleControlPanel adds a widget
   const handleAddWidget = useCallback((newWidget: any) => {
-    setWidgets(prev => [...prev, newWidget]);
+    // Check if this widget already exists (for updates)
+    if (newWidget.id) {
+      setWidgets(prev => {
+        const existingIndex = prev.findIndex(w => w.id === newWidget.id);
+        
+        // If widget exists, update it
+        if (existingIndex >= 0) {
+          // If enabled is false, remove the widget
+          if (newWidget.enabled === false) {
+            return prev.filter(w => w.id !== newWidget.id);
+          }
+          
+          // Otherwise update the widget
+          const updatedWidgets = [...prev];
+          updatedWidgets[existingIndex] = newWidget;
+          return updatedWidgets;
+        }
+        
+        // If it's a new widget, add it
+        return [...prev, newWidget];
+      });
+    } else {
+      // If no ID, just add as a new widget
+      setWidgets(prev => [...prev, newWidget]);
+    }
   }, []);
   
   // Callback for when a widget is closed

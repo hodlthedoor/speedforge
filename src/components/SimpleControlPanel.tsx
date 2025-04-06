@@ -64,6 +64,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     const widgetContent = (
       <Widget
         key={id}
+        id={id}
         title={widgetData.title}
         onClose={() => closeWidget(id)}
       >
@@ -113,6 +114,25 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
 
   const closeWidget = (id: string) => {
     console.log(`Closing widget ${id}`);
+    
+    // Since we're just passing the widget state, we need to update it locally
+    // Find the widget in the active widgets array and mark it as disabled
+    if (Array.isArray(activeWidgets)) {
+      const widgetToUpdate = activeWidgets.find(w => w.id === id);
+      if (widgetToUpdate) {
+        widgetToUpdate.enabled = false;
+        
+        // If App component passed an onClose handler, call it to update parent state
+        if (onAddWidget) {
+          // This is a hack since we don't have a dedicated onClose prop
+          // Re-add the widget with enabled=false to have App update it
+          onAddWidget({
+            ...widgetToUpdate,
+            enabled: false
+          });
+        }
+      }
+    }
     
     // If the closed widget was selected, clear the selection
     if (selectedWidget?.id === id) {
@@ -297,7 +317,16 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
           <div className="active-widgets-section">
             <h3>Selected Widget</h3>
             <div className="widget-details-panel">
-              <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
+              <div className="widget-details-header">
+                <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
+                <button 
+                  className="widget-close-btn" 
+                  onClick={() => closeWidget(selectedWidget.id)}
+                  title="Close Widget"
+                >
+                  ×
+                </button>
+              </div>
               <div className="widget-detail">
                 <span className="detail-label">ID:</span>
                 <span className="detail-value">{selectedWidget.id.slice(0, 8)}...</span>
@@ -318,12 +347,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   onClick={() => selectWidget(selectedWidget)}
                 >
                   Highlight
-                </button>
-                <button 
-                  className="btn btn-sm btn-danger"
-                  onClick={() => closeWidget(selectedWidget.id)}
-                >
-                  Close Widget
                 </button>
               </div>
             </div>
