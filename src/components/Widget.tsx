@@ -2,13 +2,13 @@ import React from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 
 export interface WidgetProps {
-  id: string;
-  name: string;
+  title: string;
   initialPosition?: { x: number, y: number };
-  onClose?: (id: string) => void;
+  onClose?: () => void;
+  children?: React.ReactNode;
 }
 
-export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition, onClose }) => {
+export const Widget: React.FC<WidgetProps> = ({ title, initialPosition, onClose, children }) => {
   // Generate a random position if none provided
   const defaultPosition = initialPosition || {
     x: 200 + Math.random() * 300,
@@ -17,7 +17,7 @@ export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition, onClo
 
   const handleClose = () => {
     if (onClose) {
-      onClose(id);
+      onClose();
     }
   };
 
@@ -28,7 +28,7 @@ export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition, onClo
     >
       <div className="widget-component">
         <div className="widget-header drag-handle">
-          <h3>{name}</h3>
+          <h3>{title}</h3>
           {onClose && (
             <button className="widget-close-btn" onClick={handleClose}>
               ×
@@ -36,32 +36,7 @@ export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition, onClo
           )}
         </div>
         <div className="widget-content">
-          {id === 'speed' && (
-            <div className="speed-widget">
-              <div className="speed-value">78</div>
-              <div className="speed-unit">KPH</div>
-            </div>
-          )}
-          {id === 'rpm' && (
-            <div className="rpm-widget">
-              <div className="rpm-gauge">
-                <div className="rpm-needle" style={{ transform: 'rotate(45deg)' }}></div>
-                <div className="rpm-value">6500</div>
-              </div>
-            </div>
-          )}
-          {id === 'lap-time' && (
-            <div className="lap-widget">
-              <div className="lap-current">
-                <span className="lap-label">Current:</span>
-                <span className="lap-value">1:24.356</span>
-              </div>
-              <div className="lap-best">
-                <span className="lap-label">Best:</span>
-                <span className="lap-value best">1:23.012</span>
-              </div>
-            </div>
-          )}
+          {children}
         </div>
       </div>
     </BaseDraggableComponent>

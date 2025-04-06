@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { SimpleControlPanel } from './components/SimpleControlPanel';
+import SimpleControlPanel from './components/SimpleControlPanel';
 
 interface ClickIndicator {
   id: number;
@@ -248,55 +248,67 @@ function App() {
       {/* Always show click status and toggle button */}
       <div className="click-status">
         Click-through is: {isClickThrough ? 'ON' : 'OFF'}
-        <button 
-          onClick={toggleClickThrough}
-          className="toggle-button"
-          title="Shortcut: Ctrl+Space"
-        >
-          Toggle
+        <button className="toggle-button" onClick={toggleClickThrough}>
+          Toggle Click-through
         </button>
-        <span className="shortcut-hint">(Ctrl+Space)</span>
+        <span className="shortcut-hint">(or Cmd/Ctrl+Space)</span>
       </div>
       
-      {/* Render click indicators */}
+      {/* Click indicators */}
       {clickIndicators.map(indicator => (
         <div 
           key={indicator.id}
           className="click-indicator"
-          style={{
-            left: indicator.x,
-            top: indicator.y,
+          style={{ 
+            left: `${indicator.x}px`, 
+            top: `${indicator.y}px` 
           }}
         />
       ))}
       
-      {/* Debug panel */}
+      {/* Debug panel in corner */}
       <div className="debug-container">
         <div className="debug-panel">
           <div className="debug-info">
-            Platform: {debugInfo.platform}<br />
-            Time: {debugInfo.timestamp}<br />
-            Last Click: {debugInfo.lastClick}<br />
-            Click-Through: {debugInfo.clickThroughState}<br />
-            Last Toggle: {debugInfo.lastToggle}<br />
-            Total Clicks: {debugInfo.clickCount}<br />
-            Electron Response: {debugInfo.electronResponse}
+            <div>Timestamp: {debugInfo.timestamp}</div>
+            <div>Platform: {debugInfo.platform}</div>
+            <div>Last Click: {debugInfo.lastClick}</div>
+            <div>Click Count: {debugInfo.clickCount}</div>
+            <div>Click-through State: {debugInfo.clickThroughState}</div>
+            <div>Last Toggle: {debugInfo.lastToggle}</div>
+            <div style={{ marginTop: '10px' }}>Electron Response:</div>
+            <pre style={{ 
+              fontSize: '10px', 
+              maxHeight: '100px', 
+              overflowY: 'auto',
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              padding: '5px',
+              borderRadius: '4px'
+            }}>
+              {debugInfo.electronResponse}
+            </pre>
           </div>
+          
           <button 
+            className="quit-button"
             onClick={() => {
               if (window.electronAPI) {
-                window.electronAPI.app.quit();
+                window.electronAPI.app.quit()
+                  .then(result => console.log('Quit result:', result))
+                  .catch(error => console.error('Error quitting:', error));
               }
             }}
-            className="quit-button"
           >
-            Quit
+            Quit App
           </button>
         </div>
       </div>
-
-      {/* SimpleControlPanel with widgets always visible */}
-      <SimpleControlPanel showControlPanel={!isClickThrough} />
+      
+      {/* Control panel */}
+      <SimpleControlPanel 
+        initialPosition={{ x: 20, y: 20 }}
+        onClickThrough={setIsClickThrough}
+      />
     </div>
   );
 }
