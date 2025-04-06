@@ -3,7 +3,6 @@
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
 }
 
 body, html {
@@ -11,7 +10,7 @@ body, html {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
+  overflow: auto; /* Keep this for the main document */
 }
 
 .logo {

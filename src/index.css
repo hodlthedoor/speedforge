@@ -78,16 +78,24 @@ button:focus-visible {
 .widget-container {
   background-color: #1f2937; /* bg-gray-800 */
   color: white;
-  overflow: hidden;
   border-radius: 0.5rem;
 }
 
+/* Widget styling - prevent ALL widget scrolling with high specificity */
+.widget-container,
+.widget-wrapper,
+div[class*="Widget"],
+div[class*="widget"] {
+  overflow: hidden !important;
+}
+
+/* Keep control panel scrollable */
 .control-panel {
   background-color: #f3f4f6; /* bg-gray-100 */
   padding: 1rem;
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-y: auto !important; /* Force vertical scrolling */
   max-height: calc(100vh - 6rem); /* Allow room for margins and headers */
 }
 
