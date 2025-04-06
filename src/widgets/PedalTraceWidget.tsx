@@ -87,7 +87,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
       if (typeof data.throttle_pct === 'number') {
         throttleHistory.push(data.throttle_pct);
         // Keep only the most recent 'traceLength' entries
-        if (throttleHistory.length > traceLength) {
+        while (throttleHistory.length > traceLength) {
           throttleHistory.shift();
         }
       }
@@ -97,7 +97,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
       if (typeof data.brake_pct === 'number') {
         brakeHistory.push(data.brake_pct);
         // Keep only the most recent 'traceLength' entries
-        if (brakeHistory.length > traceLength) {
+        while (brakeHistory.length > traceLength) {
           brakeHistory.shift();
         }
       }
@@ -107,7 +107,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
       if (typeof data.clutch_pct === 'number') {
         clutchHistory.push(data.clutch_pct);
         // Keep only the most recent 'traceLength' entries
-        if (clutchHistory.length > traceLength) {
+        while (clutchHistory.length > traceLength) {
           clutchHistory.shift();
         }
       }
@@ -190,12 +190,12 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     // Draw grid lines
     this.drawGrid(ctx, width, height);
     
-    // Calculate margins and usable area
+    // Use zero margins to utilize full width
     const margin = {
-      top: Math.max(10, height * 0.1),
-      right: Math.max(10, width * 0.05),
-      bottom: Math.max(30, height * 0.15), // Extra space for legend
-      left: Math.max(10, width * 0.05)
+      top: 2,
+      right: 2,
+      bottom: 20, // Space for legend
+      left: 2
     };
     
     const graphWidth = width - margin.left - margin.right;
@@ -204,40 +204,37 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     // Only proceed if we have a valid area to draw
     if (graphWidth <= 0 || graphHeight <= 0) return;
     
-    // Calculate step size for x-axis based on available data points
-    const xStep = graphWidth / Math.max(1, (this.state.traceLength - 1));
-    
-    // Draw each trace line
-    this.drawTraceLine(ctx, throttleHistory, xStep, margin, graphHeight, '#34d399'); // Green for throttle
-    this.drawTraceLine(ctx, brakeHistory, xStep, margin, graphHeight, '#ef4444');    // Red for brake
-    this.drawTraceLine(ctx, clutchHistory, xStep, margin, graphHeight, '#3b82f6');   // Blue for clutch
+    // Draw each trace line - draw order matters for visibility
+    this.drawTraceLine(ctx, throttleHistory, margin, graphWidth, graphHeight, '#34d399'); // Green for throttle
+    this.drawTraceLine(ctx, clutchHistory, margin, graphWidth, graphHeight, '#3b82f6');   // Blue for clutch
+    this.drawTraceLine(ctx, brakeHistory, margin, graphWidth, graphHeight, '#ef4444');    // Red for brake
     
     // Draw legend
     this.drawLegend(ctx, width, height, margin);
   }
   
-  // Draw an empty grid when no data is available
-  drawEmptyGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    ctx.strokeStyle = '#4b5563'; // Gray for grid lines
-    ctx.lineWidth = 0.5;
-    
-    // Draw horizontal grid lines (25%, 50%, 75%)
-    for (let i = 1; i < 4; i++) {
-      const y = height * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-  }
-  
   // Draw background grid
   drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    // Draw a border around the graph area
+    ctx.strokeStyle = '#4b5563'; // Gray for border
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+    
+    // Set up for grid lines
     ctx.strokeStyle = '#4b5563'; // Gray for grid lines
     ctx.lineWidth = 0.5;
-    ctx.setLineDash([5, 5]); // Dashed lines
+    ctx.setLineDash([3, 3]); // Dashed lines
     
-    // Draw horizontal grid lines (25%, 50%, 75%)
+    // Draw vertical grid lines at 25%, 50%, and 75% of width
+    for (let i = 1; i < 4; i++) {
+      const x = width * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    
+    // Draw horizontal grid lines at 25%, 50%, 75% of height
     for (let i = 1; i < 4; i++) {
       const y = height * (i / 4);
       ctx.beginPath();
@@ -250,37 +247,76 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     ctx.setLineDash([]);
   }
   
+  // Draw an empty grid when no data is available
+  drawEmptyGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    // Draw a border around the graph area
+    ctx.strokeStyle = '#4b5563'; // Gray for border
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+    
+    // Set up for grid lines
+    ctx.strokeStyle = '#4b5563'; // Gray for grid lines
+    ctx.lineWidth = 0.5;
+    
+    // Draw vertical grid lines at 25%, 50%, and 75% of width
+    for (let i = 1; i < 4; i++) {
+      const x = width * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    
+    // Draw horizontal grid lines at 25%, 50%, 75% of height
+    for (let i = 1; i < 4; i++) {
+      const y = height * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    
+    // Draw "No Data" message
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for pedal input...', width / 2, height / 2);
+  }
+  
   // Draw a single trace line
   drawTraceLine(
     ctx: CanvasRenderingContext2D,
     dataPoints: number[],
-    xStep: number,
     margin: { top: number, right: number, bottom: number, left: number },
+    graphWidth: number,
     graphHeight: number,
     color: string
   ) {
-    if (dataPoints.length === 0) return;
+    if (dataPoints.length <= 1) return;
     
+    const numPoints = dataPoints.length;
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     
-    // Start from the leftmost point and work right
-    dataPoints.forEach((value, index) => {
-      // Calculate x position (from left margin)
-      const x = margin.left + (index * xStep);
+    // Calculate points to fill the full width
+    for (let i = 0; i < numPoints; i++) {
+      // Calculate x position to use the entire width
+      // Map i from 0..numPoints-1 to margin.left..width-margin.right
+      const xRatio = i / (numPoints - 1);
+      const x = margin.left + (xRatio * graphWidth);
       
-      // Calculate y position (from top, inverted since 0,0 is top-left)
-      // Map value (0-100) to graph height, ensuring it stays within bounds
+      // Calculate y position
+      const value = dataPoints[i];
       const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
       const y = margin.top + (graphHeight - (normalizedValue * graphHeight));
       
-      if (index === 0) {
+      if (i === 0) {
         ctx.moveTo(x, y);
       } else {
         ctx.lineTo(x, y);
       }
-    });
+    }
     
     ctx.stroke();
   }
