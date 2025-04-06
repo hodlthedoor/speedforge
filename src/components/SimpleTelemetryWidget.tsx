@@ -154,18 +154,8 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       initialPosition={defaultPosition} 
       className="telemetry-widget-wrapper"
     >
-      <div className="widget-component">
-        <div className="widget-header drag-handle">
-          <h3>{name}</h3>
-          {onClose && (
-            <button className="widget-close-btn" onClick={handleClose}>
-              ×
-            </button>
-          )}
-        </div>
-        <div className="widget-content">
-          {renderContent()}
-        </div>
+      <div className="telemetry-widget drag-handle">
+        {renderContent()}
       </div>
     </BaseDraggableComponent>
   );
