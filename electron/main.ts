@@ -135,7 +135,13 @@ function setupIpcListeners() {
         // The 'forward' option in Electron 13+ only accepts boolean values
         // We'll use true to forward all events to the web contents
         console.log('Setting ignore mouse events with forwarding');
+        
+        // Important: Only ignore mouse events, not keyboard events
+        // This ensures that keyboard shortcuts like ESC still work when click-through is active
         win.setIgnoreMouseEvents(true, { forward: true });
+        
+        // Ensure the window can still receive keyboard focus - needed for ESC key
+        win.focusOnWebView();
         
         // Using pointer-events CSS in the renderer will control which elements receive clicks
         // This approach allows renderer to decide which elements should get mouse events
