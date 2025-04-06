@@ -314,7 +314,7 @@ function App() {
           style={{
             position: 'fixed',
             top: '10px',
-            left: '10px',
+            right: '10px',
             width: '20px',
             height: '20px',
             backgroundColor: 'rgba(255, 50, 50, 0.9)',
