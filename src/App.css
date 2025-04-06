@@ -56,6 +56,7 @@ body.click-through-mode {
 .app-container.click-through .telemetry-content,
 .app-container.click-through .widget-component-wrapper,
 .app-container.click-through .widget-close-btn,
+.app-container.click-through .click-through-indicator,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
@@ -601,16 +602,6 @@ body, html {
   overflow: hidden;
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* In click-through mode, make the panel invisible */
-.control-panel.click-through {
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.control-panel.click-through:hover {
-  opacity: 0.9;
 }
 
 .panel-header {

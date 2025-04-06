@@ -323,11 +323,37 @@ function App() {
         </div>
       </div>
       
-      {/* Control panel */}
-      <SimpleControlPanel 
-        initialPosition={{ x: 20, y: 20 }}
-        onClickThrough={setIsClickThrough}
-      />
+      {/* When click-through is enabled, hide control panel completely */}
+      {!isClickThrough ? (
+        <SimpleControlPanel 
+          initialPosition={{ x: 20, y: 20 }}
+          onClickThrough={setIsClickThrough}
+        />
+      ) : null}
+      
+      {/* Add a small visible indicator when in click-through mode */}
+      {isClickThrough && (
+        <div 
+          className="click-through-indicator"
+          onClick={toggleClickThrough}
+          style={{
+            position: 'fixed',
+            top: '80px',
+            left: '20px',
+            backgroundColor: 'rgba(255, 100, 100, 0.7)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            zIndex: 10000,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+          }}
+        >
+          Show Control Panel
+        </div>
+      )}
     </div>
   );
 }
