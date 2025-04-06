@@ -50,7 +50,9 @@ export class WidgetWindowManager {
         backgroundThrottling: true,    // Allow background throttling to reduce CPU/GPU usage
         disableHtmlFullscreenWindowResize: true, // Disable unnecessary resize events
         spellcheck: false,             // Disable spellchecker to save memory
-        webgl: false,                  // Disable WebGL for simple widgets
+        webgl: false,                  // Disable WebGL for simple widgets that don't need 3D
+        defaultEncoding: 'UTF-8',      // Set fixed encoding to avoid detection overhead
+        v8CacheOptions: 'code',        // Cache scripts for better performance
       },
       alwaysOnTop,
       skipTaskbar: true,
@@ -60,10 +62,11 @@ export class WidgetWindowManager {
       autoHideMenuBar: true,          // Hide the menu bar
       titleBarStyle: 'hidden',        // Hidden title bar for cleaner look
       titleBarOverlay: false,
-      thickFrame: false,              // Thin frame
+      thickFrame: false,              // Thin frame to reduce resources
+      minimizable: false,             // Prevent minimize to reduce state changes
       vibrancy: null,
       visualEffectState: null,
-      fullscreenable: false,
+      fullscreenable: false,          // Prevent fullscreen to reduce state changes
       show: false,                    // Don't show until ready-to-show
     });
     
