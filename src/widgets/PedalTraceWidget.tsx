@@ -147,12 +147,17 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     const canvas = this.canvasRef.current;
     if (!canvas) return;
     
+    // Get the parent container dimensions
     const container = canvas.parentElement;
-    if (container) {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-      this.drawTrace();
-    }
+    if (!container) return;
+    
+    // Set canvas dimensions to match container
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    // Redraw with new dimensions
+    this.drawTrace();
   }
   
   // Draw the trace on the canvas
@@ -163,100 +168,157 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // Get canvas dimensions
-    const { width, height } = canvas;
+    // Get the actual canvas dimensions
+    const width = canvas.width;
+    const height = canvas.height;
     
-    // Clear canvas
+    // Clear the entire canvas
     ctx.clearRect(0, 0, width, height);
     
-    // Set background
+    // Fill background
     ctx.fillStyle = '#1f2937'; // Dark gray background
     ctx.fillRect(0, 0, width, height);
     
-    // Set line styles
-    ctx.lineWidth = 2;
-    
     const { throttleHistory, brakeHistory, clutchHistory } = this.state;
     
-    // Only draw if we have data
-    if (throttleHistory.length === 0) return;
+    // If no data, show empty grid
+    if (throttleHistory.length === 0) {
+      this.drawEmptyGrid(ctx, width, height);
+      return;
+    }
     
-    // Calculate x step
-    const xStep = width / (this.state.traceLength - 1);
+    // Draw grid lines
+    this.drawGrid(ctx, width, height);
     
-    // Apply padding at top and bottom (5% of height)
-    const paddingY = height * 0.05;
-    const graphHeight = height - (paddingY * 2);
+    // Calculate margins and usable area
+    const margin = {
+      top: Math.max(10, height * 0.1),
+      right: Math.max(10, width * 0.05),
+      bottom: Math.max(30, height * 0.15), // Extra space for legend
+      left: Math.max(10, width * 0.05)
+    };
     
-    // Draw throttle trace (green)
-    ctx.strokeStyle = '#34d399'; // Green
-    ctx.beginPath();
-    throttleHistory.forEach((value, index) => {
-      const x = index * xStep;
-      // Apply padding to keep values from touching top and bottom
-      const y = paddingY + (graphHeight - (value / 100 * graphHeight));
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
+    const graphWidth = width - margin.left - margin.right;
+    const graphHeight = height - margin.top - margin.bottom;
     
-    // Draw brake trace (red)
-    ctx.strokeStyle = '#ef4444'; // Red
-    ctx.beginPath();
-    brakeHistory.forEach((value, index) => {
-      const x = index * xStep;
-      // Apply padding to keep values from touching top and bottom
-      const y = paddingY + (graphHeight - (value / 100 * graphHeight));
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
+    // Only proceed if we have a valid area to draw
+    if (graphWidth <= 0 || graphHeight <= 0) return;
     
-    // Draw clutch trace (blue) if available
-    if (clutchHistory.length > 0) {
-      ctx.strokeStyle = '#3b82f6'; // Blue
+    // Calculate step size for x-axis based on available data points
+    const xStep = graphWidth / Math.max(1, (this.state.traceLength - 1));
+    
+    // Draw each trace line
+    this.drawTraceLine(ctx, throttleHistory, xStep, margin, graphHeight, '#34d399'); // Green for throttle
+    this.drawTraceLine(ctx, brakeHistory, xStep, margin, graphHeight, '#ef4444');    // Red for brake
+    this.drawTraceLine(ctx, clutchHistory, xStep, margin, graphHeight, '#3b82f6');   // Blue for clutch
+    
+    // Draw legend
+    this.drawLegend(ctx, width, height, margin);
+  }
+  
+  // Draw an empty grid when no data is available
+  drawEmptyGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    ctx.strokeStyle = '#4b5563'; // Gray for grid lines
+    ctx.lineWidth = 0.5;
+    
+    // Draw horizontal grid lines (25%, 50%, 75%)
+    for (let i = 1; i < 4; i++) {
+      const y = height * (i / 4);
       ctx.beginPath();
-      clutchHistory.forEach((value, index) => {
-        const x = index * xStep;
-        // Apply padding to keep values from touching top and bottom
-        const y = paddingY + (graphHeight - (value / 100 * graphHeight));
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+  }
+  
+  // Draw background grid
+  drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    ctx.strokeStyle = '#4b5563'; // Gray for grid lines
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([5, 5]); // Dashed lines
+    
+    // Draw horizontal grid lines (25%, 50%, 75%)
+    for (let i = 1; i < 4; i++) {
+      const y = height * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
       ctx.stroke();
     }
     
-    // Draw legend
-    const legendY = height - 20;
-    const legendItemWidth = 80;
+    // Reset line style
+    ctx.setLineDash([]);
+  }
+  
+  // Draw a single trace line
+  drawTraceLine(
+    ctx: CanvasRenderingContext2D,
+    dataPoints: number[],
+    xStep: number,
+    margin: { top: number, right: number, bottom: number, left: number },
+    graphHeight: number,
+    color: string
+  ) {
+    if (dataPoints.length === 0) return;
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    // Start from the leftmost point and work right
+    dataPoints.forEach((value, index) => {
+      // Calculate x position (from left margin)
+      const x = margin.left + (index * xStep);
+      
+      // Calculate y position (from top, inverted since 0,0 is top-left)
+      // Map value (0-100) to graph height, ensuring it stays within bounds
+      const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
+      const y = margin.top + (graphHeight - (normalizedValue * graphHeight));
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    
+    ctx.stroke();
+  }
+  
+  // Draw legend showing the trace colors
+  drawLegend(
+    ctx: CanvasRenderingContext2D, 
+    width: number, 
+    height: number,
+    margin: { top: number, right: number, bottom: number, left: number }
+  ) {
+    const legendY = height - margin.bottom + 15; // Position legend in bottom margin
+    const itemWidth = Math.min(80, width / 4); // Space items evenly, up to 80px
+    const lineWidth = 15;
+    const fontSize = Math.max(10, Math.min(12, width / 40)); // Responsive font size
+    
+    ctx.font = `${fontSize}px sans-serif`;
     
     // Throttle legend
-    ctx.fillStyle = '#34d399';
-    ctx.fillRect(10, legendY, 15, 2);
+    let x = margin.left;
+    ctx.fillStyle = '#34d399'; // Green
+    ctx.fillRect(x, legendY, lineWidth, 2);
     ctx.fillStyle = '#fff';
-    ctx.font = '10px sans-serif';
-    ctx.fillText('Throttle', 30, legendY + 4);
+    ctx.fillText('Throttle', x + lineWidth + 4, legendY + 4);
     
     // Brake legend
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(10 + legendItemWidth, legendY, 15, 2);
+    x += itemWidth;
+    ctx.fillStyle = '#ef4444'; // Red
+    ctx.fillRect(x, legendY, lineWidth, 2);
     ctx.fillStyle = '#fff';
-    ctx.fillText('Brake', 30 + legendItemWidth, legendY + 4);
+    ctx.fillText('Brake', x + lineWidth + 4, legendY + 4);
     
     // Clutch legend
-    ctx.fillStyle = '#3b82f6';
-    ctx.fillRect(10 + legendItemWidth * 2, legendY, 15, 2);
+    x += itemWidth;
+    ctx.fillStyle = '#3b82f6'; // Blue
+    ctx.fillRect(x, legendY, lineWidth, 2);
     ctx.fillStyle = '#fff';
-    ctx.fillText('Clutch', 30 + legendItemWidth * 2, legendY + 4);
+    ctx.fillText('Clutch', x + lineWidth + 4, legendY + 4);
   }
   
   // Required renderContent method from BaseWidget
@@ -282,12 +344,10 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     }
     
     return (
-      <div className="widget-content p-0">
+      <div className="widget-content p-0 w-full h-full">
         <canvas 
-          ref={this.canvasRef} 
-          width="500" 
-          height="160"
-          style={{ width: '100%', height: '100%' }}
+          ref={this.canvasRef}
+          className="w-full h-full"
         />
       </div>
     );
