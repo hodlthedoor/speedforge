@@ -11,7 +11,6 @@ interface PedalTraceWidgetProps extends BaseWidgetProps {
 interface PedalTraceWidgetState extends WidgetState {
   throttleHistory: number[];
   brakeHistory: number[];
-  clutchHistory: number[];
   traceLength: number;
 }
 
@@ -37,7 +36,6 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
       ...this.state,
       throttleHistory: [],
       brakeHistory: [],
-      clutchHistory: [],
       traceLength
     };
   }
@@ -103,17 +101,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
         }
       }
       
-      // Create new clutch history
-      const clutchHistory = [...prevState.clutchHistory];
-      if (typeof data.clutch_pct === 'number') {
-        clutchHistory.push(data.clutch_pct);
-        // Keep only the most recent 'traceLength' entries
-        while (clutchHistory.length > traceLength) {
-          clutchHistory.shift();
-        }
-      }
-      
-      return { throttleHistory, brakeHistory, clutchHistory };
+      return { throttleHistory, brakeHistory };
     });
     
     // Trigger a redraw
@@ -188,7 +176,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     // Draw the grid lines first
     this.drawGrid(ctx, width, height);
     
-    const { throttleHistory, brakeHistory, clutchHistory } = this.state;
+    const { throttleHistory, brakeHistory } = this.state;
     
     // Nothing to draw if no data yet
     if (throttleHistory.length === 0) {
@@ -198,16 +186,15 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     
     // Use small vertical padding to ensure lines are visible at 0% and 100%
     const padding = {
-      top: 2,     // Small top padding so 100% value is visible
+      top: 3,     // Small top padding so 100% value is visible
       right: 0,
-      bottom: 2,  // Small bottom padding so 0% value is visible
+      bottom: 3,  // Small bottom padding so 0% value is visible
       left: 0
     };
     
     // Draw the traces using the full canvas width
     this.drawPedalTrace(ctx, throttleHistory, width, height, padding, '#34d399', 2); // Green for throttle
     this.drawPedalTrace(ctx, brakeHistory, width, height, padding, '#ef4444', 2);    // Red for brake
-    this.drawPedalTrace(ctx, clutchHistory, width, height, padding, '#3b82f6', 2);   // Blue for clutch
   }
   
   // Draw the grid background
