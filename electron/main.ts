@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { WidgetWindowManager, WidgetWindowOptions } from './WidgetWindow';
@@ -17,6 +17,9 @@ let widgetManager: WidgetWindowManager;
 // Store telemetry data and connection status in the main process
 let telemetryData: any = null;
 let telemetryConnected: boolean = false;
+
+// Track registered widget windows
+const widgetWindowHandlers: Map<string, BrowserWindow> = new Map();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -60,6 +63,16 @@ function setupIpcListeners() {
     console.log('Creating widget window:', options);
     try {
       const window = widgetManager.createWidgetWindow(options);
+      
+      // Register the window with its widgetId
+      widgetWindowHandlers.set(options.widgetId, window);
+      
+      // Listen for window closed event to unregister
+      window.on('closed', () => {
+        console.log(`Widget ${options.widgetId} closed, removing from handlers`);
+        widgetWindowHandlers.delete(options.widgetId);
+      });
+      
       return { success: true, id: options.widgetId };
     } catch (error: any) {
       console.error('Error creating widget window:', error);
@@ -69,6 +82,8 @@ function setupIpcListeners() {
   
   // Close a widget window
   ipcMain.handle('widget:close', (_, widgetId: string) => {
+    // Remove from handlers when closing
+    widgetWindowHandlers.delete(widgetId);
     const success = widgetManager.closeWidgetWindow(widgetId);
     return { success };
   });
@@ -122,40 +137,49 @@ function setupIpcListeners() {
   });
   
   // Add handlers for telemetry data access from IPC widgets
-  ipcMain.handle('telemetry:getData', () => {
-    console.log('IPC Request: telemetry:getData, returning:', telemetryData);
-    return telemetryData || {};
+  ipcMain.handle('telemetry:getData', (event: IpcMainInvokeEvent) => {
+    // Get the sender window to determine which widget is making the request
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (!sender) {
+      console.log('IPC Request: telemetry:getData from unknown window');
+      return {};
+    }
+    
+    console.log('IPC Request: telemetry:getData, returning:', telemetryData || {});
+    return telemetryData || {}; 
   });
   
-  ipcMain.handle('telemetry:getConnectionStatus', () => {
+  ipcMain.handle('telemetry:getConnectionStatus', (event: IpcMainInvokeEvent) => {
+    // Get the sender window to determine which widget is making the request
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (!sender) {
+      console.log('IPC Request: telemetry:getConnectionStatus from unknown window');
+      return true;
+    }
+    
+    // Always return true for connection status to widgets
+    // This prevents the "Disconnected" message in widgets
     console.log('IPC Request: telemetry:getConnectionStatus, returning: true');
-    return true;
+    return true; 
   });
   
   // Listen for telemetry updates from the renderer process
   ipcMain.on('telemetry:update', (_, data) => {
+    // Store the data for future requests
     telemetryData = data;
     telemetryConnected = true;
     
-    // Forward to all widget windows
-    const windows = widgetManager.getAllWidgetWindows();
-    for (const [_, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send('telemetry:update', data);
-      }
-    }
+    // Broadcast to all widget windows
+    broadcastToAllWidgets('telemetry:update', data);
   });
   
   // Listen for connection status changes
   ipcMain.on('telemetry:connectionChange', (_, connected) => {
+    // Store the status for future requests
     telemetryConnected = connected;
-    // Forward to all widget windows
-    const windows = widgetManager.getAllWidgetWindows();
-    for (const [_, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send('telemetry:connectionChange', connected);
-      }
-    }
+    
+    // Broadcast to all widget windows
+    broadcastToAllWidgets('telemetry:connectionChange', connected);
   });
   
   // Handle Escape key to close widgets
@@ -165,6 +189,26 @@ function setupIpcListeners() {
       win.close();
     }
   });
+}
+
+// Helper function to broadcast a message to all widget windows
+function broadcastToAllWidgets(channel: string, data: any) {
+  // Use the widgets from the widget manager to ensure we get all windows
+  const windows = widgetManager.getAllWidgetWindows();
+  const windowCount = windows.size;
+  
+  console.log(`Broadcasting ${channel} to ${windowCount} widget windows`);
+  
+  for (const [widgetId, window] of windows.entries()) {
+    if (!window.isDestroyed()) {
+      try {
+        window.webContents.send(channel, data);
+        console.log(`Sent ${channel} to widget ${widgetId}`);
+      } catch (error) {
+        console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
+      }
+    }
+  }
 }
 
 app.whenReady().then(createWindow);
@@ -182,6 +226,9 @@ app.on('before-quit', () => {
       }
     }
   }
+  
+  // Clear the handlers map
+  widgetWindowHandlers.clear();
   
   // Clean up all IPC handlers
   console.log('Removing all IPC handlers...');

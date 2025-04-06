@@ -59,6 +59,61 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
 
     console.log(`IpcWidget ${id}: Setting up IPC listeners (using pure IPC, no WebSocket)`);
 
+    // Reconnection state
+    let reconnectTimeout: number | null = null;
+    
+    // Function to request data from main process
+    const requestTelemetryData = () => {
+      console.log(`IpcWidget ${id}: Requesting telemetry data via IPC`);
+      window.electronAPI.invoke('telemetry:getData')
+        .then((data: any) => {
+          console.log(`IpcWidget ${id}: Received telemetry data via IPC:`, data);
+          if (data) {
+            setTelemetryData(data);
+          }
+        })
+        .catch((err: any) => {
+          console.error(`IpcWidget ${id}: Failed to get telemetry data:`, err);
+          // Schedule a retry
+          scheduleReconnect();
+        });
+    };
+    
+    // Function to request connection status from main process
+    const requestConnectionStatus = () => {
+      console.log(`IpcWidget ${id}: Requesting connection status via IPC`);
+      window.electronAPI.invoke('telemetry:getConnectionStatus')
+        .then((status: boolean) => {
+          console.log(`IpcWidget ${id}: Received connection status via IPC:`, status);
+          setConnected(status);
+          
+          // If connected, also request the latest data
+          if (status) {
+            requestTelemetryData();
+          } else {
+            scheduleReconnect();
+          }
+        })
+        .catch((err: any) => {
+          console.error(`IpcWidget ${id}: Failed to get connection status:`, err);
+          // Schedule a retry
+          scheduleReconnect();
+        });
+    };
+    
+    // Function to schedule a reconnection attempt
+    const scheduleReconnect = () => {
+      if (reconnectTimeout !== null) {
+        window.clearTimeout(reconnectTimeout);
+      }
+      
+      console.log(`IpcWidget ${id}: Scheduling reconnection attempt in 2 seconds`);
+      reconnectTimeout = window.setTimeout(() => {
+        console.log(`IpcWidget ${id}: Attempting to reconnect`);
+        requestConnectionStatus();
+      }, 2000);
+    };
+
     // Listen for parameter updates from the main process
     window.electronAPI.on('widget:params', (params: Record<string, any>) => {
       console.log(`IpcWidget ${id}: Received widget:params event:`, params);
@@ -70,40 +125,34 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       }
     });
 
-    // Request initial data from main process
-    console.log(`IpcWidget ${id}: Requesting initial telemetry data via IPC`);
-    window.electronAPI.invoke('telemetry:getData')
-      .then((data: any) => {
-        console.log(`IpcWidget ${id}: Received initial telemetry data via IPC:`, data);
-        if (data) {
-          setTelemetryData(data);
-        }
-      })
-      .catch((err: any) => {
-        console.error(`IpcWidget ${id}: Failed to get initial telemetry data:`, err);
-      });
-
-    // Request initial connection status
-    console.log(`IpcWidget ${id}: Requesting connection status via IPC`);
-    window.electronAPI.invoke('telemetry:getConnectionStatus')
-      .then((status: boolean) => {
-        console.log(`IpcWidget ${id}: Received connection status via IPC:`, status);
-        setConnected(status);
-      })
-      .catch((err: any) => {
-        console.error(`IpcWidget ${id}: Failed to get connection status:`, err);
-      });
+    // Initial requests for data and connection status
+    requestConnectionStatus();
 
     // Listen for telemetry data updates
     window.electronAPI.on('telemetry:update', (data: any) => {
       console.log(`IpcWidget ${id}: Received telemetry update via IPC`);
       setTelemetryData(data);
+      
+      // Clear any pending reconnect attempts since we're connected
+      if (reconnectTimeout !== null) {
+        window.clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
     });
 
     // Listen for connection status updates
     window.electronAPI.on('telemetry:connectionChange', (status: boolean) => {
       console.log(`IpcWidget ${id}: Received connection change via IPC:`, status);
       setConnected(status);
+      
+      // If we lost connection, schedule a reconnect attempt
+      if (!status) {
+        scheduleReconnect();
+      } else if (reconnectTimeout !== null) {
+        // Clear any pending reconnect attempts since we're connected
+        window.clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
     });
 
     // Listen for Escape key to close widget
@@ -118,6 +167,11 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
     // Cleanup function
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
+      
+      // Clear any pending reconnection attempt
+      if (reconnectTimeout !== null) {
+        window.clearTimeout(reconnectTimeout);
+      }
       
       if (window.electronAPI) {
         console.log(`IpcWidget ${id}: Removing all IPC listeners`);
