@@ -17,15 +17,18 @@ interface SimpleControlPanelProps {
   initialPosition?: { x: number, y: number };
   onClickThrough?: (enabled: boolean) => void;
   onAddWidget?: (widget: any) => void;
+  activeWidgets?: any[];
 }
 
 const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ 
   initialPosition = { x: 20, y: 20 },
   onClickThrough,
-  onAddWidget
+  onAddWidget,
+  activeWidgets = []
 }) => {
   const [clickThrough, setClickThrough] = useState(false);
   const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
+  const [selectedWidget, setSelectedWidget] = useState<any | null>(null);
   
   // Add metrics options
   const availableMetrics = [
@@ -50,26 +53,45 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     if (!onAddWidget) return;
     
     const id = uuidv4();
+    const widgetData = {
+      id,
+      type: 'default',
+      title: 'New Widget',
+      text: 'Widget content goes here',
+      enabled: true
+    };
+    
     const widgetContent = (
       <Widget
         key={id}
-        title="New Widget"
+        title={widgetData.title}
         onClose={() => closeWidget(id)}
       >
-        Widget content goes here
+        {widgetData.text}
       </Widget>
     );
     
     onAddWidget({
-      id,
+      ...widgetData,
       content: widgetContent
     });
+    
+    // Auto-select the new widget
+    setSelectedWidget(widgetData);
   };
 
   const addTelemetryWidget = (metric: string, name: string) => {
     if (!onAddWidget) return;
     
     const id = uuidv4();
+    const widgetData = {
+      id,
+      type: 'telemetry',
+      title: name,
+      metric: metric,
+      enabled: true
+    };
+    
     const widgetContent = (
       <SimpleTelemetryWidget
         key={id}
@@ -81,16 +103,32 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     );
     
     onAddWidget({
-      id,
+      ...widgetData,
       content: widgetContent
     });
     
-    setShowTelemetryOptions(false);
+    // Auto-select the new widget
+    setSelectedWidget(widgetData);
   };
 
   const closeWidget = (id: string) => {
     console.log(`Closing widget ${id}`);
-    // We don't need to update state here since widgets are managed in the parent
+    
+    // If the closed widget was selected, clear the selection
+    if (selectedWidget?.id === id) {
+      setSelectedWidget(null);
+    }
+  };
+
+  // Set the selected widget and highlight it
+  const selectWidget = (widget: any) => {
+    setSelectedWidget(widget);
+    
+    // Dispatch event to highlight the selected widget
+    const event = new CustomEvent('widget:highlight', { 
+      detail: { widgetId: widget.id }
+    });
+    window.dispatchEvent(event);
   };
 
   // Update local click-through state when App component changes it
@@ -142,6 +180,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     };
   }, []);
 
+  // Add telemetry widget options toggle with debug
+  const toggleTelemetryOptions = () => {
+    console.log(`Telemetry options toggle: ${!showTelemetryOptions}`);
+    setShowTelemetryOptions(!showTelemetryOptions);
+  };
+
   const toggleClickThrough = () => {
     const newValue = !clickThrough;
     setClickThrough(newValue);
@@ -165,12 +209,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   };
 
-  // Add telemetry widget options toggle with debug
-  const toggleTelemetryOptions = () => {
-    console.log(`Telemetry options toggle: ${!showTelemetryOptions}`);
-    setShowTelemetryOptions(!showTelemetryOptions);
-  };
-
   const quitApplication = () => {
     console.log('Quitting application');
     if (window.electronAPI) {
@@ -179,6 +217,11 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         .catch(error => console.error('Error quitting:', error));
     }
   };
+
+  // Determine what widgets are active
+  const enabledWidgets = Array.isArray(activeWidgets) 
+    ? activeWidgets.filter(w => w && w.enabled !== false)
+    : [];
 
   return (
     <BaseDraggableComponent 
@@ -231,6 +274,59 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             Quit Application
           </button>
         </div>
+        
+        {/* Active Widgets Section */}
+        {enabledWidgets.length > 0 && (
+          <div className="active-widgets-section">
+            <h3>Active Widgets</h3>
+            <div className="widget-list">
+              {enabledWidgets.map(widget => (
+                <div 
+                  key={widget.id}
+                  className={`widget-list-item ${selectedWidget?.id === widget.id ? 'selected' : ''}`}
+                  onClick={() => selectWidget(widget)}
+                >
+                  {widget.title || `Widget ${widget.id.slice(0, 6)}`}
+                </div>
+              ))}
+            </div>
+            
+            {/* Widget Details Panel - shows when a widget is selected */}
+            {selectedWidget && (
+              <div className="widget-details-panel">
+                <h4>Widget Details</h4>
+                <div className="widget-detail">
+                  <span className="detail-label">ID:</span>
+                  <span className="detail-value">{selectedWidget.id.slice(0, 8)}...</span>
+                </div>
+                <div className="widget-detail">
+                  <span className="detail-label">Type:</span>
+                  <span className="detail-value">{selectedWidget.type || 'default'}</span>
+                </div>
+                {selectedWidget.type === 'telemetry' && selectedWidget.metric && (
+                  <div className="widget-detail">
+                    <span className="detail-label">Metric:</span>
+                    <span className="detail-value">{selectedWidget.metric}</span>
+                  </div>
+                )}
+                <div className="widget-actions">
+                  <button 
+                    className="btn btn-sm btn-warning"
+                    onClick={() => selectWidget(selectedWidget)}
+                  >
+                    Highlight
+                  </button>
+                  <button 
+                    className="btn btn-sm btn-danger"
+                    onClick={() => closeWidget(selectedWidget.id)}
+                  >
+                    Close Widget
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </BaseDraggableComponent>
   );

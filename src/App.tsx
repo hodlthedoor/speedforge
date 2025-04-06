@@ -135,6 +135,7 @@ function App() {
           initialPosition={{ x: windowWidth - 320, y: 20 }}
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}
+          activeWidgets={widgets}
         />
       ) : null}
       
