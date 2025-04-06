@@ -196,15 +196,15 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
       return;
     }
     
-    // Use zero padding for horizontal, minimal for vertical
+    // Use small vertical padding to ensure lines are visible at 0% and 100%
     const padding = {
-      top: 0,
+      top: 2,     // Small top padding so 100% value is visible
       right: 0,
-      bottom: 0,
+      bottom: 2,  // Small bottom padding so 0% value is visible
       left: 0
     };
     
-    // Draw the traces using the full canvas
+    // Draw the traces using the full canvas width
     this.drawPedalTrace(ctx, throttleHistory, width, height, padding, '#34d399', 2); // Green for throttle
     this.drawPedalTrace(ctx, brakeHistory, width, height, padding, '#ef4444', 2);    // Red for brake
     this.drawPedalTrace(ctx, clutchHistory, width, height, padding, '#3b82f6', 2);   // Blue for clutch
@@ -270,16 +270,19 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     
+    // Calculate the drawable height with padding
+    const drawableHeight = height - padding.top - padding.bottom;
+    
     // Iterate through each data point
     for (let i = 0; i < dataPoints.length; i++) {
       // Calculate x position from 0 to full width
       // Important: Start exactly at 0 and end exactly at width
       const xPos = i * (width / (dataPoints.length - 1));
       
-      // Calculate y position (0-100% maps to full height)
+      // Calculate y position (0-100% maps to drawable height)
       const value = Math.max(0, Math.min(100, dataPoints[i]));
-      // Map from data value (0-100) to canvas coordinates (height-0)
-      const yPos = height - (value / 100 * height);
+      // Map from data value (0-100) to canvas coordinates with padding
+      const yPos = height - padding.bottom - (value / 100 * drawableHeight);
       
       // Draw the point
       if (i === 0) {
