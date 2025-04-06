@@ -512,3 +512,48 @@ body, html {
 .lap-value.best {
   color: #16a34a;
 }
+
+/* Telemetry Widget Styles */
+.telemetry-widget-wrapper {
+  min-width: 150px;
+  min-height: 100px;
+}
+
+.telemetry-content {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.telemetry-label {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #ccc;
+}
+
+.telemetry-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #fff;
+}
+
+.status-disconnected {
+  color: #ff4d4d;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.status-connected {
+  color: #4dff4d;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.status-message {
+  color: #ccc;
+  font-size: 12px;
+}

@@ -1,125 +1,167 @@
 import React, { useState } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
-import Widget from './Widget';
+import { Widget } from './Widget';
+import { SimpleTelemetryWidget } from './SimpleTelemetryWidget';
+import { v4 as uuidv4 } from 'uuid';
 
-interface WidgetConfig {
+interface Widget {
   id: string;
-  name: string;
+  type: 'default' | 'telemetry';
+  title: string;
+  content?: string;
+  metric?: string;
   enabled: boolean;
-  position?: { x: number, y: number };
 }
 
 interface SimpleControlPanelProps {
-  showControlPanel: boolean;
+  initialPosition?: { x: number, y: number };
+  onClickThrough?: (enabled: boolean) => void;
 }
 
-export const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ showControlPanel }) => {
-  const [widgets, setWidgets] = useState<WidgetConfig[]>([
-    { id: 'speed', name: 'Speed Indicator', enabled: false, position: { x: 100, y: 100 } },
-    { id: 'rpm', name: 'RPM Gauge', enabled: false, position: { x: 350, y: 100 } },
-    { id: 'lap-time', name: 'Lap Timer', enabled: false, position: { x: 600, y: 100 } }
-  ]);
+const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ 
+  initialPosition = { x: 20, y: 20 },
+  onClickThrough
+}) => {
+  const [clickThrough, setClickThrough] = useState(false);
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
+  
+  // Add metrics options
+  const availableMetrics = [
+    { id: 'speed_kph', name: 'Speed (KPH)' },
+    { id: 'speed_mph', name: 'Speed (MPH)' },
+    { id: 'rpm', name: 'RPM' },
+    { id: 'gear', name: 'Gear' },
+    { id: 'throttle_pct', name: 'Throttle' },
+    { id: 'brake_pct', name: 'Brake' },
+    { id: 'clutch_pct', name: 'Clutch' },
+    { id: 'g_force_lat', name: 'Lateral G' },
+    { id: 'g_force_lon', name: 'Longitudinal G' },
+    { id: 'fuel_level', name: 'Fuel Level' },
+    { id: 'current_lap_time', name: 'Current Lap' },
+    { id: 'last_lap_time', name: 'Last Lap' },
+    { id: 'best_lap_time', name: 'Best Lap' },
+    { id: 'position', name: 'Position' },
+    { id: 'lap_completed', name: 'Lap' }
+  ];
 
-  const toggleWidget = (id: string) => {
-    setWidgets(prevWidgets => 
-      prevWidgets.map(widget => 
-        widget.id === id ? { ...widget, enabled: !widget.enabled } : widget
-      )
-    );
-    console.log(`Toggled widget: ${id}`);
+  const addWidget = () => {
+    const newWidget: Widget = {
+      id: uuidv4(),
+      type: 'default',
+      title: 'New Widget',
+      content: 'Widget content goes here',
+      enabled: true
+    };
+    setWidgets([...widgets, newWidget]);
+  };
+
+  const addTelemetryWidget = (metric: string, name: string) => {
+    const newWidget: Widget = {
+      id: uuidv4(),
+      type: 'telemetry',
+      title: name,
+      metric: metric,
+      enabled: true
+    };
+    setWidgets([...widgets, newWidget]);
+    setShowTelemetryOptions(false);
   };
 
   const closeWidget = (id: string) => {
-    setWidgets(prevWidgets => 
-      prevWidgets.map(widget => 
-        widget.id === id ? { ...widget, enabled: false } : widget
-      )
-    );
-    console.log(`Closed widget: ${id}`);
+    console.log(`Closing widget ${id}`);
+    setWidgets(widgets.map(widget => 
+      widget.id === id 
+        ? { ...widget, enabled: false } 
+        : widget
+    ));
   };
 
-  const updateWidgetPosition = (id: string, position: { x: number, y: number }) => {
-    setWidgets(prevWidgets => 
-      prevWidgets.map(widget => 
-        widget.id === id ? { ...widget, position } : widget
-      )
-    );
-  };
-
-  const quitApplication = () => {
-    console.log('Quit button clicked');
-    try {
-      if (window.electronAPI) {
-        window.electronAPI.app.quit()
-          .then(result => {
-            console.log('Quit result:', result);
-            if (window.location) {
-              window.location.href = 'about:blank';
-            }
-          })
-          .catch(error => {
-            console.error('Error quitting:', error);
-          });
-      } else {
-        console.warn('Electron API not available for quitting');
-      }
-    } catch (error) {
-      console.error('Unexpected error during quit:', error);
+  const toggleClickThrough = () => {
+    const newValue = !clickThrough;
+    setClickThrough(newValue);
+    if (onClickThrough) {
+      onClickThrough(newValue);
     }
   };
 
   return (
     <>
-      {/* Render active widgets (always visible) */}
-      {widgets.filter(widget => widget.enabled).map(widget => (
-        <Widget 
-          key={widget.id}
-          id={widget.id}
-          name={widget.name}
-          initialPosition={widget.position}
-          onClose={closeWidget}
-        />
-      ))}
-
-      {/* Control Panel (conditionally visible) */}
-      {showControlPanel && (
-        <BaseDraggableComponent initialPosition={{ x: 100, y: 400 }} className="simple-control-panel-wrapper">
-          <div className="simple-control-panel visible-panel">
-            <div className="panel-header visible-header drag-handle">
-              <h2 className="visible-title">Widget Control Panel</h2>
-            </div>
+      <BaseDraggableComponent 
+        initialPosition={initialPosition}
+        className={`control-panel ${clickThrough ? 'click-through' : ''}`}
+      >
+        <div className="panel-header drag-handle">
+          <h2>Control Panel</h2>
+        </div>
+        <div className="panel-content">
+          <div className="control-buttons">
+            <button 
+              className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
+              onClick={toggleClickThrough}
+            >
+              {clickThrough ? 'Disable Click Through' : 'Enable Click Through'}
+            </button>
             
-            <div className="widget-list visible-list">
-              <h3 className="visible-subtitle">Available Widgets</h3>
-              <div className="widget-items visible-items">
-                {widgets.map(widget => (
-                  <div 
-                    key={widget.id}
-                    className="widget-item visible-item"
+            <button 
+              className="btn btn-primary"
+              onClick={addWidget}
+            >
+              Add Widget
+            </button>
+            
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowTelemetryOptions(!showTelemetryOptions)}
+            >
+              {showTelemetryOptions ? 'Hide Telemetry Options' : 'Add Telemetry Widget'}
+            </button>
+          </div>
+          
+          {showTelemetryOptions && (
+            <div className="telemetry-options">
+              <h3>Select Telemetry Metric</h3>
+              <div className="metric-buttons">
+                {availableMetrics.map(metric => (
+                  <button 
+                    key={metric.id}
+                    className="btn btn-sm btn-secondary metric-btn"
+                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
                   >
-                    <span className="widget-name visible-text">{widget.name}</span>
-                    <button
-                      className={`widget-toggle visible-button ${widget.enabled ? 'enabled' : 'disabled'}`}
-                      onClick={() => toggleWidget(widget.id)}
-                    >
-                      {widget.enabled ? 'Enabled' : 'Disabled'}
-                    </button>
-                  </div>
+                    {metric.name}
+                  </button>
                 ))}
               </div>
             </div>
-            
-            <div className="panel-footer visible-footer">
-              <button 
-                className="quit-app-button visible-quit-button"
-                onClick={quitApplication}
-              >
-                Quit Application
-              </button>
-            </div>
-          </div>
-        </BaseDraggableComponent>
-      )}
+          )}
+        </div>
+      </BaseDraggableComponent>
+
+      {widgets.filter(widget => widget.enabled).map(widget => {
+        if (widget.type === 'telemetry' && widget.metric) {
+          return (
+            <SimpleTelemetryWidget
+              key={widget.id}
+              id={widget.id}
+              name={widget.title}
+              metric={widget.metric}
+              onClose={closeWidget}
+            />
+          );
+        } else {
+          return (
+            <Widget
+              key={widget.id}
+              title={widget.title}
+              onClose={() => closeWidget(widget.id)}
+            >
+              {widget.content || ''}
+            </Widget>
+          );
+        }
+      })}
     </>
   );
-}; 
+};
+
+export default SimpleControlPanel; 
