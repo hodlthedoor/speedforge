@@ -5,13 +5,20 @@ export interface WidgetProps {
   id: string;
   name: string;
   initialPosition?: { x: number, y: number };
+  onClose?: (id: string) => void;
 }
 
-export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition }) => {
+export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition, onClose }) => {
   // Generate a random position if none provided
   const defaultPosition = initialPosition || {
     x: 200 + Math.random() * 300,
     y: 200 + Math.random() * 200
+  };
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose(id);
+    }
   };
 
   return (
@@ -22,6 +29,11 @@ export const Widget: React.FC<WidgetProps> = ({ id, name, initialPosition }) => 
       <div className="widget-component">
         <div className="widget-header drag-handle">
           <h3>{name}</h3>
+          {onClose && (
+            <button className="widget-close-btn" onClick={handleClose}>
+              ×
+            </button>
+          )}
         </div>
         <div className="widget-content">
           {id === 'speed' && (

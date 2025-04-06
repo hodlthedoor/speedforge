@@ -56,7 +56,9 @@ function createWindows() {
       vibrancy: null as any,
       visualEffectState: null as any,
       // Ensure the window accepts focus when needed
-      focusable: true
+      focusable: true,
+      // Always stay on top of other windows
+      alwaysOnTop: true
     });
 
     // Set specific window properties for macOS
@@ -170,6 +172,9 @@ function setupIpcListeners() {
         // Ensure the window can still receive keyboard focus - needed for ESC key
         win.focusOnWebView();
         
+        // Ensure the window stays on top
+        win.setAlwaysOnTop(true);
+        
         // Using pointer-events CSS in the renderer will control which elements receive clicks
         // This approach allows renderer to decide which elements should get mouse events
         console.log('Click-through enabled with forwarding. UI controls use CSS to handle clicks.');
@@ -177,6 +182,10 @@ function setupIpcListeners() {
         // Disable click-through completely
         console.log('Disabling ignore mouse events');
         win.setIgnoreMouseEvents(false);
+        
+        // Make sure window still stays on top
+        win.setAlwaysOnTop(true);
+        
         console.log('Click-through disabled');
       }
       

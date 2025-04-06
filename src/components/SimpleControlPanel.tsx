@@ -29,6 +29,15 @@ export const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ showCont
     console.log(`Toggled widget: ${id}`);
   };
 
+  const closeWidget = (id: string) => {
+    setWidgets(prevWidgets => 
+      prevWidgets.map(widget => 
+        widget.id === id ? { ...widget, enabled: false } : widget
+      )
+    );
+    console.log(`Closed widget: ${id}`);
+  };
+
   const updateWidgetPosition = (id: string, position: { x: number, y: number }) => {
     setWidgets(prevWidgets => 
       prevWidgets.map(widget => 
@@ -68,6 +77,7 @@ export const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ showCont
           id={widget.id}
           name={widget.name}
           initialPosition={widget.position}
+          onClose={closeWidget}
         />
       ))}
 
