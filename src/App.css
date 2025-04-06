@@ -603,9 +603,9 @@ body, html {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* In click-through mode, make the panel semi-transparent */
+/* In click-through mode, make the panel invisible */
 .control-panel.click-through {
-  opacity: 0.4;
+  opacity: 0;
   transition: opacity 0.3s ease;
 }
 
@@ -704,10 +704,10 @@ body, html {
   white-space: nowrap;
 }
 
-/* Make widgets semi-transparent in click-through mode */
+/* Make widgets invisible in click-through mode */
 .widget-component.click-through,
 .telemetry-widget-wrapper.click-through {
-  opacity: 0.4;
+  opacity: 0;
   transition: opacity 0.3s ease;
 }
 
