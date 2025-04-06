@@ -1,63 +1,45 @@
-const { contextBridge, ipcRenderer } = require("electron");
-contextBridge.exposeInMainWorld("electronAPI", {
-  ping: () => ipcRenderer.invoke("ping"),
-  // Invoke methods
-  invoke: (channel, ...args) => {
-    return ipcRenderer.invoke(channel, ...args);
-  },
-  // Send methods
-  send: (channel, ...args) => {
-    ipcRenderer.send(channel, ...args);
-  },
-  // Receive methods
+var import_electron = require("electron");
+import_electron.contextBridge.exposeInMainWorld("electronAPI", {
+  // Basic info and communication functions
+  isElectron: true,
+  platform: process.platform,
+  // Add event listener to receive messages from main process
   on: (channel, callback) => {
-    ipcRenderer.on(channel, (_event, ...args) => callback(...args));
+    const validChannels = ["main-process-message"];
+    if (validChannels.includes(channel)) {
+      const subscription = (_event, data) => callback(data);
+      import_electron.ipcRenderer.on(channel, subscription);
+      return () => {
+        import_electron.ipcRenderer.removeListener(channel, subscription);
+      };
+    }
   },
-  // Remove listener
+  // Remove all listeners for a channel
   removeAllListeners: (channel) => {
-    ipcRenderer.removeAllListeners(channel);
-  },
-  // Widget specific methods
-  widgets: {
-    create: (options) => {
-      return ipcRenderer.invoke("widget:create", options);
-    },
-    close: (widgetId) => {
-      return ipcRenderer.invoke("widget:close", widgetId);
-    },
-    getAll: () => {
-      return ipcRenderer.invoke("widget:getAll");
-    },
-    setPosition: (widgetId, x, y) => {
-      return ipcRenderer.invoke("widget:setPosition", { widgetId, x, y });
-    },
-    setSize: (widgetId, width, height) => {
-      return ipcRenderer.invoke("widget:setSize", { widgetId, width, height });
-    },
-    setAlwaysOnTop: (widgetId, alwaysOnTop) => {
-      return ipcRenderer.invoke("widget:setAlwaysOnTop", { widgetId, alwaysOnTop });
-    },
-    setOpacity: (widgetId, opacity) => {
-      return ipcRenderer.invoke("widget:setOpacity", { widgetId, opacity });
-    },
-    setVisible: (widgetId, visible) => {
-      return ipcRenderer.invoke("widget:setVisible", { widgetId, visible });
-    },
-    updateParams: (widgetId, params) => {
-      return ipcRenderer.invoke("widget:updateParams", { widgetId, params });
+    const validChannels = ["main-process-message"];
+    if (validChannels.includes(channel)) {
+      import_electron.ipcRenderer.removeAllListeners(channel);
     }
   },
-  // Add app-level methods
+  // Invoke a function in the main process
+  invoke: async (channel, data) => {
+    const validChannels = ["app:quit", "app:toggleClickThrough"];
+    if (validChannels.includes(channel)) {
+      return await import_electron.ipcRenderer.invoke(channel, data);
+    }
+    throw new Error(`Invoke not allowed for channel: ${channel}`);
+  },
+  // Application control functions
   app: {
-    quit: () => {
-      return ipcRenderer.invoke("app:quit");
+    // Quit the application
+    quit: async () => {
+      return await import_electron.ipcRenderer.invoke("app:quit");
+    },
+    // Toggle click-through mode
+    toggleClickThrough: async (state) => {
+      return await import_electron.ipcRenderer.invoke("app:toggleClickThrough", state);
     }
   }
 });
-contextBridge.exposeInMainWorld("electronDrag", {
-  // Function to enable dragging - we don't need this anymore since we use CSS
-  enableDrag: () => {
-    console.log("CSS-based dragging should be active");
-  }
-});
+console.log("Preload script executed successfully");
 //# sourceMappingURL=preload.js.map

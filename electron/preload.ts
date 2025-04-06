@@ -1,79 +1,58 @@
 /// <reference types="electron" />
-const { contextBridge, ipcRenderer } = require('electron');
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Define the WidgetWindowOptions type without importing it
-interface WidgetWindowOptions {
-  widgetId: string;
-  widgetType: string;
-  width?: number;
-  height?: number;
-  x?: number;
-  y?: number;
-  alwaysOnTop?: boolean;
-  params?: Record<string, any>;
-}
-
-// --------- Expose some API to the Renderer process ---------
+// API exposed to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-  ping: () => ipcRenderer.invoke('ping'),
-  // Invoke methods
-  invoke: (channel: string, ...args: any[]) => {
-    return ipcRenderer.invoke(channel, ...args);
-  },
-  // Send methods
-  send: (channel: string, ...args: any[]) => {
-    ipcRenderer.send(channel, ...args);
-  },
-  // Receive methods
-  on: (channel: string, callback: (...args: any[]) => void) => {
-    ipcRenderer.on(channel, (_event, ...args) => callback(...args));
-  },
-  // Remove listener
-  removeAllListeners: (channel: string) => {
-    ipcRenderer.removeAllListeners(channel);
-  },
-  // Widget specific methods
-  widgets: {
-    create: (options: WidgetWindowOptions) => {
-      return ipcRenderer.invoke('widget:create', options);
-    },
-    close: (widgetId: string) => {
-      return ipcRenderer.invoke('widget:close', widgetId);
-    },
-    getAll: () => {
-      return ipcRenderer.invoke('widget:getAll');
-    },
-    setPosition: (widgetId: string, x: number, y: number) => {
-      return ipcRenderer.invoke('widget:setPosition', { widgetId, x, y });
-    },
-    setSize: (widgetId: string, width: number, height: number) => {
-      return ipcRenderer.invoke('widget:setSize', { widgetId, width, height });
-    },
-    setAlwaysOnTop: (widgetId: string, alwaysOnTop: boolean) => {
-      return ipcRenderer.invoke('widget:setAlwaysOnTop', { widgetId, alwaysOnTop });
-    },
-    setOpacity: (widgetId: string, opacity: number) => {
-      return ipcRenderer.invoke('widget:setOpacity', { widgetId, opacity });
-    },
-    setVisible: (widgetId: string, visible: boolean) => {
-      return ipcRenderer.invoke('widget:setVisible', { widgetId, visible });
-    },
-    updateParams: (widgetId: string, params: Record<string, any>) => {
-      return ipcRenderer.invoke('widget:updateParams', { widgetId, params });
+  // Basic info and communication functions
+  isElectron: true,
+  platform: process.platform,
+  
+  // Add event listener to receive messages from main process
+  on: (channel: string, callback: (data: any) => void) => {
+    const validChannels = ['main-process-message'];
+    if (validChannels.includes(channel)) {
+      // Deliberately strip event as it includes `sender` 
+      const subscription = (_event: any, data: any) => callback(data);
+      ipcRenderer.on(channel, subscription);
+      
+      return () => {
+        ipcRenderer.removeListener(channel, subscription);
+      };
     }
   },
-  // Add app-level methods
+  
+  // Remove all listeners for a channel
+  removeAllListeners: (channel: string) => {
+    const validChannels = ['main-process-message'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  },
+  
+  // Invoke a function in the main process
+  invoke: async (channel: string, data?: any): Promise<any> => {
+    const validChannels = ['app:quit', 'app:toggleClickThrough'];
+    
+    if (validChannels.includes(channel)) {
+      return await ipcRenderer.invoke(channel, data);
+    }
+    
+    throw new Error(`Invoke not allowed for channel: ${channel}`);
+  },
+
+  // Application control functions
   app: {
-    quit: () => {
-      return ipcRenderer.invoke('app:quit');
+    // Quit the application
+    quit: async (): Promise<any> => {
+      return await ipcRenderer.invoke('app:quit');
+    },
+    
+    // Toggle click-through mode
+    toggleClickThrough: async (state: boolean): Promise<any> => {
+      return await ipcRenderer.invoke('app:toggleClickThrough', state);
     }
   }
 });
 
-// Add drag functionality
-contextBridge.exposeInMainWorld('electronDrag', {
-  // Function to enable dragging - we don't need this anymore since we use CSS
-  enableDrag: () => {
-    console.log('CSS-based dragging should be active');
-  }
-});
+// Log when preload script has completed
+console.log('Preload script executed successfully');

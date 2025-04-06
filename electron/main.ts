@@ -1,7 +1,6 @@
-import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { WidgetWindowManager, WidgetWindowOptions } from './WidgetWindow';
 
 // In ES modules, we need to recreate __dirname and __filename
 const __filename = fileURLToPath(import.meta.url);
@@ -12,343 +11,172 @@ process.env.VITE_PUBLIC = app.isPackaged
   ? process.env.DIST
   : path.join(__dirname, '../public');
 
-let mainWindow: BrowserWindow | null = null;
-let widgetManager: WidgetWindowManager;
-// Store telemetry data and connection status in the main process
-let telemetryData: any = null;
-let telemetryConnected: boolean = false;
+// Store references to all windows
+const windows: BrowserWindow[] = [];
 
-// Track registered widget windows
-const widgetWindowHandlers: Map<string, BrowserWindow> = new Map();
+// Create a window for each display
+function createWindows() {
+  // Get all displays
+  const displays = screen.getAllDisplays();
+  console.log(`Found ${displays.length} displays`);
+  
+  // Create a window for each display
+  for (const display of displays) {
+    console.log(`Creating window for display: ${display.id}`, {
+      bounds: display.bounds,
+      workArea: display.workArea
+    });
+    
+    // Create the window with macOS-specific settings
+    const win = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+      // Make the window transparent
+      transparent: true,
+      backgroundColor: '#00000000', // Fully transparent
+      frame: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: false,
+      fullscreen: false,
+      // Don't use simpleFullscreen as it can create issues on macOS
+      simpleFullscreen: false,
+      // Set to floating window type on macOS
+      type: 'panel', // Important for macOS transparency
+      // Remove vibrancy - it can cause transparency issues
+      vibrancy: null as any,
+      visualEffectState: null as any,
+      // Ensure the window accepts focus when needed
+      focusable: true
+    });
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: false,
-      scrollBounce: false
-    },
-    // Standard window with controls
-    frame: true,
-    transparent: false,
-    titleBarStyle: 'default'
-  });
+    // Set specific window properties for macOS
+    if (process.platform === 'darwin') {
+      win.setWindowButtonVisibility(false);
+      // Use level 'floating' for macOS to keep window above others
+      win.setAlwaysOnTop(true, 'floating', 1);
+      
+      // Additional macOS configuration to ensure transparency
+      win.setBackgroundColor('#00000000');
+      
+      // On macOS, we need to set opacity to ensure transparency
+      win.setOpacity(1.0);
+    }
 
-  // Test active push message to Renderer
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow?.webContents.send('main-process-message', new Date().toLocaleString());
-  });
-
-  const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
-  mainWindow.loadURL(mainUrl);
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.webContents.openDevTools();
+    // Start with click-through disabled for easier debugging
+    win.setIgnoreMouseEvents(false);
+    
+    // Load the app
+    const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
+    win.loadURL(mainUrl);
+    
+    // Store the window reference
+    windows.push(win);
+    
+    // Log when window is ready
+    win.webContents.on('did-finish-load', () => {
+      console.log(`Window for display ${display.id} is ready`);
+      
+      // For macOS, make sure we're the right size after loading
+      if (process.platform === 'darwin') {
+        win.setBounds({
+          x: display.bounds.x,
+          y: display.bounds.y,
+          width: display.bounds.width,
+          height: display.bounds.height
+        });
+        
+        // Force an opacity update to ensure transparency
+        win.setOpacity(0.99);
+        setTimeout(() => win.setOpacity(1.0), 100);
+      }
+    });
+    
+    // Open DevTools for primary display in dev mode (as a separate window)
+    if (process.env.VITE_DEV_SERVER_URL && display.id === screen.getPrimaryDisplay().id) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
   }
-  
-  // Create Widget Manager
-  widgetManager = new WidgetWindowManager(mainUrl);
-  
-  // Set up IPC listeners for widget operations
-  setupIpcListeners();
 }
 
+// Setup basic IPC listeners
 function setupIpcListeners() {
-  // Create a new widget window
-  ipcMain.handle('widget:create', (_, options: WidgetWindowOptions) => {
-    try {
-      const window = widgetManager.createWidgetWindow(options);
-      
-      // Register the window with its widgetId
-      widgetWindowHandlers.set(options.widgetId, window);
-      
-      // Listen for window closed event to unregister
-      window.on('closed', () => {
-        widgetWindowHandlers.delete(options.widgetId);
-      });
-      
-      return { success: true, id: options.widgetId };
-    } catch (error: any) {
-      console.error('Error creating widget window:', error);
-      return { success: false, error: error.message };
-    }
+  // Quit the application
+  ipcMain.handle('app:quit', () => {
+    console.log('Quitting application');
+    app.quit();
+    return { success: true };
   });
   
-  // Close a widget window
-  ipcMain.handle('widget:close', (_, widgetId: string) => {
-    // Remove from handlers when closing
-    widgetWindowHandlers.delete(widgetId);
-    const success = widgetManager.closeWidgetWindow(widgetId);
-    return { success };
-  });
-  
-  // Get all widget windows
-  ipcMain.handle('widget:getAll', () => {
-    const widgets = Array.from(widgetManager.getAllWidgetWindows().keys());
-    return { success: true, widgets };
-  });
-  
-  // Set widget position
-  ipcMain.handle('widget:setPosition', (_, { widgetId, x, y }: { widgetId: string, x: number, y: number }) => {
-    const success = widgetManager.setWidgetPosition(widgetId, x, y);
-    return { success };
-  });
-  
-  // Set widget size
-  ipcMain.handle('widget:setSize', (_, { widgetId, width, height }: { widgetId: string, width: number, height: number }) => {
-    const success = widgetManager.setWidgetSize(widgetId, width, height);
-    return { success };
-  });
-  
-  // Set widget always-on-top status
-  ipcMain.handle('widget:setAlwaysOnTop', (_, { widgetId, alwaysOnTop }: { widgetId: string, alwaysOnTop: boolean }) => {
-    const success = widgetManager.setWidgetAlwaysOnTop(widgetId, alwaysOnTop);
-    return { success };
-  });
-  
-  // Set widget opacity
-  ipcMain.handle('widget:setOpacity', (_, { widgetId, opacity }: { widgetId: string, opacity: number }) => {
-    const success = widgetManager.setWidgetOpacity(widgetId, opacity);
-    return { success };
-  });
-  
-  // Set widget visibility
-  ipcMain.handle('widget:setVisible', (_, { widgetId, visible }: { widgetId: string, visible: boolean }) => {
-    const success = widgetManager.setWidgetVisible(widgetId, visible);
-    return { success };
-  });
-  
-  // Update widget parameters
-  ipcMain.handle('widget:updateParams', (_, { widgetId, params }: { widgetId: string, params: Record<string, any> }) => {
-    console.log(`Main process received updateParams request for widget ${widgetId}:`, params);
+  // Toggle click-through mode
+  ipcMain.handle('app:toggleClickThrough', (event, state) => {
+    console.log(`Toggling click-through from main process to: ${state}`);
     
-    // Use the new method to reload the widget with updated parameters
-    if (widgetManager.updateWidgetParams(widgetId, params)) {
-      return { success: true };
-    } else {
-      return { success: false, error: 'Failed to update widget parameters' };
-    }
-  });
-  
-  // Handler for telemetry data requests
-  ipcMain.handle('telemetry:getData', (event) => {
-    return telemetryData;
-  });
-  
-  // Handler for connection status requests
-  ipcMain.handle('telemetry:getConnectionStatus', (event) => {
-    return telemetryConnected;
-  });
-  
-  // Listen for telemetry updates from the renderer process
-  ipcMain.on('telemetry:update', (_, data) => {
-    // Store the data for future requests (make a shallow copy to avoid reference issues)
-    telemetryData = { ...data };
-    telemetryConnected = true;
-    
-    // Only broadcast updates if we have widgets to send to
-    const windows = widgetManager.getAllWidgetWindows();
-    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
-      broadcastToAllWidgets('telemetry:update', telemetryData);
-    }
-  });
-  
-  // Listen for connection status changes
-  ipcMain.on('telemetry:connectionChange', (_, connected) => {
-    // Store the status for future requests
-    telemetryConnected = connected;
-    
-    // Only broadcast updates if we have widgets to send to
-    const windows = widgetManager.getAllWidgetWindows();
-    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
-      broadcastToAllWidgets('telemetry:connectionChange', connected);
-    }
-  });
-  
-  // Handle Escape key to close widgets
-  ipcMain.on('widget:closeByEscape', (event) => {
+    // Get the window that sent this request
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (win) {
-      win.close();
-    }
-  });
-
-  // Listen for explicit widget registration for updates
-  ipcMain.on('widget:registerForUpdates', (event, { widgetId }) => {
-    const sender = BrowserWindow.fromWebContents(event.sender);
-    if (!sender) {
-      return;
+    if (!win) {
+      console.error('Could not find window associated with this request');
+      return { success: false, error: 'Window not found' };
     }
     
-    // Store in our tracking map
-    widgetWindowHandlers.set(widgetId, sender);
-    
-    // Send current data immediately if available
-    if (telemetryData) {
-      try {
-        sender.webContents.send('telemetry:update', telemetryData);
-      } catch (error) {
-        console.error(`Failed to send initial data to widget ${widgetId}:`, error);
-      }
-    }
-    
-    // Send current connection status
     try {
-      sender.webContents.send('telemetry:connectionChange', true);
+      // When we set ignore mouse events, we can choose to forward specific elements
+      if (state === true) {
+        // Enable click-through but forward clicks on specific UI elements
+        // The 'forward' option in Electron 13+ only accepts boolean values
+        // We'll use true to forward all events to the web contents
+        win.setIgnoreMouseEvents(true, { forward: true });
+        
+        // Using pointer-events CSS in the renderer will control which elements receive clicks
+        // This approach allows renderer to decide which elements should get mouse events
+        console.log('Click-through enabled with forwarding. UI controls use CSS to handle clicks.');
+      } else {
+        // Disable click-through completely
+        win.setIgnoreMouseEvents(false);
+        console.log('Click-through disabled');
+      }
+      return { success: true, state };
     } catch (error) {
-      console.error(`Failed to send connection status to widget ${widgetId}:`, error);
-    }
-  });
-
-  // Listen for widget closure events to clean up resources
-  ipcMain.on('widget:closed', (_, widgetId) => {
-    // Remove from our tracking map
-    if (widgetWindowHandlers.has(widgetId)) {
-      widgetWindowHandlers.delete(widgetId);
+      console.error('Error toggling click-through:', error);
+      return { success: false, error: String(error) };
     }
   });
 }
 
-// Helper function to broadcast a message to all widget windows
-function broadcastToAllWidgets(channel: string, data: any) {
-  // Use a Set to keep track of which windows we've already messaged
-  // to avoid sending duplicate messages
-  const messaged = new Set<string>();
-  
-  // First, let's check if there are any windows to broadcast to
-  const windows = widgetManager.getAllWidgetWindows();
-  if (windows.size === 0 && widgetWindowHandlers.size === 0) {
-    return; // No windows to broadcast to
-  }
-  
-  // First broadcast to all windows from the widget manager
-  for (const [widgetId, window] of windows.entries()) {
-    if (!window.isDestroyed()) {
-      try {
-        window.webContents.send(channel, data);
-        messaged.add(widgetId);
-      } catch (error) {
-        console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
-      }
-    }
-  }
-  
-  // Also broadcast to any window in our explicit handler map that might not be in the widget manager
-  for (const [widgetId, window] of widgetWindowHandlers.entries()) {
-    // Skip if we've already messaged this window or if it's destroyed
-    if (messaged.has(widgetId) || window.isDestroyed()) {
-      if (window.isDestroyed()) {
-        widgetWindowHandlers.delete(widgetId);
-      }
-      continue;
-    }
-    
-    try {
-      window.webContents.send(channel, data);
-    } catch (error) {
-      console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
-      // Clean up references to destroyed windows
-      widgetWindowHandlers.delete(widgetId);
-    }
-  }
-}
-
+// When Electron is ready
 app.whenReady().then(() => {
-  createWindow();
-  setupMemoryManagement();
+  createWindows();
+  setupIpcListeners();
+  
+  // Log display information for debugging
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  console.log('Primary display:', primary);
+  console.log('All displays:', displays);
 });
 
-// Memory management function to reduce memory usage
-function setupMemoryManagement() {
-  // Periodically clean up references and force garbage collection
-  setInterval(() => {
-    // Clean up any destroyed windows from our handler map
-    for (const [widgetId, window] of widgetWindowHandlers.entries()) {
-      if (window.isDestroyed()) {
-        widgetWindowHandlers.delete(widgetId);
-      }
-    }
-    
-    // Check for memory usage
-    const memoryInfo = process.memoryUsage();
-    const memoryUsageMB = Math.round(memoryInfo.heapUsed / 1024 / 1024);
-    
-    // If memory usage is high, try to free up resources
-    if (memoryUsageMB > 500) { // 500MB threshold
-      telemetryData = null; // Clear cached data
-      
-      // Force garbage collection if available (only in dev mode with --expose-gc flag)
-      if (global.gc) {
-        global.gc();
-      }
-    }
-  }, 30000); // Run every 30 seconds
-}
-
-// Add a 'before-quit' handler to ensure all widgets are closed properly
-app.on('before-quit', () => {
-  console.log('Application is shutting down, closing all widgets...');
-  // Close all open widget windows to prevent orphaned processes
-  if (widgetManager) {
-    const windows = widgetManager.getAllWidgetWindows();
-    for (const [widgetId, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        console.log(`Closing widget: ${widgetId}`);
-        window.close();
-      }
-    }
-  }
-  
-  // Clear the handlers map
-  widgetWindowHandlers.clear();
-  
-  // Clean up all IPC handlers
-  console.log('Removing all IPC handlers...');
-  ipcMain.removeHandler('widget:create');
-  ipcMain.removeHandler('widget:close');
-  ipcMain.removeHandler('widget:getAll');
-  ipcMain.removeHandler('widget:setPosition');
-  ipcMain.removeHandler('widget:setSize');
-  ipcMain.removeHandler('widget:setAlwaysOnTop');
-  ipcMain.removeHandler('widget:setOpacity');
-  ipcMain.removeHandler('widget:setVisible');
-  ipcMain.removeHandler('widget:updateParams');
-  ipcMain.removeHandler('app:quit');
-  ipcMain.removeHandler('telemetry:getData');
-  ipcMain.removeHandler('telemetry:getConnectionStatus');
-  
-  // Remove all listeners
-  ipcMain.removeAllListeners('widget:closeByEscape');
-  ipcMain.removeAllListeners('telemetry:update');
-  ipcMain.removeAllListeners('telemetry:connectionChange');
-  ipcMain.removeAllListeners('widget:registerForUpdates');
-});
-
+// Clean up when all windows are closed
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-  mainWindow = null;
 });
 
-// Add shutdown handler for main window to close all widgets
-ipcMain.handle('app:quit', () => {
-  // Close all widget windows first
-  if (widgetManager) {
-    const windows = widgetManager.getAllWidgetWindows();
-    for (const [widgetId, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        window.close();
-      }
-    }
-  }
-  // Then quit the application
-  app.quit();
-  return { success: true };
-});
-
+// Re-create windows if activated and no windows exist
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (windows.length === 0) createWindows();
+});
+
+// Clean up before quitting
+app.on('before-quit', () => {
+  // Remove all IPC handlers
+  ipcMain.removeHandler('app:quit');
+  ipcMain.removeHandler('app:toggleClickThrough');
 });
