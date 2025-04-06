@@ -26,6 +26,7 @@ export class PedalTraceWidgetBase extends BaseWidget<PedalTraceWidgetProps> {
   private animationFrameId: number | null = null;
   
   constructor(props: PedalTraceWidgetProps) {
+    // Pass props directly to parent
     super(props);
     
     // Get trace length from props or URL parameters

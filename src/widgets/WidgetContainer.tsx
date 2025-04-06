@@ -93,6 +93,8 @@ export const WidgetContainer: React.FC = () => {
             id={widgetId}
             traceLength={parseInt(params.traceLength) || 75}
             webSocketService={webSocketService}
+            defaultWidth={500}
+            defaultHeight={160}
           />
         );
       case 'clock':
