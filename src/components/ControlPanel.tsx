@@ -368,7 +368,7 @@ export const ControlPanel: React.FC = () => {
   };
 
   return (
-    <div className="control-panel bg-gray-100 p-4 rounded-lg shadow-md overflow-y-auto">
+    <div className="control-panel bg-gray-100 p-4 text-black rounded-lg shadow-md overflow-y-auto">
       <div className="flex justify-between items-center mb-4 border-b pb-3 border-indigo-200">
         <h2 className="text-xl font-bold text-indigo-950">Widget Control Panel</h2>
         <button 
