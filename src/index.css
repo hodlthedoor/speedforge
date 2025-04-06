@@ -86,3 +86,13 @@ div[class*="widget"] {
 .widget-container::-webkit-scrollbar {
   display: none;
 }
+
+.widget-content,
+.widget-container,
+.widget-wrapper {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-sizing: border-box;
+}
+
