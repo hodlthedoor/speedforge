@@ -315,13 +315,14 @@ function App() {
             position: 'fixed',
             top: '10px',
             left: '10px',
-            width: '15px',
-            height: '15px',
-            backgroundColor: 'rgba(255, 100, 100, 0.7)',
+            width: '20px',
+            height: '20px',
+            backgroundColor: 'rgba(255, 50, 50, 0.9)',
             borderRadius: '50%',
             cursor: 'pointer',
             zIndex: 10000,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+            boxShadow: '0 0 8px 2px rgba(255, 50, 50, 0.5)',
+            border: '2px solid rgba(255, 255, 255, 0.7)'
           }}
         />
       )}
