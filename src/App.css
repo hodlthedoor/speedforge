@@ -57,6 +57,7 @@ body.click-through-mode {
 .app-container.click-through .widget-component-wrapper,
 .app-container.click-through .widget-close-btn,
 .app-container.click-through .click-through-indicator,
+.app-container.click-through .click-through-toggle,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
@@ -656,6 +657,15 @@ body, html {
 
 .btn-warning:hover {
   background-color: #b45309;
+}
+
+.btn-danger {
+  background-color: #dc2626;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
 }
 
 .btn-secondary {

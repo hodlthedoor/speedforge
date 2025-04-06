@@ -277,15 +277,6 @@ function App() {
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
       data-click-through={isClickThrough.toString()}
     >
-      {/* Always show click status and toggle button */}
-      <div className="click-status">
-        Click-through is: {isClickThrough ? 'ON' : 'OFF'}
-        <button className="toggle-button" onClick={toggleClickThrough}>
-          Toggle Click-through
-        </button>
-        <span className="shortcut-hint">(or Cmd/Ctrl+Space)</span>
-      </div>
-      
       {/* Click indicators */}
       {clickIndicators.map(indicator => (
         <div 
@@ -298,44 +289,6 @@ function App() {
         />
       ))}
       
-      {/* Debug panel in corner */}
-      <div className="debug-container">
-        <div className="debug-panel">
-          <div className="debug-info">
-            <div>Timestamp: {debugInfo.timestamp}</div>
-            <div>Platform: {debugInfo.platform}</div>
-            <div>Last Click: {debugInfo.lastClick}</div>
-            <div>Click Count: {debugInfo.clickCount}</div>
-            <div>Click-through State: {debugInfo.clickThroughState}</div>
-            <div>Last Toggle: {debugInfo.lastToggle}</div>
-            <div style={{ marginTop: '10px' }}>Electron Response:</div>
-            <pre style={{ 
-              fontSize: '10px', 
-              maxHeight: '100px', 
-              overflowY: 'auto',
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              padding: '5px',
-              borderRadius: '4px'
-            }}>
-              {debugInfo.electronResponse}
-            </pre>
-          </div>
-          
-          <button 
-            className="quit-button"
-            onClick={() => {
-              if (window.electronAPI) {
-                window.electronAPI.app.quit()
-                  .then(result => console.log('Quit result:', result))
-                  .catch(error => console.error('Error quitting:', error));
-              }
-            }}
-          >
-            Quit App
-          </button>
-        </div>
-      </div>
-      
       {/* When click-through is enabled, hide control panel completely */}
       {!isClickThrough ? (
         <SimpleControlPanel 
@@ -345,37 +298,33 @@ function App() {
         />
       ) : null}
       
-      {/* Add a small visible indicator when in click-through mode */}
-      {isClickThrough && (
-        <div 
-          className="click-through-indicator"
-          onClick={() => setIsClickThrough(false)}
-          onMouseEnter={() => setIsClickThrough(false)}
-          style={{
-            position: 'fixed',
-            top: '80px',
-            left: '20px',
-            backgroundColor: 'rgba(255, 100, 100, 0.7)',
-            color: 'white',
-            padding: '8px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            zIndex: 10000,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
-          }}
-        >
-          Show Control Panel
-        </div>
-      )}
-      
       {/* Widgets are rendered at app level, separate from control panel */}
       {widgets.map(widget => (
         <React.Fragment key={widget.id}>
           {widget.content}
         </React.Fragment>
       ))}
+      
+      {/* When click-through is enabled, show a small indicator to disable it */}
+      {isClickThrough && (
+        <div 
+          className="click-through-toggle"
+          onClick={() => setIsClickThrough(false)}
+          onMouseEnter={() => setIsClickThrough(false)}
+          style={{
+            position: 'fixed',
+            top: '10px',
+            left: '10px',
+            width: '15px',
+            height: '15px',
+            backgroundColor: 'rgba(255, 100, 100, 0.7)',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            zIndex: 10000,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -128,6 +128,15 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   };
 
+  const quitApplication = () => {
+    console.log('Quitting application');
+    if (window.electronAPI) {
+      window.electronAPI.app.quit()
+        .then(result => console.log('Quit result:', result))
+        .catch(error => console.error('Error quitting:', error));
+    }
+  };
+
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
@@ -157,6 +166,13 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             onClick={() => setShowTelemetryOptions(!showTelemetryOptions)}
           >
             {showTelemetryOptions ? 'Hide Telemetry Options' : 'Add Telemetry Widget'}
+          </button>
+          
+          <button 
+            className="btn btn-danger"
+            onClick={quitApplication}
+          >
+            Quit Application
           </button>
         </div>
         
