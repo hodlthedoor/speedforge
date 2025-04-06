@@ -189,16 +189,49 @@ function setupIpcListeners() {
       win.close();
     }
   });
+
+  // Listen for explicit widget registration for updates
+  ipcMain.on('widget:registerForUpdates', (event, { widgetId }) => {
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (!sender) {
+      console.log(`Widget ${widgetId} tried to register but couldn't find sender window`);
+      return;
+    }
+    
+    console.log(`Widget ${widgetId} registered for updates explicitly`);
+    
+    // Store in our tracking map
+    widgetWindowHandlers.set(widgetId, sender);
+    
+    // Send current data immediately if available
+    if (telemetryData) {
+      try {
+        sender.webContents.send('telemetry:update', telemetryData);
+        console.log(`Sent initial telemetry data to newly registered widget ${widgetId}`);
+      } catch (error) {
+        console.error(`Failed to send initial data to widget ${widgetId}:`, error);
+      }
+    }
+    
+    // Send current connection status
+    try {
+      sender.webContents.send('telemetry:connectionChange', true);
+      console.log(`Sent initial connection status to newly registered widget ${widgetId}`);
+    } catch (error) {
+      console.error(`Failed to send connection status to widget ${widgetId}:`, error);
+    }
+  });
 }
 
 // Helper function to broadcast a message to all widget windows
 function broadcastToAllWidgets(channel: string, data: any) {
-  // Use the widgets from the widget manager to ensure we get all windows
+  // Use both the widgets from the widget manager and our explicit handler map
   const windows = widgetManager.getAllWidgetWindows();
   const windowCount = windows.size;
   
   console.log(`Broadcasting ${channel} to ${windowCount} widget windows`);
   
+  // First broadcast to all windows from the widget manager
   for (const [widgetId, window] of windows.entries()) {
     if (!window.isDestroyed()) {
       try {
@@ -207,6 +240,24 @@ function broadcastToAllWidgets(channel: string, data: any) {
       } catch (error) {
         console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
       }
+    }
+  }
+  
+  // Also broadcast to any window in our explicit handler map that might not be in the widget manager
+  for (const [widgetId, window] of widgetWindowHandlers.entries()) {
+    if (!window.isDestroyed()) {
+      try {
+        // Don't send duplicate messages to windows we've already sent to
+        if (!windows.has(widgetId)) {
+          window.webContents.send(channel, data);
+          console.log(`Sent ${channel} to explicitly registered widget ${widgetId}`);
+        }
+      } catch (error) {
+        console.error(`Failed to send ${channel} to explicitly registered widget ${widgetId}:`, error);
+      }
+    } else {
+      // Clean up destroyed windows
+      widgetWindowHandlers.delete(widgetId);
     }
   }
 }
@@ -249,6 +300,7 @@ app.on('before-quit', () => {
   ipcMain.removeAllListeners('widget:closeByEscape');
   ipcMain.removeAllListeners('telemetry:update');
   ipcMain.removeAllListeners('telemetry:connectionChange');
+  ipcMain.removeAllListeners('widget:registerForUpdates');
 });
 
 app.on('window-all-closed', () => {

@@ -61,6 +61,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
 
     // Reconnection state
     let reconnectTimeout: number | null = null;
+    let dataCheckInterval: number | null = null;
     
     // Function to request data from main process
     const requestTelemetryData = () => {
@@ -107,11 +108,35 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         window.clearTimeout(reconnectTimeout);
       }
       
-      console.log(`IpcWidget ${id}: Scheduling reconnection attempt in 2 seconds`);
+      console.log(`IpcWidget ${id}: Scheduling reconnection attempt in 1 second`);
       reconnectTimeout = window.setTimeout(() => {
         console.log(`IpcWidget ${id}: Attempting to reconnect`);
         requestConnectionStatus();
-      }, 2000);
+      }, 1000);
+    };
+
+    // Setup a polling interval to ensure we get regular updates
+    // This helps recover from any missed events or disconnections
+    const setupDataCheckInterval = () => {
+      if (dataCheckInterval !== null) {
+        window.clearInterval(dataCheckInterval);
+      }
+      
+      dataCheckInterval = window.setInterval(() => {
+        console.log(`IpcWidget ${id}: Periodic data check`);
+        
+        // If we think we're connected but have no data, request it again
+        if (connected && (!telemetryData || Object.keys(telemetryData).length === 0)) {
+          console.log(`IpcWidget ${id}: Connected but no data, requesting new data`);
+          requestTelemetryData();
+        }
+        
+        // If we're not connected, try to reconnect
+        if (!connected) {
+          console.log(`IpcWidget ${id}: Not connected, trying to reconnect`);
+          requestConnectionStatus();
+        }
+      }, 3000); // Check every 3 seconds
     };
 
     // Listen for parameter updates from the main process
@@ -127,11 +152,15 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
 
     // Initial requests for data and connection status
     requestConnectionStatus();
+    
+    // Set up periodic data check
+    setupDataCheckInterval();
 
     // Listen for telemetry data updates
     window.electronAPI.on('telemetry:update', (data: any) => {
       console.log(`IpcWidget ${id}: Received telemetry update via IPC`);
       setTelemetryData(data);
+      setConnected(true); // Implicitly set connected when we get data
       
       // Clear any pending reconnect attempts since we're connected
       if (reconnectTimeout !== null) {
@@ -152,6 +181,9 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         // Clear any pending reconnect attempts since we're connected
         window.clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
+        
+        // When we reconnect, also request fresh data
+        requestTelemetryData();
       }
     });
 
@@ -164,6 +196,12 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
     
     window.addEventListener('keydown', handleKeyPress);
 
+    // Special case: If this is a widget window with its own ID in URL,
+    // request a specific registration with the main process to ensure updates
+    if (window.location.search.includes(`widgetId=${id}`)) {
+      window.electronAPI.send('widget:registerForUpdates', { widgetId: id });
+    }
+
     // Cleanup function
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
@@ -171,6 +209,11 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       // Clear any pending reconnection attempt
       if (reconnectTimeout !== null) {
         window.clearTimeout(reconnectTimeout);
+      }
+      
+      // Clear data check interval
+      if (dataCheckInterval !== null) {
+        window.clearInterval(dataCheckInterval);
       }
       
       if (window.electronAPI) {
@@ -182,7 +225,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       
       console.log(`IpcWidget ${id} unmounting and cleaning up resources`);
     };
-  }, [id, selectedMetric]);
+  }, [id, selectedMetric, connected, telemetryData]);
 
   // Visibility control
   const handleSetVisibility = (isVisible: boolean) => {
