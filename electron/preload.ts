@@ -49,7 +49,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     // Toggle click-through mode
     toggleClickThrough: async (state: boolean): Promise<any> => {
-      return await ipcRenderer.invoke('app:toggleClickThrough', state);
+      console.log(`Preload: Requesting toggleClickThrough with state=${state}`);
+      try {
+        const result = await ipcRenderer.invoke('app:toggleClickThrough', state);
+        console.log('Preload: Toggle response received:', result);
+        return result;
+      } catch (error) {
+        console.error('Preload: Error in toggleClickThrough:', error);
+        throw error;
+      }
     }
   }
 });

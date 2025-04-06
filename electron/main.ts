@@ -134,6 +134,7 @@ function setupIpcListeners() {
         // Enable click-through but forward clicks on specific UI elements
         // The 'forward' option in Electron 13+ only accepts boolean values
         // We'll use true to forward all events to the web contents
+        console.log('Setting ignore mouse events with forwarding');
         win.setIgnoreMouseEvents(true, { forward: true });
         
         // Using pointer-events CSS in the renderer will control which elements receive clicks
@@ -141,13 +142,19 @@ function setupIpcListeners() {
         console.log('Click-through enabled with forwarding. UI controls use CSS to handle clicks.');
       } else {
         // Disable click-through completely
+        console.log('Disabling ignore mouse events');
         win.setIgnoreMouseEvents(false);
         console.log('Click-through disabled');
       }
-      return { success: true, state };
+      
+      const response = { success: true, state };
+      console.log('Returning response:', response);
+      return response;
     } catch (error) {
       console.error('Error toggling click-through:', error);
-      return { success: false, error: String(error) };
+      const errorResponse = { success: false, error: String(error) };
+      console.log('Returning error response:', errorResponse);
+      return errorResponse;
     }
   });
 }

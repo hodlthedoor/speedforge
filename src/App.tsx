@@ -34,17 +34,47 @@ function App() {
       
       window.electronAPI.app.toggleClickThrough(isClickThrough)
         .then(response => {
-          console.log('Electron response:', response);
+          console.log('Electron response raw:', response);
           
-          // Update debug info with the response
-          setDebugInfo(prev => ({
-            ...prev,
-            electronResponse: JSON.stringify(response),
-            clickThroughState: response.success ? (response.state ? 'ON' : 'OFF') : 'ERROR'
-          }));
+          // Add additional logging to debug JSON issues
+          try {
+            // Check if response is already a parsed object
+            const isObject = typeof response === 'object' && response !== null;
+            console.log('Response type:', typeof response, isObject ? '(object)' : '(not object)');
+            
+            if (!isObject) {
+              // If it's a string, try to parse it
+              console.log('Response as string:', String(response));
+              
+              // Try parsing in case it's a JSON string
+              try {
+                const parsedResponse = JSON.parse(String(response));
+                console.log('Parsed response:', parsedResponse);
+                response = parsedResponse;
+              } catch (parseError) {
+                console.error('Failed to parse response as JSON:', parseError);
+                throw new Error(`Invalid response format: ${String(response).substring(0, 100)}...`);
+              }
+            }
+            
+            // Update debug info with the response
+            setDebugInfo(prev => ({
+              ...prev,
+              electronResponse: JSON.stringify(response, null, 2),
+              clickThroughState: response.success ? (response.state ? 'ON' : 'OFF') : 'ERROR'
+            }));
+          } catch (error) {
+            console.error('Error processing response:', error);
+            setDebugInfo(prev => ({
+              ...prev,
+              electronResponse: `Error processing: ${String(error)}`,
+              clickThroughState: 'ERROR'
+            }));
+          }
         })
         .catch(error => {
           console.error('Error toggling click-through:', error);
+          console.error('Error details:', error.message, error.stack);
           
           setDebugInfo(prev => ({
             ...prev,
