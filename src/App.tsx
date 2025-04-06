@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { ControlPanel } from './components/ControlPanel';
+import { SimpleControlPanel } from './components/SimpleControlPanel';
+import { WebSocketProvider } from './services/WebSocketContext';
 
 interface ClickIndicator {
   id: number;
@@ -241,67 +242,69 @@ function App() {
   }, [isClickThrough]);
   
   return (
-    <div 
-      className={`app-container ${isClickThrough ? 'click-through' : ''}`}
-      data-click-through={isClickThrough.toString()}
-    >
-      {/* Always show click status and toggle button */}
-      <div className="click-status">
-        Click-through is: {isClickThrough ? 'ON' : 'OFF'}
-        <button 
-          onClick={toggleClickThrough}
-          className="toggle-button"
-          title="Shortcut: Ctrl+Space"
-        >
-          Toggle
-        </button>
-        <span className="shortcut-hint">(Ctrl+Space)</span>
-      </div>
-      
-      {/* Render click indicators */}
-      {clickIndicators.map(indicator => (
-        <div 
-          key={indicator.id}
-          className="click-indicator"
-          style={{
-            left: indicator.x,
-            top: indicator.y,
-          }}
-        />
-      ))}
-      
-      {/* Debug panel */}
-      <div className="debug-container">
-        <div className="debug-panel">
-          <div className="debug-info">
-            Platform: {debugInfo.platform}<br />
-            Time: {debugInfo.timestamp}<br />
-            Last Click: {debugInfo.lastClick}<br />
-            Click-Through: {debugInfo.clickThroughState}<br />
-            Last Toggle: {debugInfo.lastToggle}<br />
-            Total Clicks: {debugInfo.clickCount}<br />
-            Electron Response: {debugInfo.electronResponse}
-          </div>
+    <WebSocketProvider>
+      <div 
+        className={`app-container ${isClickThrough ? 'click-through' : ''}`}
+        data-click-through={isClickThrough.toString()}
+      >
+        {/* Always show click status and toggle button */}
+        <div className="click-status">
+          Click-through is: {isClickThrough ? 'ON' : 'OFF'}
           <button 
-            onClick={() => {
-              if (window.electronAPI) {
-                window.electronAPI.app.quit();
-              }
-            }}
-            className="quit-button"
+            onClick={toggleClickThrough}
+            className="toggle-button"
+            title="Shortcut: Ctrl+Space"
           >
-            Quit
+            Toggle
           </button>
+          <span className="shortcut-hint">(Ctrl+Space)</span>
         </div>
-      </div>
+        
+        {/* Render click indicators */}
+        {clickIndicators.map(indicator => (
+          <div 
+            key={indicator.id}
+            className="click-indicator"
+            style={{
+              left: indicator.x,
+              top: indicator.y,
+            }}
+          />
+        ))}
+        
+        {/* Debug panel */}
+        <div className="debug-container">
+          <div className="debug-panel">
+            <div className="debug-info">
+              Platform: {debugInfo.platform}<br />
+              Time: {debugInfo.timestamp}<br />
+              Last Click: {debugInfo.lastClick}<br />
+              Click-Through: {debugInfo.clickThroughState}<br />
+              Last Toggle: {debugInfo.lastToggle}<br />
+              Total Clicks: {debugInfo.clickCount}<br />
+              Electron Response: {debugInfo.electronResponse}
+            </div>
+            <button 
+              onClick={() => {
+                if (window.electronAPI) {
+                  window.electronAPI.app.quit();
+                }
+              }}
+              className="quit-button"
+            >
+              Quit
+            </button>
+          </div>
+        </div>
 
-      {/* Show Control Panel only when click-through is OFF */}
-      {!isClickThrough && (
-        <div className="control-panel-container">
-          <ControlPanel />
-        </div>
-      )}
-    </div>
+        {/* Show Control Panel only when click-through is OFF */}
+        {!isClickThrough && (
+          <div className="control-panel-container">
+            <SimpleControlPanel />
+          </div>
+        )}
+      </div>
+    </WebSocketProvider>
   );
 }
 

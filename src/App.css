@@ -36,12 +36,18 @@ body.click-through-mode {
 .app-container.click-through .shortcut-hint,
 .app-container.click-through .quit-button,
 .app-container.click-through .control-panel-container,
+.app-container.click-through .simple-control-panel,
+.app-container.click-through .widget-toggle,
+.app-container.click-through .quit-app-button,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
 body.click-through-mode .shortcut-hint,
 body.click-through-mode .quit-button,
-body.click-through-mode .control-panel-container {
+body.click-through-mode .control-panel-container,
+body.click-through-mode .simple-control-panel,
+body.click-through-mode .widget-toggle,
+body.click-through-mode .quit-app-button {
   pointer-events: auto !important;
 }
 
@@ -184,4 +190,110 @@ body, html {
   z-index: 1000;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Simple Control Panel Styles */
+.simple-control-panel {
+  width: 400px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  color: #333;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.panel-header h2 {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.connection-status {
+  font-size: 14px;
+}
+
+.status-connected {
+  color: #22c55e;
+  font-weight: bold;
+}
+
+.status-disconnected {
+  color: #ef4444;
+  font-weight: bold;
+}
+
+.widget-list {
+  margin-bottom: 20px;
+}
+
+.widget-list h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.widget-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.widget-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f3f4f6;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.widget-name {
+  font-weight: 500;
+}
+
+.widget-toggle {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.widget-toggle.enabled {
+  background-color: #22c55e;
+  color: white;
+}
+
+.widget-toggle.disabled {
+  background-color: #d1d5db;
+  color: #4b5563;
+}
+
+.panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.quit-app-button {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.quit-app-button:hover {
+  background-color: #dc2626;
 }
