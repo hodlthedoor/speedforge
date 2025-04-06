@@ -51,6 +51,19 @@ function App() {
     electronResponse: 'None'
   });
   
+  // Track window width for positioning
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
   // Update the ref when state changes to ensure event handlers have the latest value
   useEffect(() => {
     clickThroughRef.current = isClickThrough;
@@ -292,7 +305,7 @@ function App() {
       {/* When click-through is enabled, hide control panel completely */}
       {!isClickThrough ? (
         <SimpleControlPanel 
-          initialPosition={{ x: 20, y: 20 }}
+          initialPosition={{ x: windowWidth - 320, y: 20 }}
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}
         />
