@@ -84,19 +84,6 @@ div[class*="widget"] {
   max-height: calc(100vh - 6rem); /* Allow room for margins and headers */
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
-
 /* Hide scrollbars on widgets for Windows */
 .widget-container::-webkit-scrollbar {
   display: none;
