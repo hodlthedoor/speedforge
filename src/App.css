@@ -192,18 +192,26 @@ body, html {
   overflow: hidden; /* Prevent scrolling */
 }
 
-/* Control Panel Container */
+/* Control Panel Container - updated for draggable version */
 .control-panel-container {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  /* No longer needs fixed positioning since BaseDraggableComponent handles that */
+  width: auto;
+  height: auto;
   max-width: 90vw;
   max-height: 90vh;
   overflow: auto;
-  z-index: 10000; /* Increased z-index to ensure it's above everything */
+  z-index: 10000;
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Darker shadow for better visibility */
+}
+
+/* Simple control panel wrapper styles */
+.simple-control-panel-wrapper {
+  z-index: 10000;
+}
+
+/* Hide elements */
+.hidden {
+  display: none !important;
 }
 
 /* Simple Control Panel Styles */
@@ -224,12 +232,23 @@ body, html {
   margin-bottom: 15px;
   padding-bottom: 10px;
   border-bottom: 1px solid #eee;
+  background-color: #f8f9fa;
+  padding: 10px 15px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  margin: -20px -20px 15px -20px; /* Extend to the edges of the panel */
+  cursor: grab;
+}
+
+.panel-header:active {
+  cursor: grabbing;
 }
 
 .panel-header h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
   margin: 0;
+  color: #444;
 }
 
 .widget-list {
@@ -334,4 +353,25 @@ body, html {
 .visible-button,
 .visible-quit-button {
   display: inline-block !important;
+}
+
+/* Draggable component styles */
+.draggable-component {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.2s ease;
+}
+
+.draggable-component.dragging {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0.95;
+  z-index: 10000;
+}
+
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
