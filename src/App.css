@@ -37,7 +37,12 @@ body.click-through-mode {
 .app-container.click-through .quit-button,
 .app-container.click-through .control-panel-container,
 .app-container.click-through .simple-control-panel,
+.app-container.click-through .panel-header,
+.app-container.click-through .widget-list,
+.app-container.click-through .widget-item,
+.app-container.click-through .widget-name,
 .app-container.click-through .widget-toggle,
+.app-container.click-through .panel-footer,
 .app-container.click-through .quit-app-button,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
@@ -46,7 +51,12 @@ body.click-through-mode .shortcut-hint,
 body.click-through-mode .quit-button,
 body.click-through-mode .control-panel-container,
 body.click-through-mode .simple-control-panel,
+body.click-through-mode .panel-header,
+body.click-through-mode .widget-list,
+body.click-through-mode .widget-item,
+body.click-through-mode .widget-name,
 body.click-through-mode .widget-toggle,
+body.click-through-mode .panel-footer,
 body.click-through-mode .quit-app-button {
   pointer-events: auto !important;
 }
@@ -74,14 +84,18 @@ body.click-through-mode .quit-app-button {
   color: white;
   border: none;
   border-radius: 4px;
-  padding: 3px 8px;
+  padding: 5px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   margin-left: 10px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .toggle-button:hover {
   background-color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
 }
 
 /* Shortcut hint */
@@ -187,9 +201,9 @@ body, html {
   max-width: 90vw;
   max-height: 90vh;
   overflow: auto;
-  z-index: 1000;
+  z-index: 10000; /* Increased z-index to ensure it's above everything */
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Darker shadow for better visibility */
 }
 
 /* Simple Control Panel Styles */
@@ -200,6 +214,7 @@ body, html {
   padding: 20px;
   border-radius: 8px;
   color: #333;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
 }
 
 .panel-header {
@@ -246,12 +261,21 @@ body, html {
   font-weight: 500;
 }
 
+/* Widget toggle button */
 .widget-toggle {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 4px;
   border: none;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.widget-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
 .widget-toggle.enabled {
@@ -270,16 +294,44 @@ body, html {
   margin-top: 20px;
 }
 
+/* Quit app button */
 .quit-app-button {
   background-color: #ef4444;
   color: white;
   border: none;
   border-radius: 4px;
-  padding: 8px 16px;
-  font-size: 14px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: bold;
   cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
 }
 
 .quit-app-button:hover {
   background-color: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* Debug visibility classes */
+.visible-panel,
+.visible-header,
+.visible-title,
+.visible-list,
+.visible-subtitle,
+.visible-items,
+.visible-item,
+.visible-text,
+.visible-button,
+.visible-footer,
+.visible-quit-button {
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+.visible-button,
+.visible-quit-button {
+  display: inline-block !important;
 }

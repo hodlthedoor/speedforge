@@ -296,11 +296,9 @@ function App() {
       </div>
 
       {/* Show Control Panel only when click-through is OFF */}
-      {!isClickThrough && (
-        <div className="control-panel-container">
-          <SimpleControlPanel />
-        </div>
-      )}
+      <div className="control-panel-container" style={{ display: isClickThrough ? 'none' : 'block' }}>
+        <SimpleControlPanel />
+      </div>
     </div>
   );
 }
