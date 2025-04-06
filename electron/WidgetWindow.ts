@@ -49,7 +49,8 @@ export class WidgetWindowManager {
         scrollBounce: false,           // Improves scrollbar behavior
         backgroundThrottling: true,    // Allow background throttling to reduce CPU/GPU usage
         disableHtmlFullscreenWindowResize: true, // Disable unnecessary resize events
-        devTools: process.env.NODE_ENV === 'development', // Only enable devtools in dev mode
+        spellcheck: false,             // Disable spellchecker to save memory
+        webgl: false,                  // Disable WebGL for simple widgets
       },
       alwaysOnTop,
       skipTaskbar: true,
