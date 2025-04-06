@@ -349,7 +349,7 @@ function App() {
       {isClickThrough && (
         <div 
           className="click-through-indicator"
-          onClick={toggleClickThrough}
+          onClick={() => setIsClickThrough(false)}
           style={{
             position: 'fixed',
             top: '80px',
