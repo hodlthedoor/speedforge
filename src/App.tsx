@@ -51,32 +51,6 @@ function App() {
     electronResponse: 'None'
   });
   
-  // Add a timer ref for click-through toggle delay
-  const clickThroughTimerRef = useRef<number | null>(null);
-
-  // Function to handle re-enabling click-through with delay
-  const handleReEnableClickThrough = useCallback(() => {
-    // Clear any existing timer
-    if (clickThroughTimerRef.current !== null) {
-      window.clearTimeout(clickThroughTimerRef.current);
-    }
-    
-    // Set a new timer to re-enable click-through after 2 seconds
-    clickThroughTimerRef.current = window.setTimeout(() => {
-      setIsClickThrough(true);
-      clickThroughTimerRef.current = null;
-    }, 2000);
-  }, []);
-
-  // Clear the timer on unmount
-  useEffect(() => {
-    return () => {
-      if (clickThroughTimerRef.current !== null) {
-        window.clearTimeout(clickThroughTimerRef.current);
-      }
-    };
-  }, []);
-  
   // Update the ref when state changes to ensure event handlers have the latest value
   useEffect(() => {
     clickThroughRef.current = isClickThrough;
@@ -364,15 +338,11 @@ function App() {
       
       {/* When click-through is enabled, hide control panel completely */}
       {!isClickThrough ? (
-        <div 
-          onMouseLeave={handleReEnableClickThrough}
-        >
-          <SimpleControlPanel 
-            initialPosition={{ x: 20, y: 20 }}
-            onClickThrough={setIsClickThrough}
-            onAddWidget={handleAddWidget}
-          />
-        </div>
+        <SimpleControlPanel 
+          initialPosition={{ x: 20, y: 20 }}
+          onClickThrough={setIsClickThrough}
+          onAddWidget={handleAddWidget}
+        />
       ) : null}
       
       {/* Add a small visible indicator when in click-through mode */}
