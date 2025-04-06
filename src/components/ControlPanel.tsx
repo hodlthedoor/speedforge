@@ -372,7 +372,7 @@ export const ControlPanel: React.FC = () => {
       <div className="flex justify-between items-center mb-4 border-b pb-3 border-indigo-200">
         <h2 className="text-xl font-bold text-indigo-950">Widget Control Panel</h2>
         <button 
-          className="px-3 py-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition duration-300 shadow-sm"
+          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition duration-200 text-sm font-medium shadow-sm"
           onClick={quitApplication}
         >
           Quit Application
@@ -398,7 +398,7 @@ export const ControlPanel: React.FC = () => {
                 <div className="flex space-x-2">
                   {widget.isLaunched ? (
                     <button 
-                      className="px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs transition duration-200 shadow-sm"
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition duration-200 shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         closeWidget(widget.id);
@@ -408,7 +408,7 @@ export const ControlPanel: React.FC = () => {
                     </button>
                   ) : (
                     <button 
-                      className="px-2 py-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-xs transition duration-200 shadow-sm"
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-xs font-medium transition duration-200 shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         launchWidget(widget);
@@ -683,7 +683,7 @@ export const ControlPanel: React.FC = () => {
           {availableWidgets.map((widget) => (
             <button
               key={widget.type}
-              className="px-4 py-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 text-sm transition duration-300 shadow-sm"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium transition duration-200 shadow-sm"
               onClick={() => createWidget(widget.type)}
             >
               {widget.name}
