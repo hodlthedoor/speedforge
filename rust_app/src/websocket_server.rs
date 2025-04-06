@@ -7,6 +7,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use std::hash::{Hash, Hasher};
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::{self, Write};
 
 /// A wrapper for UnboundedSender that implements Hash and Eq
 #[derive(Clone)]
@@ -72,7 +74,9 @@ impl TelemetryWebSocketServer {
         // Accept incoming connections
         tokio::spawn(async move {
             while let Ok((stream, addr)) = listener.accept().await {
-                println!("New WebSocket connection: {}", addr);
+                let timestamp = get_timestamp();
+                println!("\n[{}] 🔌 New WebSocket connection attempt from: {}", timestamp, addr);
+                
                 let clients = clients.clone();
                 tokio::spawn(handle_connection(stream, addr, clients));
             }
@@ -100,8 +104,10 @@ impl TelemetryWebSocketServer {
                 }
                 
                 if !disconnected.is_empty() {
-                    println!("Removed {} disconnected clients, {} remaining", 
-                        disconnected.len(), clients.len());
+                    let timestamp = get_timestamp();
+                    println!("\n[{}] ❌ Removed {} disconnected clients, {} remaining", 
+                        timestamp, disconnected.len(), clients.len());
+                    io::stdout().flush().unwrap();
                 }
             }
         }
@@ -113,12 +119,31 @@ impl TelemetryWebSocketServer {
     }
 }
 
+// Helper function to get a timestamp string
+fn get_timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    
+    // Convert to hours, minutes, seconds in local time
+    let hours = (secs % 86400) / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+    
+    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
+}
+
 /// Handle an individual WebSocket connection
 async fn handle_connection(stream: TcpStream, addr: SocketAddr, clients: Clients) {
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
-            println!("Error during WebSocket handshake: {}", e);
+            let timestamp = get_timestamp();
+            println!("[{}] ❌ Error during WebSocket handshake with {}: {}", timestamp, addr, e);
+            io::stdout().flush().unwrap();
             return;
         }
     };
@@ -128,8 +153,15 @@ async fn handle_connection(stream: TcpStream, addr: SocketAddr, clients: Clients
     
     // Add new client to the set
     let client_sender = ClientSender::new(tx.clone());
-    clients.lock().unwrap().insert(client_sender.clone());
-    println!("Client connected: {}", addr);
+    let client_count = {
+        let mut clients_lock = clients.lock().unwrap();
+        clients_lock.insert(client_sender.clone());
+        clients_lock.len()
+    };
+    
+    let timestamp = get_timestamp();
+    println!("\n[{}] ✅ Client connected: {} (Total clients: {})", timestamp, addr, client_count);
+    io::stdout().flush().unwrap();
     
     // Task that forwards messages from the channel to the WebSocket
     let forward_task = tokio::spawn(async move {
@@ -152,7 +184,9 @@ async fn handle_connection(stream: TcpStream, addr: SocketAddr, clients: Clients
                     
                     // Optional: Handle client commands here if needed
                     if let Ok(text) = msg.to_text() {
-                        println!("Received message from {}: {}", addr, text);
+                        let timestamp = get_timestamp();
+                        println!("[{}] 📩 Received message from {}: {}", timestamp, addr, text);
+                        io::stdout().flush().unwrap();
                         
                         // Example command handling
                         if text == "ping" {
@@ -161,17 +195,24 @@ async fn handle_connection(stream: TcpStream, addr: SocketAddr, clients: Clients
                     }
                 }
                 Err(e) => {
-                    println!("Error from {}: {}", addr, e);
+                    let timestamp = get_timestamp();
+                    println!("[{}] ❌ Error from {}: {}", timestamp, addr, e);
+                    io::stdout().flush().unwrap();
                     break;
                 }
             }
         }
         
         // Client disconnected or error occurred
-        println!("Client disconnected: {}", addr);
-        if let Ok(mut clients_lock) = clients.lock() {
+        let client_count = {
+            let mut clients_lock = clients.lock().unwrap();
             clients_lock.remove(&client_sender);
-        }
+            clients_lock.len()
+        };
+        
+        let timestamp = get_timestamp();
+        println!("\n[{}] 🔌 Client disconnected: {} (Total clients: {})", timestamp, addr, client_count);
+        io::stdout().flush().unwrap();
     });
     
     // Wait for either task to complete
