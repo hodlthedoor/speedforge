@@ -78,6 +78,7 @@ button:focus-visible {
 .widget-container {
   background-color: #1f2937; /* bg-gray-800 */
   color: white;
+  overflow: hidden; /* Prevent scrolling in widgets */
   border-radius: 0.5rem;
 }
 
@@ -110,4 +111,9 @@ div[class*="widget"] {
   button {
     background-color: #f9f9f9;
   }
+}
+
+/* Hide scrollbars on widgets for Windows */
+.widget-container::-webkit-scrollbar {
+  display: none;
 }
