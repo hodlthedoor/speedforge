@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 
 export interface WidgetProps {
@@ -9,6 +9,20 @@ export interface WidgetProps {
 }
 
 export const Widget: React.FC<WidgetProps> = ({ title, initialPosition, onClose, children }) => {
+  const [isClickThrough, setIsClickThrough] = useState(false);
+
+  // Listen for click-through state changes from App
+  useEffect(() => {
+    const handleToggleFromApp = (e: any) => {
+      if (e.detail && typeof e.detail.state === 'boolean') {
+        setIsClickThrough(e.detail.state);
+      }
+    };
+    
+    window.addEventListener('app:toggle-click-through', handleToggleFromApp);
+    return () => window.removeEventListener('app:toggle-click-through', handleToggleFromApp);
+  }, []);
+
   // Generate a random position if none provided
   const defaultPosition = initialPosition || {
     x: 200 + Math.random() * 300,
@@ -24,9 +38,9 @@ export const Widget: React.FC<WidgetProps> = ({ title, initialPosition, onClose,
   return (
     <BaseDraggableComponent 
       initialPosition={defaultPosition} 
-      className="widget-component-wrapper"
+      className={`widget-component-wrapper ${isClickThrough ? 'click-through' : ''}`}
     >
-      <div className="widget-component">
+      <div className={`widget-component ${isClickThrough ? 'click-through' : ''}`}>
         <div className="widget-header drag-handle">
           <h3>{title}</h3>
           {onClose && (

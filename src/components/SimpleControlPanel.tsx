@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { Widget } from './Widget';
 import { SimpleTelemetryWidget } from './SimpleTelemetryWidget';
@@ -76,6 +76,18 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         : widget
     ));
   };
+
+  // Update local click-through state when App component changes it
+  useEffect(() => {
+    const handleToggleFromApp = (e: any) => {
+      if (e.detail && typeof e.detail.state === 'boolean') {
+        setClickThrough(e.detail.state);
+      }
+    };
+    
+    window.addEventListener('app:toggle-click-through', handleToggleFromApp);
+    return () => window.removeEventListener('app:toggle-click-through', handleToggleFromApp);
+  }, []);
 
   const toggleClickThrough = () => {
     const newValue = !clickThrough;

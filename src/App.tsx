@@ -42,6 +42,12 @@ function App() {
   useEffect(() => {
     clickThroughRef.current = isClickThrough;
     
+    // Dispatch custom event for other components to know about click-through changes
+    const event = new CustomEvent('app:toggle-click-through', { 
+      detail: { state: isClickThrough }
+    });
+    window.dispatchEvent(event);
+    
     // Use Electron's native click-through functionality
     if (window.electronAPI) {
       console.log(`Requesting Electron to set click-through to: ${isClickThrough}`);

@@ -19,6 +19,19 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
 }) => {
   const [telemetryData, setTelemetryData] = useState<any>(null);
   const [connected, setConnected] = useState<boolean>(false);
+  const [isClickThrough, setIsClickThrough] = useState(false);
+  
+  // Listen for click-through state changes from App
+  useEffect(() => {
+    const handleToggleFromApp = (e: any) => {
+      if (e.detail && typeof e.detail.state === 'boolean') {
+        setIsClickThrough(e.detail.state);
+      }
+    };
+    
+    window.addEventListener('app:toggle-click-through', handleToggleFromApp);
+    return () => window.removeEventListener('app:toggle-click-through', handleToggleFromApp);
+  }, []);
   
   // Initialize with WebSocketService
   useEffect(() => {
@@ -152,9 +165,9 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={defaultPosition} 
-      className="telemetry-widget-wrapper"
+      className={`telemetry-widget-wrapper ${isClickThrough ? 'click-through' : ''}`}
     >
-      <div className="widget-component">
+      <div className={`widget-component ${isClickThrough ? 'click-through' : ''}`}>
         <div className="widget-header drag-handle">
           <h3>{name}</h3>
           {onClose && (

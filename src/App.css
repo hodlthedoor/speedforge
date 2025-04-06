@@ -703,3 +703,15 @@ body, html {
   text-align: left;
   white-space: nowrap;
 }
+
+/* Make widgets semi-transparent in click-through mode */
+.widget-component.click-through,
+.telemetry-widget-wrapper.click-through {
+  opacity: 0.4;
+  transition: opacity 0.3s ease;
+}
+
+.widget-component.click-through:hover,
+.telemetry-widget-wrapper.click-through:hover {
+  opacity: 0.9;
+}
