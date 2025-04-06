@@ -274,14 +274,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
             onClick={toggleClickThrough}
           >
-            {clickThrough ? 'Disable Click Through' : 'Enable Click Through'}
-          </button>
-          
-          <button 
-            className="btn btn-primary"
-            onClick={addWidget}
-          >
-            Add Widget
+            {clickThrough ? 'Show Panel' : 'Hide Panel'}
           </button>
           
           <details className="telemetry-details">
