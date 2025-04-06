@@ -131,6 +131,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     window.dispatchEvent(event);
   };
 
+  // Listen for widget click events from the application
+  useEffect(() => {
+    const handleWidgetClick = (e: any) => {
+      if (e.detail && e.detail.widgetId) {
+        // Find the widget with matching ID
+        const clickedWidget = activeWidgets.find(w => w.id === e.detail.widgetId);
+        if (clickedWidget) {
+          console.log('Widget clicked:', clickedWidget);
+          setSelectedWidget(clickedWidget);
+        }
+      }
+    };
+    
+    window.addEventListener('widget:clicked', handleWidgetClick);
+    return () => window.removeEventListener('widget:clicked', handleWidgetClick);
+  }, [activeWidgets]);
+
   // Update local click-through state when App component changes it
   useEffect(() => {
     const handleToggleFromApp = (e: any) => {
@@ -275,56 +292,41 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
           </button>
         </div>
         
-        {/* Active Widgets Section */}
-        {enabledWidgets.length > 0 && (
+        {/* Selected Widget Details Section */}
+        {selectedWidget && (
           <div className="active-widgets-section">
-            <h3>Active Widgets</h3>
-            <div className="widget-list">
-              {enabledWidgets.map(widget => (
-                <div 
-                  key={widget.id}
-                  className={`widget-list-item ${selectedWidget?.id === widget.id ? 'selected' : ''}`}
-                  onClick={() => selectWidget(widget)}
-                >
-                  {widget.title || `Widget ${widget.id.slice(0, 6)}`}
-                </div>
-              ))}
-            </div>
-            
-            {/* Widget Details Panel - shows when a widget is selected */}
-            {selectedWidget && (
-              <div className="widget-details-panel">
-                <h4>Widget Details</h4>
-                <div className="widget-detail">
-                  <span className="detail-label">ID:</span>
-                  <span className="detail-value">{selectedWidget.id.slice(0, 8)}...</span>
-                </div>
-                <div className="widget-detail">
-                  <span className="detail-label">Type:</span>
-                  <span className="detail-value">{selectedWidget.type || 'default'}</span>
-                </div>
-                {selectedWidget.type === 'telemetry' && selectedWidget.metric && (
-                  <div className="widget-detail">
-                    <span className="detail-label">Metric:</span>
-                    <span className="detail-value">{selectedWidget.metric}</span>
-                  </div>
-                )}
-                <div className="widget-actions">
-                  <button 
-                    className="btn btn-sm btn-warning"
-                    onClick={() => selectWidget(selectedWidget)}
-                  >
-                    Highlight
-                  </button>
-                  <button 
-                    className="btn btn-sm btn-danger"
-                    onClick={() => closeWidget(selectedWidget.id)}
-                  >
-                    Close Widget
-                  </button>
-                </div>
+            <h3>Selected Widget</h3>
+            <div className="widget-details-panel">
+              <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
+              <div className="widget-detail">
+                <span className="detail-label">ID:</span>
+                <span className="detail-value">{selectedWidget.id.slice(0, 8)}...</span>
               </div>
-            )}
+              <div className="widget-detail">
+                <span className="detail-label">Type:</span>
+                <span className="detail-value">{selectedWidget.type || 'default'}</span>
+              </div>
+              {selectedWidget.type === 'telemetry' && selectedWidget.metric && (
+                <div className="widget-detail">
+                  <span className="detail-label">Metric:</span>
+                  <span className="detail-value">{selectedWidget.metric}</span>
+                </div>
+              )}
+              <div className="widget-actions">
+                <button 
+                  className="btn btn-sm btn-warning"
+                  onClick={() => selectWidget(selectedWidget)}
+                >
+                  Highlight
+                </button>
+                <button 
+                  className="btn btn-sm btn-danger"
+                  onClick={() => closeWidget(selectedWidget.id)}
+                >
+                  Close Widget
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

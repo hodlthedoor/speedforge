@@ -154,7 +154,16 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       initialPosition={defaultPosition} 
       className="telemetry-widget-wrapper"
     >
-      <div className="telemetry-widget drag-handle">
+      <div 
+        className="telemetry-widget drag-handle"
+        onClick={() => {
+          // Emit widget:clicked event
+          const event = new CustomEvent('widget:clicked', { 
+            detail: { widgetId: id }
+          });
+          window.dispatchEvent(event);
+        }}
+      >
         {renderContent()}
       </div>
     </BaseDraggableComponent>
