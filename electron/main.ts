@@ -124,17 +124,19 @@ function setupIpcListeners() {
   // Add handlers for telemetry data access from IPC widgets
   ipcMain.handle('telemetry:getData', () => {
     console.log('IPC Request: telemetry:getData, returning:', telemetryData);
-    return telemetryData;
+    return telemetryData || {};
   });
   
   ipcMain.handle('telemetry:getConnectionStatus', () => {
-    console.log('IPC Request: telemetry:getConnectionStatus, returning:', telemetryConnected);
-    return telemetryConnected;
+    console.log('IPC Request: telemetry:getConnectionStatus, returning: true');
+    return true;
   });
   
   // Listen for telemetry updates from the renderer process
   ipcMain.on('telemetry:update', (_, data) => {
     telemetryData = data;
+    telemetryConnected = true;
+    
     // Forward to all widget windows
     const windows = widgetManager.getAllWidgetWindows();
     for (const [_, window] of windows.entries()) {

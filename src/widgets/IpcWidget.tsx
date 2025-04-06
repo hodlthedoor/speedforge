@@ -239,17 +239,31 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
     if (!connected) {
       return (
         <div className="widget-content">
-          <div className="status-disconnected">Disconnected</div>
-          <div className="status-message">Attempting to connect...</div>
+          <div className="status-message">Waiting for data source...</div>
         </div>
       );
     }
     
-    if (!telemetryData) {
+    if (!telemetryData || Object.keys(telemetryData).length === 0) {
       return (
         <div className="widget-content">
           <div className="status-connected">Connected</div>
           <div className="status-message">Waiting for data...</div>
+        </div>
+      );
+    }
+    
+    // Check if the selected metric exists in the telemetry data
+    const value = telemetryData[selectedMetric];
+    if (value === undefined || value === null) {
+      return (
+        <div className="widget-content">
+          <div className="widget-label">
+            {getMetricName(selectedMetric)}
+          </div>
+          <div className="widget-value">
+            N/A
+          </div>
         </div>
       );
     }
@@ -260,7 +274,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
           {getMetricName(selectedMetric)}
         </div>
         <div className="widget-value">
-          {formatMetricValue(selectedMetric, telemetryData[selectedMetric])}
+          {formatMetricValue(selectedMetric, value)}
         </div>
       </div>
     );
