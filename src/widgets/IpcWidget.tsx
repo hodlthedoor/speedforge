@@ -71,7 +71,6 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         })
         .catch((err: any) => {
           console.error(`IpcWidget ${id}: Failed to get telemetry data:`, err);
-          // Schedule a retry
           scheduleReconnect();
         });
     };
@@ -82,7 +81,6 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         .then((status: boolean) => {
           setConnected(status);
           
-          // If connected, also request the latest data
           if (status) {
             requestTelemetryData();
           } else {
@@ -91,7 +89,6 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         })
         .catch((err: any) => {
           console.error(`IpcWidget ${id}: Failed to get connection status:`, err);
-          // Schedule a retry
           scheduleReconnect();
         });
     };
@@ -104,7 +101,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       
       reconnectTimeout = window.setTimeout(() => {
         requestConnectionStatus();
-      }, 1000);
+      }, 2000); // Increased to 2 seconds
     };
 
     // Setup a polling interval to ensure we get regular updates
@@ -115,21 +112,22 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       }
       
       dataCheckInterval = window.setInterval(() => {
-        // If we think we're connected but have no data, request it again
-        if (connected && (!telemetryData || Object.keys(telemetryData).length === 0)) {
-          requestTelemetryData();
-        }
+        // Only make IPC calls if the component is still mounted
+        if (!window.electronAPI) return;
         
-        // If we're not connected, try to reconnect
+        // If we're not connected or we've been disconnected, try to reconnect
         if (!connected) {
           requestConnectionStatus();
         }
-      }, 3000); // Check every 3 seconds
+        // Only request data again if we're connected but don't have any
+        else if (connected && (!telemetryData || Object.keys(telemetryData || {}).length === 0)) {
+          requestTelemetryData();
+        }
+      }, 10000); // Increased to 10 seconds to significantly reduce IPC traffic
     };
 
     // Listen for parameter updates from the main process
     window.electronAPI.on('widget:params', (params: Record<string, any>) => {
-      // Update metric if provided
       if (params.metric && params.metric !== selectedMetric) {
         setSelectedMetric(params.metric);
       }
@@ -144,9 +142,8 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
     // Listen for telemetry data updates
     window.electronAPI.on('telemetry:update', (data: any) => {
       setTelemetryData(data);
-      setConnected(true); // Implicitly set connected when we get data
+      setConnected(true);
       
-      // Clear any pending reconnect attempts since we're connected
       if (reconnectTimeout !== null) {
         window.clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
@@ -157,15 +154,11 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
     window.electronAPI.on('telemetry:connectionChange', (status: boolean) => {
       setConnected(status);
       
-      // If we lost connection, schedule a reconnect attempt
       if (!status) {
         scheduleReconnect();
       } else if (reconnectTimeout !== null) {
-        // Clear any pending reconnect attempts since we're connected
         window.clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
-        
-        // When we reconnect, also request fresh data
         requestTelemetryData();
       }
     });
@@ -192,11 +185,13 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
       // Clear any pending reconnection attempt
       if (reconnectTimeout !== null) {
         window.clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
       }
       
       // Clear data check interval
       if (dataCheckInterval !== null) {
         window.clearInterval(dataCheckInterval);
+        dataCheckInterval = null;
       }
       
       if (window.electronAPI) {
@@ -205,7 +200,7 @@ const IpcWidgetBase: React.FC<IpcWidgetProps> = (props) => {
         window.electronAPI.removeAllListeners('telemetry:connectionChange');
       }
     };
-  }, [id, selectedMetric, connected, telemetryData]);
+  }, [id, selectedMetric]); // Reduced dependencies to prevent re-running effect too often
 
   // Visibility control
   const handleSetVisibility = (isVisible: boolean) => {

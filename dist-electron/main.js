@@ -1,4 +1,4 @@
-import { BrowserWindow, app, ipcMain } from "electron";
+import { BrowserWindow, ipcMain, app } from "electron";
 import * as path from "path";
 import { fileURLToPath } from "url";
 const __filename$1 = fileURLToPath(import.meta.url);
@@ -32,8 +32,14 @@ class WidgetWindowManager {
         contextIsolation: true,
         webSecurity: false,
         // Allow loading of local resources
-        scrollBounce: false
+        scrollBounce: false,
         // Improves scrollbar behavior
+        backgroundThrottling: true,
+        // Allow background throttling to reduce CPU/GPU usage
+        disableHtmlFullscreenWindowResize: true,
+        // Disable unnecessary resize events
+        devTools: process.env.NODE_ENV === "development"
+        // Only enable devtools in dev mode
       },
       alwaysOnTop,
       skipTaskbar: true,
@@ -90,6 +96,10 @@ class WidgetWindowManager {
     win.loadURL(widgetUrl);
     win.on("closed", () => {
       this.windows.delete(widgetId);
+      ipcMain.emit("widget:closed", {}, options.widgetId);
+    });
+    win.webContents.setWindowOpenHandler(() => {
+      return { action: "deny" };
     });
     return win;
   }
@@ -178,6 +188,7 @@ let mainWindow = null;
 let widgetManager;
 let telemetryData = null;
 let telemetryConnected = false;
+const widgetWindowHandlers = /* @__PURE__ */ new Map();
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1e3,
@@ -207,9 +218,12 @@ function createWindow() {
 }
 function setupIpcListeners() {
   ipcMain.handle("widget:create", (_, options) => {
-    console.log("Creating widget window:", options);
     try {
       const window = widgetManager.createWidgetWindow(options);
+      widgetWindowHandlers.set(options.widgetId, window);
+      window.on("closed", () => {
+        widgetWindowHandlers.delete(options.widgetId);
+      });
       return { success: true, id: options.widgetId };
     } catch (error) {
       console.error("Error creating widget window:", error);
@@ -217,6 +231,7 @@ function setupIpcListeners() {
     }
   });
   ipcMain.handle("widget:close", (_, widgetId) => {
+    widgetWindowHandlers.delete(widgetId);
     const success = widgetManager.closeWidgetWindow(widgetId);
     return { success };
   });
@@ -252,30 +267,25 @@ function setupIpcListeners() {
       return { success: false, error: "Failed to update widget parameters" };
     }
   });
-  ipcMain.handle("telemetry:getData", () => {
-    console.log("IPC Request: telemetry:getData, returning:", telemetryData);
+  ipcMain.handle("telemetry:getData", (event) => {
     return telemetryData;
   });
-  ipcMain.handle("telemetry:getConnectionStatus", () => {
-    console.log("IPC Request: telemetry:getConnectionStatus, returning:", telemetryConnected);
+  ipcMain.handle("telemetry:getConnectionStatus", (event) => {
     return telemetryConnected;
   });
   ipcMain.on("telemetry:update", (_, data) => {
-    telemetryData = data;
+    telemetryData = { ...data };
+    telemetryConnected = true;
     const windows = widgetManager.getAllWidgetWindows();
-    for (const [_2, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send("telemetry:update", data);
-      }
+    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
+      broadcastToAllWidgets("telemetry:update", telemetryData);
     }
   });
   ipcMain.on("telemetry:connectionChange", (_, connected) => {
     telemetryConnected = connected;
     const windows = widgetManager.getAllWidgetWindows();
-    for (const [_2, window] of windows.entries()) {
-      if (!window.isDestroyed()) {
-        window.webContents.send("telemetry:connectionChange", connected);
-      }
+    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
+      broadcastToAllWidgets("telemetry:connectionChange", connected);
     }
   });
   ipcMain.on("widget:closeByEscape", (event) => {
@@ -284,8 +294,83 @@ function setupIpcListeners() {
       win.close();
     }
   });
+  ipcMain.on("widget:registerForUpdates", (event, { widgetId }) => {
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (!sender) {
+      return;
+    }
+    widgetWindowHandlers.set(widgetId, sender);
+    if (telemetryData) {
+      try {
+        sender.webContents.send("telemetry:update", telemetryData);
+      } catch (error) {
+        console.error(`Failed to send initial data to widget ${widgetId}:`, error);
+      }
+    }
+    try {
+      sender.webContents.send("telemetry:connectionChange", true);
+    } catch (error) {
+      console.error(`Failed to send connection status to widget ${widgetId}:`, error);
+    }
+  });
+  ipcMain.on("widget:closed", (_, widgetId) => {
+    if (widgetWindowHandlers.has(widgetId)) {
+      widgetWindowHandlers.delete(widgetId);
+    }
+  });
 }
-app.whenReady().then(createWindow);
+function broadcastToAllWidgets(channel, data) {
+  const messaged = /* @__PURE__ */ new Set();
+  const windows = widgetManager.getAllWidgetWindows();
+  if (windows.size === 0 && widgetWindowHandlers.size === 0) {
+    return;
+  }
+  for (const [widgetId, window] of windows.entries()) {
+    if (!window.isDestroyed()) {
+      try {
+        window.webContents.send(channel, data);
+        messaged.add(widgetId);
+      } catch (error) {
+        console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
+      }
+    }
+  }
+  for (const [widgetId, window] of widgetWindowHandlers.entries()) {
+    if (messaged.has(widgetId) || window.isDestroyed()) {
+      if (window.isDestroyed()) {
+        widgetWindowHandlers.delete(widgetId);
+      }
+      continue;
+    }
+    try {
+      window.webContents.send(channel, data);
+    } catch (error) {
+      console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
+      widgetWindowHandlers.delete(widgetId);
+    }
+  }
+}
+app.whenReady().then(() => {
+  createWindow();
+  setupMemoryManagement();
+});
+function setupMemoryManagement() {
+  setInterval(() => {
+    for (const [widgetId, window] of widgetWindowHandlers.entries()) {
+      if (window.isDestroyed()) {
+        widgetWindowHandlers.delete(widgetId);
+      }
+    }
+    const memoryInfo = process.memoryUsage();
+    const memoryUsageMB = Math.round(memoryInfo.heapUsed / 1024 / 1024);
+    if (memoryUsageMB > 500) {
+      telemetryData = null;
+      if (global.gc) {
+        global.gc();
+      }
+    }
+  }, 3e4);
+}
 app.on("before-quit", () => {
   console.log("Application is shutting down, closing all widgets...");
   if (widgetManager) {
@@ -297,6 +382,7 @@ app.on("before-quit", () => {
       }
     }
   }
+  widgetWindowHandlers.clear();
   console.log("Removing all IPC handlers...");
   ipcMain.removeHandler("widget:create");
   ipcMain.removeHandler("widget:close");
@@ -313,6 +399,7 @@ app.on("before-quit", () => {
   ipcMain.removeAllListeners("widget:closeByEscape");
   ipcMain.removeAllListeners("telemetry:update");
   ipcMain.removeAllListeners("telemetry:connectionChange");
+  ipcMain.removeAllListeners("widget:registerForUpdates");
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

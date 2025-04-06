@@ -1,4 +1,4 @@
-import { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -46,7 +46,10 @@ export class WidgetWindowManager {
         nodeIntegration: false,
         contextIsolation: true,
         webSecurity: false,            // Allow loading of local resources
-        scrollBounce: false            // Improves scrollbar behavior
+        scrollBounce: false,           // Improves scrollbar behavior
+        backgroundThrottling: true,    // Allow background throttling to reduce CPU/GPU usage
+        disableHtmlFullscreenWindowResize: true, // Disable unnecessary resize events
+        devTools: process.env.NODE_ENV === 'development', // Only enable devtools in dev mode
       },
       alwaysOnTop,
       skipTaskbar: true,
@@ -113,6 +116,13 @@ export class WidgetWindowManager {
     // Handle window closed event
     win.on('closed', () => {
       this.windows.delete(widgetId);
+      // Remove from any tracking maps in main.ts
+      ipcMain.emit('widget:closed', {}, options.widgetId);
+    });
+    
+    // Prevent new windows from opening
+    win.webContents.setWindowOpenHandler(() => {
+      return { action: 'deny' };
     });
     
     return win;

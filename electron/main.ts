@@ -134,37 +134,27 @@ function setupIpcListeners() {
     }
   });
   
-  // Add handlers for telemetry data access from IPC widgets
-  ipcMain.handle('telemetry:getData', (event: IpcMainInvokeEvent) => {
-    // Get the sender window to determine which widget is making the request
-    const sender = BrowserWindow.fromWebContents(event.sender);
-    if (!sender) {
-      return {};
-    }
-    
-    return telemetryData || {}; 
+  // Handler for telemetry data requests
+  ipcMain.handle('telemetry:getData', (event) => {
+    return telemetryData;
   });
   
-  ipcMain.handle('telemetry:getConnectionStatus', (event: IpcMainInvokeEvent) => {
-    // Get the sender window to determine which widget is making the request
-    const sender = BrowserWindow.fromWebContents(event.sender);
-    if (!sender) {
-      return true;
-    }
-    
-    // Always return true for connection status to widgets
-    // This prevents the "Disconnected" message in widgets
-    return true; 
+  // Handler for connection status requests
+  ipcMain.handle('telemetry:getConnectionStatus', (event) => {
+    return telemetryConnected;
   });
   
   // Listen for telemetry updates from the renderer process
   ipcMain.on('telemetry:update', (_, data) => {
-    // Store the data for future requests
-    telemetryData = data;
+    // Store the data for future requests (make a shallow copy to avoid reference issues)
+    telemetryData = { ...data };
     telemetryConnected = true;
     
-    // Broadcast to all widget windows
-    broadcastToAllWidgets('telemetry:update', data);
+    // Only broadcast updates if we have widgets to send to
+    const windows = widgetManager.getAllWidgetWindows();
+    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
+      broadcastToAllWidgets('telemetry:update', telemetryData);
+    }
   });
   
   // Listen for connection status changes
@@ -172,8 +162,11 @@ function setupIpcListeners() {
     // Store the status for future requests
     telemetryConnected = connected;
     
-    // Broadcast to all widget windows
-    broadcastToAllWidgets('telemetry:connectionChange', connected);
+    // Only broadcast updates if we have widgets to send to
+    const windows = widgetManager.getAllWidgetWindows();
+    if (windows.size > 0 || widgetWindowHandlers.size > 0) {
+      broadcastToAllWidgets('telemetry:connectionChange', connected);
+    }
   });
   
   // Handle Escape key to close widgets
@@ -210,18 +203,34 @@ function setupIpcListeners() {
       console.error(`Failed to send connection status to widget ${widgetId}:`, error);
     }
   });
+
+  // Listen for widget closure events to clean up resources
+  ipcMain.on('widget:closed', (_, widgetId) => {
+    // Remove from our tracking map
+    if (widgetWindowHandlers.has(widgetId)) {
+      widgetWindowHandlers.delete(widgetId);
+    }
+  });
 }
 
 // Helper function to broadcast a message to all widget windows
 function broadcastToAllWidgets(channel: string, data: any) {
-  // Use both the widgets from the widget manager and our explicit handler map
+  // Use a Set to keep track of which windows we've already messaged
+  // to avoid sending duplicate messages
+  const messaged = new Set<string>();
+  
+  // First, let's check if there are any windows to broadcast to
   const windows = widgetManager.getAllWidgetWindows();
+  if (windows.size === 0 && widgetWindowHandlers.size === 0) {
+    return; // No windows to broadcast to
+  }
   
   // First broadcast to all windows from the widget manager
   for (const [widgetId, window] of windows.entries()) {
     if (!window.isDestroyed()) {
       try {
         window.webContents.send(channel, data);
+        messaged.add(widgetId);
       } catch (error) {
         console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
       }
@@ -230,23 +239,55 @@ function broadcastToAllWidgets(channel: string, data: any) {
   
   // Also broadcast to any window in our explicit handler map that might not be in the widget manager
   for (const [widgetId, window] of widgetWindowHandlers.entries()) {
-    if (!window.isDestroyed()) {
-      try {
-        // Don't send duplicate messages to windows we've already sent to
-        if (!windows.has(widgetId)) {
-          window.webContents.send(channel, data);
-        }
-      } catch (error) {
-        console.error(`Failed to send ${channel} to explicitly registered widget ${widgetId}:`, error);
+    // Skip if we've already messaged this window or if it's destroyed
+    if (messaged.has(widgetId) || window.isDestroyed()) {
+      if (window.isDestroyed()) {
+        widgetWindowHandlers.delete(widgetId);
       }
-    } else {
-      // Clean up destroyed windows
+      continue;
+    }
+    
+    try {
+      window.webContents.send(channel, data);
+    } catch (error) {
+      console.error(`Failed to send ${channel} to widget ${widgetId}:`, error);
+      // Clean up references to destroyed windows
       widgetWindowHandlers.delete(widgetId);
     }
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  setupMemoryManagement();
+});
+
+// Memory management function to reduce memory usage
+function setupMemoryManagement() {
+  // Periodically clean up references and force garbage collection
+  setInterval(() => {
+    // Clean up any destroyed windows from our handler map
+    for (const [widgetId, window] of widgetWindowHandlers.entries()) {
+      if (window.isDestroyed()) {
+        widgetWindowHandlers.delete(widgetId);
+      }
+    }
+    
+    // Check for memory usage
+    const memoryInfo = process.memoryUsage();
+    const memoryUsageMB = Math.round(memoryInfo.heapUsed / 1024 / 1024);
+    
+    // If memory usage is high, try to free up resources
+    if (memoryUsageMB > 500) { // 500MB threshold
+      telemetryData = null; // Clear cached data
+      
+      // Force garbage collection if available (only in dev mode with --expose-gc flag)
+      if (global.gc) {
+        global.gc();
+      }
+    }
+  }, 30000); // Run every 30 seconds
+}
 
 // Add a 'before-quit' handler to ensure all widgets are closed properly
 app.on('before-quit', () => {
