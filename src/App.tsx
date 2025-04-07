@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import SimpleControlPanel from './components/SimpleControlPanel';
+import ClickThroughHint from './components/ClickThroughHint';
 import { WebSocketService } from './services/WebSocketService';
 
 function App() {
@@ -148,6 +149,9 @@ function App() {
     };
   }, []);
   
+  // Track if hint has been shown
+  const [showHint, setShowHint] = useState(true);
+  
   return (
     <div 
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
@@ -172,24 +176,29 @@ function App() {
       
       {/* When click-through is enabled, show a small indicator to disable it */}
       {isClickThrough && (
-        <div 
-          className="click-through-toggle"
-          onClick={() => setIsClickThrough(false)}
-          onMouseEnter={() => setIsClickThrough(false)}
-          style={{
-            position: 'fixed',
-            top: '10px',
-            right: '10px',
-            width: '20px',
-            height: '20px',
-            backgroundColor: 'rgba(255, 50, 50, 0.9)',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            zIndex: 10000,
-            boxShadow: '0 0 8px 2px rgba(255, 50, 50, 0.5)',
-            border: '2px solid rgba(255, 255, 255, 0.7)'
-          }}
-        />
+        <>
+          <div 
+            className="click-through-toggle"
+            onClick={() => setIsClickThrough(false)}
+            onMouseEnter={() => setIsClickThrough(false)}
+            style={{
+              position: 'fixed',
+              top: '10px',
+              right: '10px',
+              width: '20px',
+              height: '20px',
+              backgroundColor: 'rgba(255, 50, 50, 0.9)',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              zIndex: 10000,
+              boxShadow: '0 0 8px 2px rgba(255, 50, 50, 0.5)',
+              border: '2px solid rgba(255, 255, 255, 0.7)'
+            }}
+          />
+          {showHint && (
+            <ClickThroughHint onDismiss={() => setShowHint(false)} />
+          )}
+        </>
       )}
     </div>
   );
