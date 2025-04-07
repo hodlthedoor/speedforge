@@ -30,6 +30,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [clickThrough, setClickThrough] = useState(false);
   const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<any | null>(null);
+  const [widgetOpacity, setWidgetOpacity] = useState<{ [key: string]: number }>({});
   
   // Add metrics options
   const availableMetrics = [
@@ -277,6 +278,19 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     ? activeWidgets.filter(w => w && w.enabled !== false)
     : [];
 
+  const handleOpacityChange = (widgetId: string, value: number) => {
+    setWidgetOpacity(prev => ({
+      ...prev,
+      [widgetId]: value
+    }));
+    
+    // Dispatch event to update widget opacity
+    const event = new CustomEvent('widget:opacity', { 
+      detail: { widgetId, opacity: value }
+    });
+    window.dispatchEvent(event);
+  };
+
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
@@ -368,6 +382,18 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   <span className="detail-value">{selectedWidget.metric}</span>
                 </div>
               )}
+              <div className="widget-detail">
+                <span className="detail-label">Opacity:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={widgetOpacity[selectedWidget.id] ?? 1}
+                  onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
             </div>
           </div>
         )}

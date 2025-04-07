@@ -7,6 +7,7 @@ interface BaseWidgetProps {
   title?: string;
   initialPosition?: { x: number, y: number };
   className?: string;
+  opacity?: number;
   children: React.ReactNode;
 }
 
@@ -15,10 +16,12 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
   title,
   initialPosition = { x: 100, y: 100 },
   className = '',
+  opacity = 1,
   children
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentOpacity, setCurrentOpacity] = useState(opacity);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -28,8 +31,17 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
       setIsLoading(false);
     });
 
+    const handleOpacityChange = (e: CustomEvent) => {
+      if (e.detail.widgetId === id) {
+        setCurrentOpacity(e.detail.opacity);
+      }
+    };
+
+    window.addEventListener('widget:opacity', handleOpacityChange as EventListener);
+
     return () => {
       webSocketService.removeListeners(id);
+      window.removeEventListener('widget:opacity', handleOpacityChange as EventListener);
     };
   }, [id]);
 
@@ -40,6 +52,7 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
     >
       <div 
         className="bg-gray-900 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
+        style={{ opacity: currentOpacity }}
         onClick={() => {
           // Emit widget:clicked event
           const event = new CustomEvent('widget:clicked', { 
