@@ -1,5 +1,5 @@
 {
-  "name": "my-app",
+  "name": "speedforge",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -39,5 +39,21 @@
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.speedforge.app",
+    "productName": "Speedforge",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
   }
 }
