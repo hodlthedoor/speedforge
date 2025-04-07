@@ -54,7 +54,7 @@ function App() {
   }, []);
   
   // Toggle click-through mode state
-  const [isClickThrough, setIsClickThrough] = useState(false);
+  const [isClickThrough, setIsClickThrough] = useState(true);
   const clickThroughRef = useRef(false);
   
   // Track window width for positioning

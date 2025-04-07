@@ -83,8 +83,11 @@ function createWindows() {
       win.setAlwaysOnTop(true);
     }
 
-    // Start with click-through disabled for easier debugging
-    win.setIgnoreMouseEvents(false);
+    // Start with click-through enabled
+    win.setIgnoreMouseEvents(true, { forward: true });
+    
+    // Set window title to reflect click-through state
+    win.setTitle('SpeedForge (click-through:true)');
     
     // Load the app
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
