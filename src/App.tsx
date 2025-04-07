@@ -187,7 +187,10 @@ function App() {
           <div 
             className="click-through-toggle"
             onClick={() => setIsClickThrough(false)}
-            onMouseEnter={() => setIsClickThrough(false)}
+            onMouseEnter={() => {
+              setIsClickThrough(false);
+              setShowHint(false);
+            }}
             style={{
               position: 'fixed',
               top: '10px',
