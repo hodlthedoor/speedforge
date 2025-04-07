@@ -119,12 +119,12 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   }, [data, isFlashing]);
 
   return (
-    <BaseWidget id={id} title="Shift Indicator" className="">
+    <BaseWidget id={id} title="Shift Indicator" className="p-0">
       <svg
         ref={svgRef}
         width={400}
         height={48}
-        className="bg-transparent"
+        className="bg-transparent w-full h-full"
       />
     </BaseWidget>
   );
