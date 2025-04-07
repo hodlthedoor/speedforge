@@ -4,10 +4,11 @@ import { Widget } from './Widget';
 import { SimpleTelemetryWidget } from './SimpleTelemetryWidget';
 import { v4 as uuidv4 } from 'uuid';
 import PedalTraceWidget from './PedalTraceWidget';
+import ShiftIndicatorWidget from './ShiftIndicatorWidget';
 
 interface WidgetData {
   id: string;
-  type: 'default' | 'telemetry' | 'pedal-trace';
+  type: 'default' | 'telemetry' | 'pedal-trace' | 'shift-indicator';
   title: string;
   content?: string;
   metric?: string;
@@ -123,6 +124,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       title: 'Pedal Traces',
       content: (
         <PedalTraceWidget
+          id={widgetId}
+          onClose={() => closeWidget(widgetId)}
+        />
+      )
+    };
+    onAddWidget(widget);
+  };
+
+  const addShiftIndicatorWidget = () => {
+    const widgetId = `shift-indicator-${Date.now()}`;
+    const widget = {
+      id: widgetId,
+      type: 'shift-indicator',
+      title: 'Shift Indicator',
+      content: (
+        <ShiftIndicatorWidget
           id={widgetId}
           onClose={() => closeWidget(widgetId)}
         />
@@ -341,6 +358,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   onClick={addPedalTraceWidget}
                 >
                   Pedal Traces
+                </button>
+                <button 
+                  className="btn btn-sm btn-secondary metric-btn"
+                  onClick={addShiftIndicatorWidget}
+                >
+                  Shift Indicator
                 </button>
               </div>
             </div>
