@@ -123,7 +123,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
         <svg
           ref={svgRef}
           width={400}
-          height={60}
+          height={48}
           className="bg-transparent w-full h-full"
           style={{ pointerEvents: 'none' }}
         />
