@@ -30,6 +30,7 @@ body.click-through-mode {
 }
 
 /* But make specific UI elements still receive events even in click-through mode */
+/* don't use these any more, use the new .interactive class system */
 .app-container.click-through .debug-panel,
 .app-container.click-through .click-status,
 .app-container.click-through .toggle-button,
@@ -57,7 +58,6 @@ body.click-through-mode {
 .app-container.click-through .widget-component-wrapper,
 .app-container.click-through .widget-close-btn,
 .app-container.click-through .click-through-indicator,
-.app-container.click-through .click-through-toggle,
 body.click-through-mode .debug-panel,
 body.click-through-mode .click-status,
 body.click-through-mode .toggle-button,
@@ -84,6 +84,12 @@ body.click-through-mode .telemetry-widget-wrapper,
 body.click-through-mode .telemetry-content,
 body.click-through-mode .widget-component-wrapper,
 body.click-through-mode .widget-close-btn {
+  pointer-events: auto !important;
+}
+
+/* New interactive class system */
+.app-container.click-through .interactive,
+body.click-through-mode .interactive {
   pointer-events: auto !important;
 }
 
@@ -920,3 +926,9 @@ body.click-through-mode .widget-detail,
 body.click-through-mode .widget-actions {
   pointer-events: auto !important;
 }
+
+
+/* 
+  DO NOT USE THIS FILE ANY MORE UNLESS THERE IS A SPECIFIC REASON TO ADD A NEW STYLE
+  USE TAILWIND INLINE CSS INSTEAD
+*/

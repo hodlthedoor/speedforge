@@ -185,7 +185,7 @@ function App() {
       {isClickThrough && (
         <>
           <div 
-            className="click-through-toggle"
+            className="interactive"
             onClick={() => setIsClickThrough(false)}
             onMouseEnter={() => {
               setIsClickThrough(false);
