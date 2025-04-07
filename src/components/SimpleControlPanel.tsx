@@ -383,10 +383,10 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </div>
               )}
               <div className="widget-detail">
-                <span className="detail-label">Opacity:</span>
+                <span className="detail-label pr-2">Opacity:</span>
                 <input
                   type="range"
-                  min="0"
+                  min="0.1"
                   max="1"
                   step="0.1"
                   value={widgetOpacity[selectedWidget.id] ?? 1}
