@@ -97,22 +97,27 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
     // Create line generators
     const line = d3.line<PedalData>()
       .x(d => x(d.timestamp))
-      .y(d => y(d.throttle));
+      .y(d => y(d.throttle))
+      .curve(d3.curveMonotoneX);
 
     const brakeLine = d3.line<PedalData>()
       .x(d => x(d.timestamp))
-      .y(d => y(d.brake));
+      .y(d => y(d.brake))
+      .curve(d3.curveMonotoneX);
 
     const clutchLine = d3.line<PedalData>()
       .x(d => x(d.timestamp))
-      .y(d => y(d.clutch));
+      .y(d => y(d.clutch))
+      .curve(d3.curveMonotoneX);
 
-    // Add lines
+    // Add lines with proper styling
     svg.append('path')
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', '#4CAF50')
       .attr('stroke-width', 2)
+      .attr('stroke-linejoin', 'round')
+      .attr('stroke-linecap', 'round')
       .attr('d', line);
 
     svg.append('path')
@@ -120,6 +125,8 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .attr('fill', 'none')
       .attr('stroke', '#F44336')
       .attr('stroke-width', 2)
+      .attr('stroke-linejoin', 'round')
+      .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
 
     svg.append('path')
@@ -127,6 +134,8 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .attr('fill', 'none')
       .attr('stroke', '#2196F3')
       .attr('stroke-width', 2)
+      .attr('stroke-linejoin', 'round')
+      .attr('stroke-linecap', 'round')
       .attr('d', clutchLine);
 
     // Add legend
