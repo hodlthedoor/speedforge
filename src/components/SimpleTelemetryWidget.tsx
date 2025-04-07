@@ -10,6 +10,26 @@ interface SimpleTelemetryWidgetProps {
   onClose?: (id: string) => void;
 }
 
+export   // Add metrics options
+const availableMetrics = [
+  { id: 'speed_kph', name: 'Speed (KPH)' },
+  { id: 'speed_mph', name: 'Speed (MPH)' },
+  { id: 'rpm', name: 'RPM' },
+  { id: 'shift_indicator_pct', name: 'Shift Indicator %' },
+  { id: 'gear', name: 'Gear' },
+  { id: 'throttle_pct', name: 'Throttle' },
+  { id: 'brake_pct', name: 'Brake' },
+  { id: 'clutch_pct', name: 'Clutch' },
+  { id: 'g_force_lat', name: 'Lateral G' },
+  { id: 'g_force_lon', name: 'Longitudinal G' },
+  { id: 'fuel_level', name: 'Fuel Level' },
+  { id: 'current_lap_time', name: 'Current Lap' },
+  { id: 'last_lap_time', name: 'Last Lap' },
+  { id: 'best_lap_time', name: 'Best Lap' },
+  { id: 'position', name: 'Position' },
+  { id: 'lap_completed', name: 'Lap' }
+];
+
 export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({ 
   id, 
   name,
