@@ -280,13 +280,13 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
-      className={`w-[400px] max-h-[80vh] overflow-y-auto shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
+      className={`w-[400px] max-h-[80vh] overflow-y-auto overflow-x-hidden scrollbar-none shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
     >
-      <div className="panel-header drag-handle">
+      <div className="panel-header drag-handle w-full">
         <h2>Control Panel</h2>
       </div>
-      <div className="panel-content">
-        <div className="control-buttons">
+      <div className="panel-content w-full px-4 py-3">
+        <div className="control-buttons flex flex-col gap-2 w-full">
           <button 
             className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
             onClick={toggleClickThrough}
