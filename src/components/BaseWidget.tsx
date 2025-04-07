@@ -39,7 +39,7 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
       className={`interactive ${className}`}
     >
       <div 
-        className="bg-gray-800/70 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
+        className="bg-gray-900/90 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
         onClick={() => {
           // Emit widget:clicked event
           const event = new CustomEvent('widget:clicked', { 
