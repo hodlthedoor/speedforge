@@ -383,16 +383,18 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </div>
               )}
               <div className="widget-detail">
-                <span className="detail-label pr-2">Opacity:</span>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1"
-                  step="0.1"
-                  value={widgetOpacity[selectedWidget.id] ?? 1}
-                  onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                  className="w-full"
-                />
+                <span className="detail-label">Opacity:</span>
+                <div className="pl-2">
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="1"
+                    step="0.1"
+                    value={widgetOpacity[selectedWidget.id] ?? 1}
+                    onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
           </div>
