@@ -20,7 +20,9 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   
   // Use our custom hook with throttle and brake metrics, without throttling
   const { data: telemetryData } = useTelemetryData(id, { 
-    metrics: ['throttle_pct', 'brake_pct']
+    metrics: ['throttle_pct', 'brake_pct'],
+    throttleUpdates: true,
+    updateInterval: 50
   });
 
   // Transform telemetry data into our visualization format
