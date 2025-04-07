@@ -43,17 +43,26 @@
   "build": {
     "appId": "com.speedforge.app",
     "productName": "Speedforge",
+    "executableName": "speedforge",
     "directories": {
       "output": "release"
     },
     "mac": {
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "artifactName": "Speedforge-${version}-${arch}.${ext}",
+      "target": ["dmg", "zip"],
+      "darkModeSupport": true
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "executableName": "Speedforge",
+      "artifactName": "Speedforge-Setup-${version}.${ext}"
     },
     "linux": {
-      "target": ["AppImage", "deb"]
+      "target": ["AppImage", "deb"],
+      "executableName": "speedforge",
+      "artifactName": "speedforge-${version}-${arch}.${ext}",
+      "category": "Utility"
     }
   }
 }

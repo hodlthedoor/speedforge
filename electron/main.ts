@@ -87,7 +87,7 @@ function createWindows() {
     win.setIgnoreMouseEvents(true, { forward: true });
     
     // Set window title to reflect click-through state
-    win.setTitle('SpeedForge (click-through:true)');
+    win.setTitle('Speedforge (click-through:true)');
     
     // Load the app
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
@@ -227,6 +227,9 @@ function setupIpcListeners() {
 
 // When Electron is ready
 app.whenReady().then(() => {
+  // Set application name for process manager
+  app.setName('Speedforge');
+  
   createWindows();
   setupIpcListeners();
   
@@ -261,7 +264,7 @@ app.whenReady().then(() => {
       win.webContents.send('app:toggle-click-through', newState);
       
       // Update window title with state for tracking
-      win.setTitle(`SpeedForge (click-through:${newState})`);
+      win.setTitle(`Speedforge (click-through:${newState})`);
     }
   });
   
