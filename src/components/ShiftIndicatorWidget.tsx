@@ -16,6 +16,7 @@ interface ShiftData {
 const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<ShiftData[]>([]);
+  const [isFlashing, setIsFlashing] = useState(false);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -27,7 +28,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       };
 
       setData(prev => {
-        const updated = [...prev, newData].slice(-100); // Keep last 100 points
+        const updated = [...prev, newData].slice(-1); // Only keep the latest value
         return updated;
       });
     };
@@ -39,82 +40,110 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     };
   }, [id]);
 
+  // Handle flashing effect for overrev
   useEffect(() => {
-    if (!svgRef.current || data.length === 0) return;
+    if (data.length > 0 && data[0].shiftIndicator >= 90) {
+      const interval = setInterval(() => {
+        setIsFlashing(prev => !prev);
+      }, 500);
+      return () => clearInterval(interval);
+    } else {
+      setIsFlashing(false);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
     const width = 400;
-    const height = 200;
-    const margin = { top: 3, right: 0, bottom: 3, left: 0 };
+    const height = 60;
+    const margin = { top: 10, right: 10, bottom: 10, left: 10 };
 
     // Clear previous content
     svg.selectAll('*').remove();
 
     // Create scales
-    const x = d3.scaleTime()
-      .domain([data[0].timestamp, data[data.length - 1].timestamp])
+    const x = d3.scaleLinear()
+      .domain([0, 100])
       .range([margin.left, width - margin.right]);
 
-    const y = d3.scaleLinear()
-      .domain([0, 100])
-      .range([height - margin.bottom, margin.top]);
+    // Define color zones
+    const zones = [
+      { start: 0, end: 60, color: '#4CAF50' },    // Green
+      { start: 60, end: 75, color: '#FFEB3B' },   // Yellow
+      { start: 75, end: 85, color: '#FF9800' },   // Orange
+      { start: 85, end: 90, color: '#F44336' },   // Red
+      { start: 90, end: 100, color: '#F44336' }   // Red (overrev)
+    ];
 
-    // Create line generator
-    const line = d3.line<ShiftData>()
-      .x(d => x(d.timestamp))
-      .y(d => y(d.shiftIndicator))
-      .curve(d3.curveMonotoneX);
+    // Add color zones
+    zones.forEach(zone => {
+      svg.append('rect')
+        .attr('x', x(zone.start))
+        .attr('y', margin.top)
+        .attr('width', x(zone.end) - x(zone.start))
+        .attr('height', height - margin.top - margin.bottom)
+        .attr('fill', zone.color)
+        .attr('opacity', 0.3);
+    });
 
-    // Add overrev zone (90-100%)
-    svg.append('rect')
-      .attr('x', margin.left)
-      .attr('y', y(90))
-      .attr('width', width - margin.left - margin.right)
-      .attr('height', y(0) - y(90))
-      .attr('fill', 'rgba(255, 0, 0, 0.1)')
-      .attr('stroke', 'rgba(255, 0, 0, 0.3)')
-      .attr('stroke-width', 1);
+    // Add current value bar
+    if (data.length > 0) {
+      const currentValue = data[0].shiftIndicator;
+      const currentColor = zones.find(zone => currentValue >= zone.start && currentValue < zone.end)?.color || '#4CAF50';
+      
+      svg.append('rect')
+        .attr('x', margin.left)
+        .attr('y', margin.top)
+        .attr('width', x(currentValue) - x(0))
+        .attr('height', height - margin.top - margin.bottom)
+        .attr('fill', currentValue >= 90 && isFlashing ? '#F44336' : currentColor)
+        .attr('opacity', 0.7);
+    }
 
-    // Add shift indicator line
-    svg.append('path')
-      .datum(data)
-      .attr('fill', 'none')
-      .attr('stroke', '#4CAF50')
-      .attr('stroke-width', 2)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'round')
-      .attr('d', line);
+    // Add tick marks and labels
+    const ticks = [0, 20, 40, 60, 75, 85, 90, 100];
+    ticks.forEach(tick => {
+      // Add tick line
+      svg.append('line')
+        .attr('x1', x(tick))
+        .attr('x2', x(tick))
+        .attr('y1', height - margin.bottom - 5)
+        .attr('y2', height - margin.bottom)
+        .attr('stroke', '#666')
+        .attr('stroke-width', 1);
 
-    // Add 90% threshold line
-    svg.append('line')
-      .attr('x1', margin.left)
-      .attr('x2', width - margin.right)
-      .attr('y1', y(90))
-      .attr('y2', y(90))
-      .attr('stroke', 'rgba(255, 0, 0, 0.5)')
-      .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '4,4');
+      // Add tick label
+      svg.append('text')
+        .attr('x', x(tick))
+        .attr('y', height - margin.bottom + 12)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#fff')
+        .attr('font-size', '10px')
+        .text(`${tick}%`);
+    });
 
     // Add current value text
     if (data.length > 0) {
-      const currentValue = data[data.length - 1].shiftIndicator;
+      const currentValue = data[0].shiftIndicator;
       svg.append('text')
         .attr('x', width - margin.right - 5)
-        .attr('y', y(currentValue) - 5)
+        .attr('y', margin.top + 15)
         .attr('text-anchor', 'end')
-        .attr('fill', currentValue >= 90 ? '#ff0000' : '#4CAF50')
-        .attr('font-size', '12px')
+        .attr('fill', '#fff')
+        .attr('font-size', '14px')
         .text(`${currentValue.toFixed(1)}%`);
     }
 
-  }, [data]);
+  }, [data, isFlashing]);
 
   return (
     <BaseWidget id={id} title="Shift Indicator" className="">
       <svg
         ref={svgRef}
         width={400}
-        height={200}
+        height={60}
         className="bg-transparent"
       />
     </BaseWidget>
