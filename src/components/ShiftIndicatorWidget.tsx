@@ -65,7 +65,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
 
     // Create scales
     const x = d3.scaleLinear()
-      .domain([0, 100])
+      .domain([0, 90])
       .range([0, width]);
 
     // Define color zones
