@@ -91,15 +91,29 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     // Add current value bar
     if (data.length > 0) {
       const currentValue = data[0].shiftIndicator;
+      const displayValue = Math.min(currentValue, 90); // Cap at 90% for display
       const currentColor = zones.find(zone => currentValue >= zone.start && currentValue < zone.end)?.color || '#4CAF50';
       
+      // Add the main bar
       svg.append('rect')
         .attr('x', 0)
         .attr('y', 0)
-        .attr('width', x(currentValue))
+        .attr('width', x(displayValue))
         .attr('height', height)
         .attr('fill', currentValue >= 90 && isFlashing ? '#F44336' : currentColor)
         .attr('opacity', 0.7);
+
+      // If in overrev, add a thin red line at 90%
+      if (currentValue >= 90) {
+        svg.append('line')
+          .attr('x1', x(90))
+          .attr('x2', x(90))
+          .attr('y1', 0)
+          .attr('y2', height)
+          .attr('stroke', '#F44336')
+          .attr('stroke-width', 2)
+          .attr('opacity', isFlashing ? 1 : 0.5);
+      }
     }
 
   }, [data, isFlashing]);
