@@ -152,6 +152,13 @@ function App() {
   // Track if hint has been shown
   const [showHint, setShowHint] = useState(true);
   
+  // Reset hint visibility when click-through is enabled
+  useEffect(() => {
+    if (isClickThrough) {
+      setShowHint(true);
+    }
+  }, [isClickThrough]);
+  
   return (
     <div 
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
