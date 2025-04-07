@@ -64,6 +64,7 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       case 'brake_pct':
       case 'clutch_pct':
       case 'fuel_pct':
+      case 'shift_indicator_pct':
         return `${value.toFixed(1)}%`;
       case 'gear':
         return String(value);
@@ -105,7 +106,8 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       'last_lap_time': 'Last Lap',
       'best_lap_time': 'Best Lap',
       'position': 'Position',
-      'lap_completed': 'Lap'
+      'lap_completed': 'Lap',
+      'shift_indicator_pct': 'Shift Indicator'
     };
     
     return metricNames[metric] || metric;

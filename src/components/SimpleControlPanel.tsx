@@ -37,6 +37,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     { id: 'speed_kph', name: 'Speed (KPH)' },
     { id: 'speed_mph', name: 'Speed (MPH)' },
     { id: 'rpm', name: 'RPM' },
+    { id: 'shift_indicator_pct', name: 'Shift Indicator %' },
     { id: 'gear', name: 'Gear' },
     { id: 'throttle_pct', name: 'Throttle' },
     { id: 'brake_pct', name: 'Brake' },
