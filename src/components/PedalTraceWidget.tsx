@@ -60,7 +60,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
     const svg = d3.select(svgRef.current);
     const width = 400;
     const height = 200;
-    const margin = { top: 0, right: 0, bottom: 0, left: 0 };
+    const margin = { top: 3, right: 0, bottom: 3, left: 0 };
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -107,7 +107,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   }, [data]);
 
   return (
-    <BaseDraggableComponent className="bg-gray-900 rounded overflow-hidden">
+    <BaseDraggableComponent className="bg-gray-800/70 rounded overflow-hidden drag-handle">
       {isLoading ? (
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
@@ -122,7 +122,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
           ref={svgRef}
           width={400}
           height={200}
-          className="bg-gray-900"
+          className="bg-transparent"
         />
       )}
     </BaseDraggableComponent>
