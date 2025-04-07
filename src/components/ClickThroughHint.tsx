@@ -1,10 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface ClickThroughHintProps {
   onDismiss: () => void;
 }
 
 const ClickThroughHint: React.FC<ClickThroughHintProps> = ({ onDismiss }) => {
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  if (isDismissed) {
+    return null;
+  }
+
+  React.useEffect(() => {
+    const handleDismiss = () => {
+      setIsDismissed(true);
+    };
+    return () => onDismiss();
+  }, [onDismiss]);
+
   return (
     <div className="fixed top-2 right-10 z-[10001] animate-fade-in">
       <div className="relative">
