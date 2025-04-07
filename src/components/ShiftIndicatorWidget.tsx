@@ -73,8 +73,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       { start: 0, end: 60, color: '#4CAF50' },    // Green
       { start: 60, end: 75, color: '#FFEB3B' },   // Yellow
       { start: 75, end: 85, color: '#FF9800' },   // Orange
-      { start: 85, end: 90, color: '#F44336' },   // Red
-      { start: 90, end: 100, color: '#F44336' }   // Red (overrev)
+      { start: 85, end: 90, color: '#F44336' }    // Red
     ];
 
     // Add color zones
@@ -119,14 +118,15 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   }, [data, isFlashing]);
 
   return (
-    <BaseWidget id={id} title="Shift Indicator" className="p-0">
-      <div className="w-full h-full">
+    <BaseWidget id={id} title="Shift Indicator" className="[&_div.flex-1]:!p-0">
+      <div className="w-full h-full flex items-stretch">
         <svg
           ref={svgRef}
-          width={400}
-          height={48}
-          className="bg-transparent w-full h-full"
+          width="100%"
+          height="100%"
+          className="bg-transparent"
           style={{ pointerEvents: 'none' }}
+          preserveAspectRatio="none"
         />
       </div>
     </BaseWidget>
