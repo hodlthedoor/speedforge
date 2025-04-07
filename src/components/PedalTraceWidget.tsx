@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { WebSocketService } from '../services/WebSocketService';
 import BaseWidget from './BaseWidget';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface PedalTraceWidgetProps {
   id: string;
@@ -17,29 +17,27 @@ interface PedalData {
 const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<PedalData[]>([]);
+  
+  // Use our custom hook with throttle and brake metrics, without throttling
+  const { data: telemetryData } = useTelemetryData(id, { 
+    metrics: ['throttle_pct', 'brake_pct']
+  });
 
+  // Transform telemetry data into our visualization format
   useEffect(() => {
-    const webSocketService = WebSocketService.getInstance();
-    
-    const handleTelemetry = (telemetry: any) => {
+    if (telemetryData) {
       const newData: PedalData = {
         timestamp: Date.now(),
-        throttle: telemetry.throttle_pct || 0,
-        brake: telemetry.brake_pct || 0
+        throttle: telemetryData.throttle_pct || 0,
+        brake: telemetryData.brake_pct || 0
       };
 
       setData(prev => {
         const updated = [...prev, newData].slice(-100); // Keep last 100 points
         return updated;
       });
-    };
-
-    webSocketService.addDataListener(id, handleTelemetry);
-
-    return () => {
-      webSocketService.removeListeners(id);
-    };
-  }, [id]);
+    }
+  }, [telemetryData]);
 
   useEffect(() => {
     if (!svgRef.current || data.length === 0) return;

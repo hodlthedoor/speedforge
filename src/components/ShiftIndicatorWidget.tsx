@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { WebSocketService } from '../services/WebSocketService';
 import BaseWidget from './BaseWidget';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface ShiftIndicatorWidgetProps {
   id: string;
@@ -17,28 +17,26 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<ShiftData[]>([]);
   const [isFlashing, setIsFlashing] = useState(false);
+  
+  // Use our custom hook with shift indicator metric, without throttling
+  const { data: telemetryData } = useTelemetryData(id, { 
+    metrics: ['shift_indicator_pct']
+  });
 
+  // Transform telemetry data into our visualization format
   useEffect(() => {
-    const webSocketService = WebSocketService.getInstance();
-    
-    const handleTelemetry = (telemetry: any) => {
+    if (telemetryData) {
       const newData: ShiftData = {
         timestamp: Date.now(),
-        shiftIndicator: telemetry.shift_indicator_pct || 0
+        shiftIndicator: telemetryData.shift_indicator_pct || 0
       };
 
       setData(prev => {
         const updated = [...prev, newData].slice(-1); // Only keep the latest value
         return updated;
       });
-    };
-
-    webSocketService.addDataListener(id, handleTelemetry);
-
-    return () => {
-      webSocketService.removeListeners(id);
-    };
-  }, [id]);
+    }
+  }, [telemetryData]);
 
   // Handle flashing effect for overrev
   useEffect(() => {
