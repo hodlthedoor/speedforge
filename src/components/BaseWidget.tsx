@@ -36,10 +36,10 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
   return (
     <BaseDraggableComponent
       initialPosition={initialPosition}
-      className={`interactive ${className}`}
+      className={`interactive overflow-hidden ${className}`}
     >
       <div 
-        className="bg-gray-900/90 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
+        className="bg-gray-900 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
         onClick={() => {
           // Emit widget:clicked event
           const event = new CustomEvent('widget:clicked', { 

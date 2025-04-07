@@ -94,7 +94,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   }, [data]);
 
   return (
-    <BaseWidget id={id} title="Pedal Trace" className="overflow-hidden">
+    <BaseWidget id={id} title="Pedal Trace" className="">
       <svg
         ref={svgRef}
         width={400}
