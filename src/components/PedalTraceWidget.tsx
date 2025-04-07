@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { WebSocketService } from '../services/WebSocketService';
-import BaseWidget from './BaseWidget';
+import BaseDraggableComponent from './BaseDraggableComponent';
 
 interface PedalTraceWidgetProps {
   id: string;
@@ -12,7 +12,6 @@ interface PedalData {
   timestamp: number;
   throttle: number;
   brake: number;
-  clutch: number;
 }
 
 const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
@@ -31,8 +30,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       const newData: PedalData = {
         timestamp: Date.now(),
         throttle: telemetry.throttle_pct || 0,
-        brake: telemetry.brake_pct || 0,
-        clutch: telemetry.clutch_pct || 0
+        brake: telemetry.brake_pct || 0
       };
 
       setData(prev => {
@@ -62,7 +60,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
     const svg = d3.select(svgRef.current);
     const width = 400;
     const height = 200;
-    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+    const margin = { top: 0, right: 0, bottom: 0, left: 0 };
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -76,24 +74,6 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .domain([0, 100])
       .range([height - margin.bottom, margin.top]);
 
-    // Create axes
-    const xAxis = d3.axisBottom(x)
-      .ticks(5)
-      .tickFormat(d3.timeFormat('%H:%M:%S') as any);
-
-    const yAxis = d3.axisLeft(y)
-      .ticks(5)
-      .tickFormat(d => `${d}%`);
-
-    // Add axes
-    svg.append('g')
-      .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(xAxis);
-
-    svg.append('g')
-      .attr('transform', `translate(${margin.left},0)`)
-      .call(yAxis);
-
     // Create line generators
     const line = d3.line<PedalData>()
       .x(d => x(d.timestamp))
@@ -103,11 +83,6 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
     const brakeLine = d3.line<PedalData>()
       .x(d => x(d.timestamp))
       .y(d => y(d.brake))
-      .curve(d3.curveMonotoneX);
-
-    const clutchLine = d3.line<PedalData>()
-      .x(d => x(d.timestamp))
-      .y(d => y(d.clutch))
       .curve(d3.curveMonotoneX);
 
     // Add lines with proper styling
@@ -129,62 +104,10 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
 
-    svg.append('path')
-      .datum(data)
-      .attr('fill', 'none')
-      .attr('stroke', '#2196F3')
-      .attr('stroke-width', 2)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'round')
-      .attr('d', clutchLine);
-
-    // Add legend
-    const legend = svg.append('g')
-      .attr('transform', `translate(${width - margin.right - 100},${margin.top})`);
-
-    legend.append('rect')
-      .attr('width', 10)
-      .attr('height', 10)
-      .attr('fill', '#4CAF50');
-
-    legend.append('text')
-      .attr('x', 15)
-      .attr('y', 10)
-      .text('Throttle')
-      .style('font-size', '12px');
-
-    legend.append('rect')
-      .attr('y', 20)
-      .attr('width', 10)
-      .attr('height', 10)
-      .attr('fill', '#F44336');
-
-    legend.append('text')
-      .attr('x', 15)
-      .attr('y', 30)
-      .text('Brake')
-      .style('font-size', '12px');
-
-    legend.append('rect')
-      .attr('y', 40)
-      .attr('width', 10)
-      .attr('height', 10)
-      .attr('fill', '#2196F3');
-
-    legend.append('text')
-      .attr('x', 15)
-      .attr('y', 50)
-      .text('Clutch')
-      .style('font-size', '12px');
-
   }, [data]);
 
   return (
-    <BaseWidget
-      id={id}
-      title="Pedal Traces"
-      onClose={onClose}
-    >
+    <BaseDraggableComponent className="bg-gray-900 rounded overflow-hidden">
       {isLoading ? (
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
@@ -199,10 +122,10 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
           ref={svgRef}
           width={400}
           height={200}
-          className="bg-gray-900 rounded"
+          className="bg-gray-900"
         />
       )}
-    </BaseWidget>
+    </BaseDraggableComponent>
   );
 };
 
