@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import BaseWidget from './BaseWidget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
@@ -16,9 +16,12 @@ interface ShiftData {
 const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<ShiftData[]>([]);
+  const dataRef = useRef<ShiftData[]>([]);
   const [isFlashing, setIsFlashing] = useState(false);
+  const flashingTimerRef = useRef<number | null>(null);
+  const animationFrameId = useRef<number | null>(null);
   
-  // Use our custom hook with shift indicator metric, without throttling
+  // Use our custom hook with shift indicator metric
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: ['shift_indicator_pct']
   });
@@ -31,26 +34,52 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
         shiftIndicator: telemetryData.shift_indicator_pct || 0
       };
 
-      setData(prev => {
-        const updated = [...prev, newData].slice(-1); // Only keep the latest value
-        return updated;
-      });
+      // Update ref without causing a state update
+      dataRef.current = [newData]; // Only keep the latest value
+      
+      // Only update state when needed
+      if (!animationFrameId.current) {
+        animationFrameId.current = requestAnimationFrame(() => {
+          setData([...dataRef.current]);
+          animationFrameId.current = null;
+        });
+      }
     }
+    
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+    };
   }, [telemetryData]);
 
   // Handle flashing effect for overrev
   useEffect(() => {
+    // Clear any existing interval
+    if (flashingTimerRef.current) {
+      clearInterval(flashingTimerRef.current);
+      flashingTimerRef.current = null;
+    }
+    
     if (data.length > 0 && data[0].shiftIndicator >= 90) {
-      const interval = setInterval(() => {
+      flashingTimerRef.current = window.setInterval(() => {
         setIsFlashing(prev => !prev);
       }, 500);
-      return () => clearInterval(interval);
     } else {
       setIsFlashing(false);
     }
+    
+    return () => {
+      if (flashingTimerRef.current) {
+        clearInterval(flashingTimerRef.current);
+        flashingTimerRef.current = null;
+      }
+    };
   }, [data]);
 
-  useEffect(() => {
+  // D3 drawing logic
+  const updateChart = useCallback(() => {
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
@@ -112,8 +141,12 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
           .attr('opacity', isFlashing ? 1 : 0.5);
       }
     }
-
   }, [data, isFlashing]);
+
+  // Only update chart when data or flashing state changes
+  useEffect(() => {
+    updateChart();
+  }, [updateChart]);
 
   return (
     <BaseWidget id={id} title="Shift Indicator" className="p-0">

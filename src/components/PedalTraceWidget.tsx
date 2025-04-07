@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import BaseWidget from './BaseWidget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
@@ -17,8 +17,10 @@ interface PedalData {
 const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<PedalData[]>([]);
+  const dataRef = useRef<PedalData[]>([]);
+  const animationFrameId = useRef<number | null>(null);
   
-  // Use our custom hook with throttle and brake metrics, without throttling
+  // Use our custom hook with throttle and brake metrics
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: ['throttle_pct', 'brake_pct'],
     throttleUpdates: true,
@@ -34,14 +36,28 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
         brake: telemetryData.brake_pct || 0
       };
 
-      setData(prev => {
-        const updated = [...prev, newData].slice(-100); // Keep last 100 points
-        return updated;
-      });
+      // Update ref without causing a state update
+      dataRef.current = [...dataRef.current, newData].slice(-100);
+      
+      // Only update state when we need to redraw
+      if (!animationFrameId.current) {
+        animationFrameId.current = requestAnimationFrame(() => {
+          setData([...dataRef.current]);
+          animationFrameId.current = null;
+        });
+      }
     }
+    
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+    };
   }, [telemetryData]);
 
-  useEffect(() => {
+  // D3 drawing logic
+  const updateChart = useCallback(() => {
     if (!svgRef.current || data.length === 0) return;
 
     const svg = d3.select(svgRef.current);
@@ -90,8 +106,11 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
-
   }, [data]);
+
+  useEffect(() => {
+    updateChart();
+  }, [updateChart]);
 
   return (
     <BaseWidget id={id} title="Pedal Trace" className="">

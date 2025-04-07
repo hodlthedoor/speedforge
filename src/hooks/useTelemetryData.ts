@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { WebSocketService } from '../services/WebSocketService';
 
 // Typescript interface for telemetry data
@@ -69,60 +69,105 @@ export function useTelemetryData(
   const [data, setData] = useState<TelemetryData | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
   const { metrics, throttleUpdates = false, updateInterval = 100 } = options;
+  
+  // Use refs to store the latest values without causing re-renders
+  const latestDataRef = useRef<TelemetryData | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  
+  // Store metrics in a ref to avoid dependency changes
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
-  useEffect(() => {
-    const webSocketService = WebSocketService.getInstance();
-    let timer: number | null = null;
+  // Memoized handler function to prevent recreation on every render
+  const handleData = useCallback((newData: TelemetryData) => {
+    if (!isMountedRef.current) return;
     
-    // Add connection status listener
-    webSocketService.addConnectionListener(id, (isConnected) => {
-      setConnected(isConnected);
-    });
-    
-    // Handler function for data updates
-    const handleData = (newData: TelemetryData) => {
-      // If specific metrics are requested, filter the data
-      if (metrics && metrics.length > 0) {
-        const filteredData: TelemetryData = {};
-        metrics.forEach(metric => {
-          if (metric in newData) {
-            filteredData[metric] = newData[metric];
-          }
-        });
+    // If specific metrics are requested, filter the data
+    if (metricsRef.current && metricsRef.current.length > 0) {
+      const filteredData: TelemetryData = {};
+      metricsRef.current.forEach(metric => {
+        if (metric in newData) {
+          filteredData[metric] = newData[metric];
+        }
+      });
+      latestDataRef.current = filteredData;
+      
+      // Only update state if not throttling
+      if (!throttleUpdates) {
         setData(filteredData);
-      } else {
+      }
+    } else {
+      latestDataRef.current = newData;
+      
+      // Only update state if not throttling
+      if (!throttleUpdates) {
         setData(newData);
       }
-    };
-    
-    if (throttleUpdates) {
-      // Throttled updates using an interval
-      let latestData: TelemetryData | null = null;
-      
-      // Add data listener that captures but doesn't immediately update state
-      webSocketService.addDataListener(id, (newData) => {
-        latestData = newData;
-      });
-      
-      // Set up interval to update state with latest data
-      timer = window.setInterval(() => {
-        if (latestData) {
-          handleData(latestData);
+    }
+  }, [throttleUpdates]);
+
+  // Connection status handler
+  const handleConnection = useCallback((isConnected: boolean) => {
+    if (isMountedRef.current) {
+      setConnected(isConnected);
+    }
+  }, []);
+
+  // Set up the timer for throttled updates
+  const setupThrottledUpdates = useCallback(() => {
+    if (throttleUpdates && timerRef.current === null) {
+      timerRef.current = window.setInterval(() => {
+        if (isMountedRef.current && latestDataRef.current) {
+          setData(latestDataRef.current);
         }
       }, updateInterval);
-    } else {
-      // Direct updates on each data message
-      webSocketService.addDataListener(id, handleData);
     }
+  }, [throttleUpdates, updateInterval]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    const webSocketService = WebSocketService.getInstance();
+    
+    // Add connection status listener
+    webSocketService.addConnectionListener(id, handleConnection);
+    
+    // Add data listener
+    webSocketService.addDataListener(id, handleData);
+    
+    // Set up throttling timer if needed
+    setupThrottledUpdates();
     
     // Clean up on unmount
     return () => {
+      isMountedRef.current = false;
       webSocketService.removeListeners(id);
-      if (timer !== null) {
-        window.clearInterval(timer);
+      
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     };
-  }, [id, metrics, throttleUpdates, updateInterval]);
+  }, [id, handleData, handleConnection, setupThrottledUpdates]);
+
+  // If throttling options change during the lifetime of the component
+  useEffect(() => {
+    // Clear any existing timer
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    // Restart timer with new settings if needed
+    setupThrottledUpdates();
+    
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [throttleUpdates, updateInterval, setupThrottledUpdates]);
 
   return { data, connected };
 }
