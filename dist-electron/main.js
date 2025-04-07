@@ -59,7 +59,8 @@ function createWindows() {
     } else {
       win.setAlwaysOnTop(true);
     }
-    win.setIgnoreMouseEvents(false);
+    win.setIgnoreMouseEvents(true, { forward: true });
+    win.setTitle("SpeedForge (click-through:true)");
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
     win.loadURL(mainUrl);
     windows.push(win);
