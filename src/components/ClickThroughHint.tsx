@@ -1,23 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 interface ClickThroughHintProps {
   onDismiss: () => void;
 }
 
 const ClickThroughHint: React.FC<ClickThroughHintProps> = ({ onDismiss }) => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  // Check if hint has been shown before
-  useEffect(() => {
-    const hasShownHint = localStorage.getItem('clickThroughHintShown');
-    if (!hasShownHint) {
-      setIsVisible(true);
-      localStorage.setItem('clickThroughHintShown', 'true');
-    }
-  }, []);
-
-  if (!isVisible) return null;
-
   return (
     <div className="fixed top-3 right-12 z-[10001] animate-fade-in">
       <div className="relative">

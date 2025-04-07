@@ -150,7 +150,7 @@ function App() {
   }, []);
   
   // Track if hint has been shown
-  const [showHint, setShowHint] = useState(true);
+  const [showHint, setShowHint] = useState(true);  // Start with hint visible
   
   // Reset hint visibility when click-through is enabled
   useEffect(() => {
@@ -189,7 +189,7 @@ function App() {
             onClick={() => setIsClickThrough(false)}
             onMouseEnter={() => {
               setIsClickThrough(false);
-              setShowHint(false);
+              setShowHint(false);  // Hide hint on first hover
             }}
             style={{
               position: 'fixed',
