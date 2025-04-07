@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
+import { WebSocketService } from '../services/WebSocketService';
 
 interface BaseWidgetProps {
   id: string;
-  title: string;
-  onClose: () => void;
+  title?: string;
   initialPosition?: { x: number, y: number };
   className?: string;
   children: React.ReactNode;
@@ -13,18 +13,33 @@ interface BaseWidgetProps {
 const BaseWidget: React.FC<BaseWidgetProps> = ({
   id,
   title,
-  onClose,
   initialPosition = { x: 100, y: 100 },
   className = '',
   children
 }) => {
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const webSocketService = WebSocketService.getInstance();
+    
+    webSocketService.addConnectionListener(id, (status) => {
+      setIsConnected(status);
+      setIsLoading(false);
+    });
+
+    return () => {
+      webSocketService.removeListeners(id);
+    };
+  }, [id]);
+
   return (
     <BaseDraggableComponent
       initialPosition={initialPosition}
       className={`interactive ${className}`}
     >
       <div 
-        className="bg-gray-800 text-white p-4 rounded-lg shadow-lg w-[440px]"
+        className="bg-gray-800/70 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
         onClick={() => {
           // Emit widget:clicked event
           const event = new CustomEvent('widget:clicked', { 
@@ -33,19 +48,24 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
           window.dispatchEvent(event);
         }}
       >
-        <div className="flex justify-between items-center mb-4 drag-handle">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // Prevent click from bubbling to parent
-              onClose();
-            }}
-            className="text-gray-400 hover:text-white"
-          >
-            ×
-          </button>
+        <div className="flex-1 flex items-center justify-center p-4">
+          {isLoading ? (
+            <div className="text-center">
+              {title && <p className="text-sm font-medium text-gray-400 mb-4">{title}</p>}
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-400">Connecting to telemetry...</p>
+            </div>
+          ) : !isConnected ? (
+            <div className="text-center">
+              {title && <p className="text-sm font-medium text-gray-400 mb-4">{title}</p>}
+              <div className="rounded-full h-3 w-3 bg-red-500 mx-auto animate-pulse"></div>
+              <p className="mt-2 text-sm font-medium text-red-400">Disconnected</p>
+              <p className="text-xs text-gray-500">Attempting to reconnect...</p>
+            </div>
+          ) : (
+            children
+          )}
         </div>
-        {children}
       </div>
     </BaseDraggableComponent>
   );

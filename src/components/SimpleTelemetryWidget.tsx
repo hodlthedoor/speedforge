@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import BaseDraggableComponent from './BaseDraggableComponent';
 import { WebSocketService } from '../services/WebSocketService';
+import BaseWidget from './BaseWidget';
 
 interface SimpleTelemetryWidgetProps {
   id: string;
@@ -18,7 +18,6 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   onClose
 }) => {
   const [telemetryData, setTelemetryData] = useState<any>(null);
-  const [connected, setConnected] = useState<boolean>(false);
   
   // Initialize with WebSocketService
   useEffect(() => {
@@ -27,11 +26,6 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
     // Add data listener
     webSocketService.addDataListener(id, (data) => {
       setTelemetryData(data);
-    });
-    
-    // Add connection listener
-    webSocketService.addConnectionListener(id, (status) => {
-      setConnected(status);
     });
     
     // Cleanup on unmount
@@ -119,19 +113,9 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
 
   // Render the widget content
   const renderContent = () => {
-    if (!connected) {
-      return (
-        <div className="telemetry-content">
-          <div className="status-disconnected">Disconnected</div>
-          <div className="status-message">Attempting to connect...</div>
-        </div>
-      );
-    }
-    
     if (!telemetryData) {
       return (
         <div className="telemetry-content">
-          <div className="status-connected">Connected</div>
           <div className="status-message">Waiting for data...</div>
         </div>
       );
@@ -150,22 +134,15 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   };
 
   return (
-    <BaseDraggableComponent 
-      initialPosition={defaultPosition} 
+    <BaseWidget 
+      id={id} 
+      title={name}
+      initialPosition={defaultPosition}
       className="telemetry-widget-wrapper"
     >
-      <div 
-        className="telemetry-widget drag-handle"
-        onClick={() => {
-          // Emit widget:clicked event
-          const event = new CustomEvent('widget:clicked', { 
-            detail: { widgetId: id }
-          });
-          window.dispatchEvent(event);
-        }}
-      >
+      <div className="telemetry-widget">
         {renderContent()}
       </div>
-    </BaseDraggableComponent>
+    </BaseWidget>
   );
 }; 

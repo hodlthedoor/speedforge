@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { WebSocketService } from '../services/WebSocketService';
-import BaseDraggableComponent from './BaseDraggableComponent';
+import BaseWidget from './BaseWidget';
 
 interface PedalTraceWidgetProps {
   id: string;
@@ -17,16 +17,11 @@ interface PedalData {
 const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<PedalData[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
     
     const handleTelemetry = (telemetry: any) => {
-      setIsConnected(true);
-      setIsLoading(false);
-      
       const newData: PedalData = {
         timestamp: Date.now(),
         throttle: telemetry.throttle_pct || 0,
@@ -39,15 +34,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       });
     };
 
-    const handleDisconnect = () => {
-      setIsConnected(false);
-    };
-
     webSocketService.addDataListener(id, handleTelemetry);
-    webSocketService.addConnectionListener(id, (status) => {
-      setIsConnected(status);
-      setIsLoading(false);
-    });
 
     return () => {
       webSocketService.removeListeners(id);
@@ -107,25 +94,14 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   }, [data]);
 
   return (
-    <BaseDraggableComponent className="bg-gray-800/70 rounded overflow-hidden drag-handle">
-      {isLoading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-          <p className="mt-2">Connecting to telemetry...</p>
-        </div>
-      ) : !isConnected ? (
-        <div className="text-center py-8">
-          <p className="text-red-500">Disconnected from telemetry</p>
-        </div>
-      ) : (
-        <svg
-          ref={svgRef}
-          width={400}
-          height={200}
-          className="bg-transparent"
-        />
-      )}
-    </BaseDraggableComponent>
+    <BaseWidget id={id} title="Pedal Trace" className="overflow-hidden">
+      <svg
+        ref={svgRef}
+        width={400}
+        height={200}
+        className="bg-transparent"
+      />
+    </BaseWidget>
   );
 };
 
