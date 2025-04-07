@@ -9,8 +9,8 @@ const ClickThroughHint: React.FC<ClickThroughHintProps> = ({ onDismiss }) => {
     <div className="fixed top-2 right-10 z-[10001] animate-fade-in">
       <div className="relative">
         {/* Speech bubble */}
-        <div className="bg-black/90 text-white px-12 py-10 rounded-xl shadow-lg max-w-[380px]">
-          <div className="mx-4 my-3">
+        <div className="bg-black/90 text-white p-8 rounded-xl shadow-lg max-w-[380px]">
+          <div className="m-6">
             <p className="text-xl leading-relaxed">
               Hover over this red dot to show the control panel
             </p>
