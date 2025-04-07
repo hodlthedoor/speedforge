@@ -248,7 +248,7 @@ body, html {
 
 /* Simple Control Panel Styles */
 .simple-control-panel {
-  width: 400px;
+  width: 500px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: white;
   padding: 20px;

@@ -3,10 +3,11 @@ import BaseDraggableComponent from './BaseDraggableComponent';
 import { Widget } from './Widget';
 import { SimpleTelemetryWidget } from './SimpleTelemetryWidget';
 import { v4 as uuidv4 } from 'uuid';
+import PedalTraceWidget from './PedalTraceWidget';
 
 interface WidgetData {
   id: string;
-  type: 'default' | 'telemetry';
+  type: 'default' | 'telemetry' | 'pedal-trace';
   title: string;
   content?: string;
   metric?: string;
@@ -110,6 +111,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     
     // Auto-select the new widget
     setSelectedWidget(widgetData);
+  };
+
+  const addPedalTraceWidget = () => {
+    const widgetId = `pedal-trace-${Date.now()}`;
+    const widget = {
+      id: widgetId,
+      type: 'pedal-trace',
+      title: 'Pedal Traces',
+      content: (
+        <PedalTraceWidget
+          id={widgetId}
+          onClose={() => closeWidget(widgetId)}
+        />
+      )
+    };
+    onAddWidget(widget);
   };
 
   const closeWidget = (id: string) => {
@@ -263,7 +280,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
-      className={`control-panel ${clickThrough ? 'click-through' : ''}`}
+      className={`w-[400px] max-h-[80vh] overflow-y-auto shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
     >
       <div className="panel-header drag-handle">
         <h2>Control Panel</h2>
@@ -293,6 +310,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     {metric.name}
                   </button>
                 ))}
+              </div>
+            </div>
+          </details>
+
+          <details className="telemetry-details">
+            <summary className="btn btn-primary telemetry-summary">
+              Add Speedforge Widget
+            </summary>
+            <div className="telemetry-options">
+              <h3>Select Widget</h3>
+              <div className="metric-buttons">
+                <button 
+                  className="btn btn-sm btn-secondary metric-btn"
+                  onClick={addPedalTraceWidget}
+                >
+                  Pedal Traces
+                </button>
               </div>
             </div>
           </details>

@@ -167,7 +167,7 @@ function App() {
       {/* When click-through is enabled, hide control panel completely */}
       {!isClickThrough ? (
         <SimpleControlPanel 
-          initialPosition={{ x: windowWidth - 320, y: 20 }}
+          initialPosition={{ x: windowWidth - 420, y: 20 }}
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}
           activeWidgets={widgets}
