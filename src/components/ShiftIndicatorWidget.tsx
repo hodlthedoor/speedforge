@@ -57,8 +57,8 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
 
     const svg = d3.select(svgRef.current);
     const width = 400;
-    const height = 60;
-    const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+    const height = 48;
+    const margin = { top: 0, right: 0, bottom: 0, left: 0 };
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -66,7 +66,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     // Create scales
     const x = d3.scaleLinear()
       .domain([0, 100])
-      .range([margin.left, width - margin.right]);
+      .range([0, width]);
 
     // Define color zones
     const zones = [
@@ -81,9 +81,9 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     zones.forEach(zone => {
       svg.append('rect')
         .attr('x', x(zone.start))
-        .attr('y', margin.top)
+        .attr('y', 0)
         .attr('width', x(zone.end) - x(zone.start))
-        .attr('height', height - margin.top - margin.bottom)
+        .attr('height', height)
         .attr('fill', zone.color)
         .attr('opacity', 0.3);
     });
@@ -94,46 +94,12 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       const currentColor = zones.find(zone => currentValue >= zone.start && currentValue < zone.end)?.color || '#4CAF50';
       
       svg.append('rect')
-        .attr('x', margin.left)
-        .attr('y', margin.top)
-        .attr('width', x(currentValue) - x(0))
-        .attr('height', height - margin.top - margin.bottom)
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', x(currentValue))
+        .attr('height', height)
         .attr('fill', currentValue >= 90 && isFlashing ? '#F44336' : currentColor)
         .attr('opacity', 0.7);
-    }
-
-    // Add tick marks and labels
-    const ticks = [0, 20, 40, 60, 75, 85, 90, 100];
-    ticks.forEach(tick => {
-      // Add tick line
-      svg.append('line')
-        .attr('x1', x(tick))
-        .attr('x2', x(tick))
-        .attr('y1', height - margin.bottom - 5)
-        .attr('y2', height - margin.bottom)
-        .attr('stroke', '#666')
-        .attr('stroke-width', 1);
-
-      // Add tick label
-      svg.append('text')
-        .attr('x', x(tick))
-        .attr('y', height - margin.bottom + 12)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#fff')
-        .attr('font-size', '10px')
-        .text(`${tick}%`);
-    });
-
-    // Add current value text
-    if (data.length > 0) {
-      const currentValue = data[0].shiftIndicator;
-      svg.append('text')
-        .attr('x', width - margin.right - 5)
-        .attr('y', margin.top + 15)
-        .attr('text-anchor', 'end')
-        .attr('fill', '#fff')
-        .attr('font-size', '14px')
-        .text(`${currentValue.toFixed(1)}%`);
     }
 
   }, [data, isFlashing]);
@@ -143,7 +109,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       <svg
         ref={svgRef}
         width={400}
-        height={60}
+        height={48}
         className="bg-transparent"
       />
     </BaseWidget>
