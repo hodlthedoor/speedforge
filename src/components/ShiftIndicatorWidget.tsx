@@ -57,7 +57,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
 
     const svg = d3.select(svgRef.current);
     const width = 400;
-    const height = 48;
+    const height = 32;
     const margin = { top: 0, right: 0, bottom: 0, left: 0 };
 
     // Clear previous content
@@ -118,15 +118,14 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   }, [data, isFlashing]);
 
   return (
-    <BaseWidget id={id} title="Shift Indicator" className="[&_div.flex-1]:!p-0">
-      <div className="w-full h-full flex items-stretch">
+    <BaseWidget id={id} title="Shift Indicator" className="p-0">
+      <div className="w-full py-2 flex items-center justify-center">
         <svg
           ref={svgRef}
-          width="100%"
-          height="100%"
+          width={400}
+          height={32}
           className="bg-transparent"
           style={{ pointerEvents: 'none' }}
-          preserveAspectRatio="none"
         />
       </div>
     </BaseWidget>
