@@ -27,6 +27,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
   const [currentPosition, setCurrentPosition] = useState<number>(0);
   const mapCompleteRef = useRef<boolean>(false);
+  const startLapDistPctRef = useRef<number>(-1); // Reference to track starting position
   
   // Use telemetry data with relevant metrics for track mapping
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -42,15 +43,36 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
     updateInterval: 50
   });
 
+  // Auto-start recording when conditions are met
+  useEffect(() => {
+    if (!telemetryData || mapBuildingState !== 'idle') return;
+
+    const speed = telemetryData.velocity_ms || 0;
+    const lapDistPct = telemetryData.lap_dist_pct || 0;
+    
+    // Auto-start recording when:
+    // 1. Car is moving reasonably fast (above 10 m/s or ~36 km/h)
+    // 2. We're near the start/finish line (within 5% of 0.0 or 1.0)
+    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95)) {
+      console.log('Auto-starting track recording');
+      startRecording();
+    }
+  }, [telemetryData, mapBuildingState]);
+
   // Start recording track data
   const startRecording = useCallback(() => {
     trackPointsRef.current = [];
     setTrackPoints([]);
     lastPositionRef.current = null;
     mapCompleteRef.current = false;
+    
+    // Store the starting lap distance percentage
+    const currentLapDistPct = telemetryData?.lap_dist_pct || 0;
+    startLapDistPctRef.current = currentLapDistPct;
+    
     setMapBuildingState('recording');
     console.log('Started recording track map data');
-  }, []);
+  }, [telemetryData]);
 
   // Stop recording and finalize track
   const stopRecording = useCallback(() => {
@@ -114,10 +136,18 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
     
     // Detect if we've completed a lap (only after collecting some points)
     if (trackPointsRef.current.length > 20) {
-      const firstPoint = trackPointsRef.current[0];
+      // Use stored start position for comparison to detect a complete lap
+      const lapStartPosition = startLapDistPctRef.current;
       
-      // If we've come back to the start point (within 2% of track), consider lap complete
-      if (Math.abs(lapDistPct - firstPoint.lapDistPct) < 0.02) {
+      // If we've completed a full lap (crossed start line)
+      // For tracks where start position is near 0: we went from high pct to low pct
+      // For tracks where start position is elsewhere: we're back to the same pct
+      const completedLap = 
+        (lapStartPosition < 0.05 && lapDistPct > 0.95 && lastPositionRef.current?.lapDistPct < 0.05) || 
+        (Math.abs(lapDistPct - lapStartPosition) < 0.02 && 
+         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.01);
+         
+      if (completedLap) {
         stopRecording();
         return;
       }
@@ -191,46 +221,180 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
       const xExtent = d3.extent(xValues) as [number, number];
       const yExtent = d3.extent(yValues) as [number, number];
       
-      const xScale = d3.scaleLinear()
-        .domain([xExtent[0] * 1.1, xExtent[1] * 1.1])
-        .range([margin.left, width - margin.right]);
+      // Calculate scale to maintain aspect ratio
+      const xRange = xExtent[1] - xExtent[0];
+      const yRange = yExtent[1] - yExtent[0];
+      const scale = Math.min(
+        (width - margin.left - margin.right) / xRange,
+        (height - margin.top - margin.bottom) / yRange
+      ) * 0.9; // 10% padding
       
-      const yScale = d3.scaleLinear()
-        .domain([yExtent[0] * 1.1, yExtent[1] * 1.1])
-        .range([height - margin.bottom, margin.top]);
-        
+      // Center the track in the available space
+      const centerX = (width - margin.left - margin.right) / 2 + margin.left;
+      const centerY = (height - margin.top - margin.bottom) / 2 + margin.top;
+      
+      // Create custom scales that maintain aspect ratio
+      const xScale = (x: number) => centerX + (x - (xExtent[0] + xExtent[1]) / 2) * scale;
+      const yScale = (y: number) => centerY + (y - (yExtent[0] + yExtent[1]) / 2) * scale;
+      
       // Create line generator
       const line = d3.line<TrackPoint>()
         .x(d => xScale(d.x))
         .y(d => yScale(d.y))
         .curve(d3.curveCatmullRom.alpha(0.5));
       
-      // Create track outline
-      trackGroup.append('path')
-        .datum(trackPoints)
-        .attr('fill', 'none')
-        .attr('stroke', '#4CAF50')
-        .attr('stroke-width', 2)
-        .attr('stroke-linejoin', 'round')
-        .attr('stroke-linecap', 'round')
-        .attr('d', line);
+      // Draw track sectors
+      // Sector 1: 0-33%, Sector 2: 33-66%, Sector 3: 66-100%
+      const sector1Points = trackPoints.filter(p => p.lapDistPct >= 0 && p.lapDistPct < 0.33);
+      const sector2Points = trackPoints.filter(p => p.lapDistPct >= 0.33 && p.lapDistPct < 0.66);
+      const sector3Points = trackPoints.filter(p => p.lapDistPct >= 0.66 && p.lapDistPct <= 1);
+      
+      if (sector1Points.length > 0) {
+        trackGroup.append('path')
+          .datum(sector1Points)
+          .attr('fill', 'none')
+          .attr('stroke', '#4CAF50') // Green
+          .attr('stroke-width', 3)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('d', line);
+      }
+      
+      if (sector2Points.length > 0) {
+        trackGroup.append('path')
+          .datum(sector2Points)
+          .attr('fill', 'none')
+          .attr('stroke', '#FFEB3B') // Yellow
+          .attr('stroke-width', 3)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('d', line);
+      }
+      
+      if (sector3Points.length > 0) {
+        trackGroup.append('path')
+          .datum(sector3Points)
+          .attr('fill', 'none')
+          .attr('stroke', '#F44336') // Red
+          .attr('stroke-width', 3)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('d', line);
+      }
+      
+      // Add start/finish line
+      const startPoint = trackPoints.find(p => p.lapDistPct < 0.01);
+      if (startPoint) {
+        // Find direction by looking at next point
+        const nextPoint = trackPoints.find(p => p.lapDistPct > 0.01 && p.lapDistPct < 0.02);
+        if (nextPoint) {
+          const dx = nextPoint.x - startPoint.x;
+          const dy = nextPoint.y - startPoint.y;
+          const length = Math.sqrt(dx * dx + dy * dy);
+          const unitX = dx / length;
+          const unitY = dy / length;
+          
+          // Perpendicular vector
+          const perpX = -unitY;
+          const perpY = unitX;
+          
+          // Draw start/finish line
+          trackGroup.append('line')
+            .attr('x1', xScale(startPoint.x + perpX * 5))
+            .attr('y1', yScale(startPoint.y + perpY * 5))
+            .attr('x2', xScale(startPoint.x - perpX * 5))
+            .attr('y2', yScale(startPoint.y - perpY * 5))
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '2,2');
+        }
+      }
       
       // Draw current position marker if map is complete
-      if (mapBuildingState === 'complete') {
+      if (mapBuildingState === 'complete' || mapBuildingState === 'recording') {
         // Find the closest point by lapDistPct
-        const closestPointIndex = trackPoints.findIndex(
-          point => Math.abs(point.lapDistPct - currentPosition) < 0.01
-        );
+        let closestPoint = trackPoints[0];
+        let minDist = 1;
         
-        if (closestPointIndex >= 0) {
-          const point = trackPoints[closestPointIndex];
+        for (const point of trackPoints) {
+          const dist = Math.min(
+            Math.abs(point.lapDistPct - currentPosition),
+            Math.abs(point.lapDistPct - currentPosition + 1),
+            Math.abs(point.lapDistPct - currentPosition - 1)
+          );
+          
+          if (dist < minDist) {
+            minDist = dist;
+            closestPoint = point;
+          }
+        }
+        
+        // Draw car position
+        trackGroup.append('circle')
+          .attr('cx', xScale(closestPoint.x))
+          .attr('cy', yScale(closestPoint.y))
+          .attr('r', 5)
+          .attr('fill', 'white')
+          .attr('stroke', 'black')
+          .attr('stroke-width', 1.5);
+        
+        // Add motion blur/trail behind car
+        const trailPoints = [];
+        let trailIndex = trackPoints.indexOf(closestPoint);
+        for (let i = 1; i <= 10; i++) {
+          const prevIndex = (trailIndex - i + trackPoints.length) % trackPoints.length;
+          trailPoints.push(trackPoints[prevIndex]);
+        }
+        
+        trailPoints.forEach((point, i) => {
+          const opacity = 0.8 - (i / 10) * 0.8;
+          const size = 4 - (i / 10) * 3;
+          
           trackGroup.append('circle')
             .attr('cx', xScale(point.x))
             .attr('cy', yScale(point.y))
-            .attr('r', 5)
-            .attr('fill', 'red');
-        }
+            .attr('r', size)
+            .attr('fill', 'white')
+            .attr('opacity', opacity);
+        });
       }
+      
+      // Add sector markers
+      [0.33, 0.66].forEach(sector => {
+        const sectorPoint = trackPoints.find(p => Math.abs(p.lapDistPct - sector) < 0.01);
+        if (sectorPoint) {
+          trackGroup.append('circle')
+            .attr('cx', xScale(sectorPoint.x))
+            .attr('cy', yScale(sectorPoint.y))
+            .attr('r', 3)
+            .attr('fill', 'white')
+            .attr('opacity', 0.8);
+        }
+      });
+      
+      // Add track percentage labels
+      [0, 0.25, 0.5, 0.75].forEach(pct => {
+        const labelPoint = trackPoints.find(p => Math.abs(p.lapDistPct - pct) < 0.01);
+        if (labelPoint) {
+          trackGroup.append('text')
+            .attr('x', xScale(labelPoint.x))
+            .attr('y', yScale(labelPoint.y) - 8)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '10px')
+            .attr('fill', 'rgba(255,255,255,0.7)')
+            .text(`${Math.round(pct * 100)}%`);
+        }
+      });
+      
+      // Add current percentage display
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', height - 5)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '12px')
+        .attr('fill', 'white')
+        .text(`Position: ${(currentPosition * 100).toFixed(1)}%`);
+      
     } else if (mapBuildingState === 'recording') {
       // Show recording status
       svg.append('text')
@@ -240,6 +404,17 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         .attr('font-size', '16px')
         .attr('fill', '#FFFFFF')
         .text('Recording track data...');
+      
+      // Show lap percentage
+      if (telemetryData?.lap_dist_pct) {
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2 + 30)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '14px')
+          .attr('fill', '#AAAAAA')
+          .text(`Track position: ${(telemetryData.lap_dist_pct * 100).toFixed(1)}%`);
+      }
     } else {
       // Show start instructions
       svg.append('text')
@@ -248,17 +423,28 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         .attr('text-anchor', 'middle')
         .attr('font-size', '16px')
         .attr('fill', '#FFFFFF')
-        .text('Drive a lap to map the track');
+        .text('Drive near start/finish line');
         
       svg.append('text')
         .attr('x', width / 2)
-        .attr('y', height / 2 + 20)
+        .attr('y', height / 2 + 10)
         .attr('text-anchor', 'middle')
         .attr('font-size', '14px')
         .attr('fill', '#AAAAAA')
-        .text('Click "Start Recording" to begin');
+        .text('Recording will start automatically');
+      
+      if (telemetryData?.velocity_ms) {
+        const speed = telemetryData.velocity_ms * 3.6; // Convert to km/h
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2 + 40)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '12px')
+          .attr('fill', speed > 30 ? '#4CAF50' : '#AAAAAA')
+          .text(`Current speed: ${speed.toFixed(1)} km/h`);
+      }
     }
-  }, [trackPoints, mapBuildingState, currentPosition]);
+  }, [trackPoints, mapBuildingState, currentPosition, telemetryData]);
 
   // Update chart when data changes
   useEffect(() => {
@@ -276,11 +462,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         />
         <div className="controls mt-2 flex justify-between">
           {mapBuildingState === 'idle' && (
-            <button 
-              className="btn btn-sm btn-success"
-              onClick={startRecording}>
-              Start Recording
-            </button>
+            <div className="text-sm text-gray-300">
+              Waiting for car movement near start/finish line...
+            </div>
           )}
           {mapBuildingState === 'recording' && (
             <button 
