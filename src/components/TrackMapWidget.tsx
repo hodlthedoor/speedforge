@@ -6,6 +6,14 @@ import { useTelemetryData } from '../hooks/useTelemetryData';
 interface TrackMapWidgetProps {
   id: string;
   onClose: () => void;
+  onStateChange?: (state: { 
+    mapBuildingState: MapBuildingState;
+    colorMode: 'curvature' | 'acceleration' | 'none';
+  }) => void;
+  externalControls?: {
+    mapBuildingState?: MapBuildingState;
+    colorMode?: 'curvature' | 'acceleration' | 'none';
+  };
 }
 
 interface TrackPoint {
@@ -16,17 +24,26 @@ interface TrackPoint {
   longitudinalAccel?: number;
 }
 
+interface TrackPosition {
+  lapDistPct: number;
+}
+
 // Map building state
 type MapBuildingState = 'idle' | 'recording' | 'complete';
 
-const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
+const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ 
+  id, 
+  onClose,
+  onStateChange,
+  externalControls 
+}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const trackPointsRef = useRef<TrackPoint[]>([]);
   const animationFrameId = useRef<number | null>(null);
   const lastPositionRef = useRef<TrackPoint | null>(null);
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
-  const [currentPosition, setCurrentPosition] = useState<number>(0);
+  const [currentPosition, setCurrentPosition] = useState<TrackPosition>({ lapDistPct: 0 });
   const mapCompleteRef = useRef<boolean>(false);
   const startLapDistPctRef = useRef<number>(-1); // Reference to track starting position
   const [colorMode, setColorMode] = useState<'curvature' | 'acceleration' | 'none'>('none');
@@ -126,51 +143,74 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
       
-      // Calculate heading based on velocity and lateral acceleration
-      // This approach uses the yaw rate to update the heading directly
-      // Rather than incorrectly using atan2 on the position
+      // Get heading from the previous points
       let heading = 0;
       
-      // Get heading from the previous 2 points if we have them
-      if (trackPointsRef.current.length >= 2) {
+      // Calculate heading based on lap distance percentage rather than using the exact position
+      // This helps maintain accuracy over long distances
+      if (trackPointsRef.current.length >= 5) {
+        // Use a few back points for a more stable heading calculation
+        const prevPoints = trackPointsRef.current.slice(-5);
+        const avgDx = prevPoints.reduce((sum, p, i, arr) => {
+          if (i === 0) return sum;
+          return sum + (p.x - arr[i-1].x);
+        }, 0) / (prevPoints.length - 1);
+        
+        const avgDy = prevPoints.reduce((sum, p, i, arr) => {
+          if (i === 0) return sum;
+          return sum + (p.y - arr[i-1].y);
+        }, 0) / (prevPoints.length - 1);
+        
+        heading = Math.atan2(avgDy, avgDx);
+      } else if (trackPointsRef.current.length >= 2) {
+        // Fallback for when we don't have enough points yet
         const prevPoint = trackPointsRef.current[trackPointsRef.current.length - 2];
         const dx = lastPositionRef.current.x - prevPoint.x;
         const dy = lastPositionRef.current.y - prevPoint.y;
         heading = Math.atan2(dy, dx);
       }
       
-      // Update heading based on yaw rate
-      heading += (yawRate * Math.PI / 180) * timeDelta;
+      // Apply a smaller yaw rate influence
+      // Reduced from full influence to 25% to prevent accumulated errors
+      heading += (yawRate * Math.PI / 180) * timeDelta * 0.25;
       
       // Calculate distance traveled
       const distance = velocity * timeDelta;
       
-      // Apply lateral acceleration effect (makes corners more pronounced)
-      const lateralDisplacement = 0.5 * lateralAccel * timeDelta * timeDelta;
+      // Apply accelerations to update position
+      // First, move in the heading direction
+      let nextX = lastX + distance * Math.cos(heading);
+      let nextY = lastY + distance * Math.sin(heading);
       
-      // Apply longitudinal acceleration effect (affects acceleration/braking zones)
-      const longitudinalDisplacement = 0.5 * longitudinalAccel * timeDelta * timeDelta;
+      // Then apply lateral acceleration (perpendicular to heading)
+      // This creates the proper cornering effect
+      const lateralFactor = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel), 10) / 10;
+      nextX += distance * lateralFactor * -Math.sin(heading);
+      nextY += distance * lateralFactor * Math.cos(heading);
       
-      // Update position - move forward in heading direction and offset by both lateral and longitudinal acceleration
-      newX = lastX + distance * Math.cos(heading) - lateralDisplacement * Math.sin(heading) + longitudinalDisplacement * Math.cos(heading);
-      newY = lastY + distance * Math.sin(heading) + lateralDisplacement * Math.cos(heading) + longitudinalDisplacement * Math.sin(heading);
+      // Apply longitudinal acceleration (along heading)
+      // This creates proper acceleration/braking effect
+      const longFactor = Math.sign(longitudinalAccel) * Math.min(Math.abs(longitudinalAccel), 10) / 20;
+      nextX += distance * longFactor * Math.cos(heading);
+      nextY += distance * longFactor * Math.sin(heading);
       
-      // Amplify the effect of corners for better visualization
-      if (Math.abs(lateralAccel) > 1) {
-        const cornerAmplification = 1.0 + (Math.abs(lateralAccel) / 20); // Amplify based on lateral G
-        const deltaX = newX - lastX;
-        const deltaY = newY - lastY;
-        newX = lastX + deltaX * cornerAmplification;
-        newY = lastY + deltaY * cornerAmplification;
-      }
+      // Update positions
+      newX = nextX;
+      newY = nextY;
       
-      // Amplify the effect of acceleration/braking zones
-      if (Math.abs(longitudinalAccel) > 2) {
-        const accelBrakeAmplification = 1.0 + (Math.abs(longitudinalAccel) / 30); // Amplify based on longitudinal G
-        const deltaX = newX - lastX;
-        const deltaY = newY - lastY;
-        newX = lastX + deltaX * accelBrakeAmplification;
-        newY = lastY + deltaY * accelBrakeAmplification;
+      // Force track to close as we near completion of the lap
+      // This helps ensure the track properly connects back to the start
+      if (trackPointsRef.current.length > 20) {
+        // If we're near the end of the lap (over 95%) and started near the beginning,
+        // start gradually pulling the track toward the starting point
+        if (lapDistPct > 0.95 && startLapDistPctRef.current < 0.05) {
+          const firstPoint = trackPointsRef.current[0];
+          const closingFactor = (lapDistPct - 0.95) / 0.05; // 0 at 95%, 1 at 100%
+          
+          // Pull toward the first point with increasing strength
+          newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
+          newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+        }
       }
     }
     
@@ -215,7 +255,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
     }
     
     // Always update current position for the car marker
-    setCurrentPosition(lapDistPct);
+    setCurrentPosition({ lapDistPct });
     
   }, [telemetryData, mapBuildingState, stopRecording]);
 
@@ -223,7 +263,19 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   const normalizeTrack = (points: TrackPoint[]): TrackPoint[] => {
     if (points.length < 10) return points;
     
-    // First, smooth the track using a simple moving average to reduce noise
+    // First, ensure the track is properly closed
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    
+    // If the track doesn't naturally close, add a final connecting point
+    if (Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2)) > 5) {
+      points.push({
+        ...firstPoint,
+        lapDistPct: 1.0
+      });
+    }
+    
+    // Then smooth the track using a simple moving average to reduce noise
     const smoothedPoints: TrackPoint[] = [];
     const windowSize = 3;
     
@@ -266,7 +318,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   // Track current position when map is complete
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'complete') return;
-    setCurrentPosition(telemetryData.lap_dist_pct || 0);
+    setCurrentPosition({ lapDistPct: telemetryData.lap_dist_pct || 0 });
   }, [telemetryData, mapBuildingState]);
 
   // D3 drawing logic
@@ -407,9 +459,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         
         for (const point of trackPoints) {
           const dist = Math.min(
-            Math.abs(point.lapDistPct - currentPosition),
-            Math.abs(point.lapDistPct - currentPosition + 1),
-            Math.abs(point.lapDistPct - currentPosition - 1)
+            Math.abs(point.lapDistPct - currentPosition.lapDistPct),
+            Math.abs(point.lapDistPct - currentPosition.lapDistPct + 1),
+            Math.abs(point.lapDistPct - currentPosition.lapDistPct - 1)
           );
           
           if (dist < minDist) {
@@ -482,7 +534,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         .attr('text-anchor', 'middle')
         .attr('font-size', '12px')
         .attr('fill', 'white')
-        .text(`Position: ${(currentPosition * 100).toFixed(1)}%`);
+        .text(`Position: ${(currentPosition.lapDistPct * 100).toFixed(1)}%`);
       
     } else if (mapBuildingState === 'recording') {
       // Show recording status with a more visual representation
@@ -716,7 +768,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
 
   // Update current position marker when lap distance changes
   useEffect(() => {
-    if (trackPoints.length > 0 && currentPosition?.lapDistPct !== undefined) {
+    if (trackPoints.length > 0 && currentPosition.lapDistPct !== undefined) {
       // Find the closest track point to the current lap distance percentage
       const index = trackPoints.findIndex(point => 
         point.lapDistPct >= currentPosition.lapDistPct
@@ -725,7 +777,25 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
     } else {
       setCurrentPositionIndex(-1);
     }
-  }, [currentPosition?.lapDistPct, trackPoints]);
+  }, [currentPosition.lapDistPct, trackPoints]);
+
+  // Sync with external controls
+  useEffect(() => {
+    if (externalControls?.mapBuildingState) {
+      setMapBuildingState(externalControls.mapBuildingState);
+    }
+    if (externalControls?.colorMode) {
+      setColorMode(externalControls.colorMode);
+    }
+  }, [externalControls]);
+
+  // Notify parent component of state changes
+  useEffect(() => {
+    onStateChange?.({
+      mapBuildingState,
+      colorMode
+    });
+  }, [mapBuildingState, colorMode, onStateChange]);
 
   return (
     <BaseWidget id={id} title="Track Map" className="track-map-widget">
@@ -736,27 +806,16 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
           height={300}
           className="bg-gray-800/80"
         />
-        <div className="controls mt-2 flex justify-between">
-          {mapBuildingState === 'idle' && (
-            <div className="text-sm text-gray-300">
-              Waiting for car movement near start/finish line...
-            </div>
-          )}
-          {mapBuildingState === 'recording' && (
-            <button 
-              className="btn btn-sm btn-warning"
-              onClick={stopRecording}>
-              Stop Recording
-            </button>
-          )}
-          {mapBuildingState === 'complete' && (
-            <button 
-              className="btn btn-sm btn-primary"
-              onClick={startRecording}>
-              Record New Track
-            </button>
-          )}
-        </div>
+        {mapBuildingState === 'idle' && (
+          <div className="text-sm text-gray-300 text-center mt-2">
+            Waiting for car movement near start/finish line...
+          </div>
+        )}
+        {mapBuildingState === 'recording' && (
+          <div className="text-sm text-gray-300 text-center mt-2">
+            Recording track data...
+          </div>
+        )}
       </div>
     </BaseWidget>
   );

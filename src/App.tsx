@@ -163,6 +163,32 @@ function App() {
     }
   }, [isClickThrough]);
   
+  // Add event listener for track map control updates
+  useEffect(() => {
+    const handleTrackMapControl = (e: any) => {
+      if (e.detail && e.detail.widgetId && e.detail.updates) {
+        const { widgetId, updates } = e.detail;
+        
+        // Find the widget and apply the updates
+        setWidgets(prev => prev.map(widget => {
+          if (widget.id === widgetId && widget.type === 'track-map') {
+            return {
+              ...widget,
+              externalControls: updates
+            };
+          }
+          return widget;
+        }));
+      }
+    };
+    
+    window.addEventListener('track-map:control', handleTrackMapControl);
+    
+    return () => {
+      window.removeEventListener('track-map:control', handleTrackMapControl);
+    };
+  }, []);
+  
   return (
     <div 
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
@@ -203,6 +229,14 @@ function App() {
           widgetContent = <TrackMapWidget 
             id={widget.id}
             onClose={() => handleCloseWidget(widget.id)}
+            externalControls={widget.externalControls}
+            onStateChange={(state) => {
+              // Update widgets for state tracking in the control panel
+              const stateEvent = new CustomEvent('track-map:state', {
+                detail: { widgetId: widget.id, state }
+              });
+              window.dispatchEvent(stateEvent);
+            }}
           />;
         } else {
           widgetContent = widget.content || 'Widget content';

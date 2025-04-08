@@ -23,6 +23,12 @@ interface SimpleControlPanelProps {
   activeWidgets?: any[];
 }
 
+// Define the widget state interfaces
+interface TrackMapWidgetState {
+  mapBuildingState: 'idle' | 'recording' | 'complete';
+  colorMode: 'curvature' | 'acceleration' | 'none';
+}
+
 const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({ 
   initialPosition = { x: 20, y: 20 },
   onClickThrough,
@@ -31,11 +37,72 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
 }) => {
   const [clickThrough, setClickThrough] = useState(false);
   const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
-  const [selectedWidget, setSelectedWidget] = useState<any | null>(null);
-  const [widgetOpacity, setWidgetOpacity] = useState<{ [key: string]: number }>({});
+  const [selectedWidget, setSelectedWidget] = useState<any>(null);
+  const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
+  const [trackMapWidgetStates, setTrackMapWidgetStates] = useState<Record<string, TrackMapWidgetState>>({});
   
-
-
+  // Function to close a widget - defined early to avoid reference errors
+  const closeWidget = useCallback((id: string) => {
+    console.log(`Closing widget ${id}`);
+    
+    // Since we're just passing the widget state, we need to update it locally
+    // Find the widget in the active widgets array and mark it as disabled
+    if (Array.isArray(activeWidgets)) {
+      const widgetToUpdate = activeWidgets.find(w => w.id === id);
+      if (widgetToUpdate) {
+        widgetToUpdate.enabled = false;
+        
+        // If App component passed an onClose handler, call it to update parent state
+        if (onAddWidget) {
+          // This is a hack since we don't have a dedicated onClose prop
+          // Re-add the widget with enabled=false to have App update it
+          onAddWidget({
+            ...widgetToUpdate,
+            enabled: false
+          });
+        }
+      }
+    }
+    
+    // If the closed widget was selected, clear the selection
+    if (selectedWidget?.id === id) {
+      setSelectedWidget(null);
+    }
+  }, [onAddWidget, selectedWidget, activeWidgets]);
+  
+  // Handle track map widget state changes - defined early
+  const handleTrackMapStateChange = useCallback((widgetId: string, state: TrackMapWidgetState) => {
+    setTrackMapWidgetStates(prev => ({
+      ...prev,
+      [widgetId]: state
+    }));
+  }, []);
+  
+  // Update track map widget controls
+  const updateTrackMapState = useCallback((widgetId: string, updates: Partial<TrackMapWidgetState>) => {
+    const event = new CustomEvent('track-map:control', { 
+      detail: { widgetId, updates }
+    });
+    window.dispatchEvent(event);
+  }, []);
+  
+  // Start new track recording
+  const handleStartRecording = useCallback((widgetId: string) => {
+    updateTrackMapState(widgetId, { mapBuildingState: 'idle' });
+  }, [updateTrackMapState]);
+  
+  // Stop current recording
+  const handleStopRecording = useCallback((widgetId: string) => {
+    updateTrackMapState(widgetId, { mapBuildingState: 'complete' });
+  }, [updateTrackMapState]);
+  
+  // Change visualization mode
+  const handleChangeColorMode = useCallback((widgetId: string, mode: 'curvature' | 'acceleration' | 'none') => {
+    updateTrackMapState(widgetId, { colorMode: mode });
+  }, [updateTrackMapState]);
+  
+  // Now that we've defined the necessary functions, we can create other widget functions
+  
   const addWidget = () => {
     if (!onAddWidget) return;
     
@@ -131,7 +198,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     onAddWidget(widget);
   };
 
-  const addTrackMapWidget = () => {
+  const addTrackMapWidget = useCallback(() => {
     const widgetId = `track-map-${Date.now()}`;
     const widget = {
       id: widgetId,
@@ -141,39 +208,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         <TrackMapWidget
           id={widgetId}
           onClose={() => closeWidget(widgetId)}
+          onStateChange={(state) => handleTrackMapStateChange(widgetId, state)}
         />
       )
     };
     onAddWidget(widget);
-  };
-
-  const closeWidget = (id: string) => {
-    console.log(`Closing widget ${id}`);
-    
-    // Since we're just passing the widget state, we need to update it locally
-    // Find the widget in the active widgets array and mark it as disabled
-    if (Array.isArray(activeWidgets)) {
-      const widgetToUpdate = activeWidgets.find(w => w.id === id);
-      if (widgetToUpdate) {
-        widgetToUpdate.enabled = false;
-        
-        // If App component passed an onClose handler, call it to update parent state
-        if (onAddWidget) {
-          // This is a hack since we don't have a dedicated onClose prop
-          // Re-add the widget with enabled=false to have App update it
-          onAddWidget({
-            ...widgetToUpdate,
-            enabled: false
-          });
-        }
-      }
-    }
-    
-    // If the closed widget was selected, clear the selection
-    if (selectedWidget?.id === id) {
-      setSelectedWidget(null);
-    }
-  };
+  }, [onAddWidget, closeWidget, handleTrackMapStateChange]);
 
   // Set the selected widget and highlight it
   const selectWidget = (widget: any) => {
@@ -185,6 +225,27 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     });
     window.dispatchEvent(event);
   };
+
+  // Listen for track map state changes from widgets
+  useEffect(() => {
+    const handleTrackMapState = (e: any) => {
+      if (e.detail && e.detail.widgetId && e.detail.state) {
+        const { widgetId, state } = e.detail;
+        
+        // Update the track map widget state
+        setTrackMapWidgetStates(prev => ({
+          ...prev,
+          [widgetId]: state
+        }));
+      }
+    };
+    
+    window.addEventListener('track-map:state', handleTrackMapState);
+    
+    return () => {
+      window.removeEventListener('track-map:state', handleTrackMapState);
+    };
+  }, []);
 
   // Listen for widget click events from the application
   useEffect(() => {
@@ -411,6 +472,61 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   <span className="detail-value">{selectedWidget.metric}</span>
                 </div>
               )}
+              
+              {/* Track Map Specific Controls */}
+              {selectedWidget.type === 'track-map' && trackMapWidgetStates[selectedWidget.id] && (
+                <div className="widget-controls mt-3">
+                  <div className="flex flex-col gap-2">
+                    <span className="detail-label">Track Map Controls:</span>
+                    
+                    {/* Recording Controls */}
+                    <div className="flex gap-2 mt-1">
+                      {trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'recording' ? (
+                        <button 
+                          className="btn btn-sm btn-warning"
+                          onClick={() => handleStopRecording(selectedWidget.id)}>
+                          Stop Recording
+                        </button>
+                      ) : trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'complete' ? (
+                        <button 
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleStartRecording(selectedWidget.id)}>
+                          Record New Track
+                        </button>
+                      ) : (
+                        <div className="text-xs text-gray-300">
+                          Waiting for auto-recording...
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Visualization Mode */}
+                    {trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'complete' && (
+                      <div className="mt-2">
+                        <span className="detail-label text-sm">Visualization Mode:</span>
+                        <div className="flex gap-1 mt-1">
+                          <button 
+                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'none' ? 'btn-info' : 'btn-outline'}`}
+                            onClick={() => handleChangeColorMode(selectedWidget.id, 'none')}>
+                            Sectors
+                          </button>
+                          <button 
+                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'curvature' ? 'btn-info' : 'btn-outline'}`}
+                            onClick={() => handleChangeColorMode(selectedWidget.id, 'curvature')}>
+                            Corners
+                          </button>
+                          <button 
+                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'acceleration' ? 'btn-info' : 'btn-outline'}`}
+                            onClick={() => handleChangeColorMode(selectedWidget.id, 'acceleration')}>
+                            Accel/Brake
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
               <div className="widget-detail">
                 <span className="detail-label">Opacity:</span>
                 <div className="pl-2">
