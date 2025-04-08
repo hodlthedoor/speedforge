@@ -135,77 +135,59 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       newX = 0;
       newY = 0;
     }
-    // If we have a previous point, calculate new position
+    // If we have a previous point, calculate new position using a simpler approach
     else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
-      // Get the last position and current heading
+      // Get the last position
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
       
-      // Get heading from the previous points
+      // Calculate heading - simplified to use mainly lap_dist_pct as the primary source of truth
       let heading = 0;
       
-      // Calculate heading based on lap distance percentage rather than using the exact position
-      // This helps maintain accuracy over long distances
-      if (trackPointsRef.current.length >= 5) {
-        // Use a few back points for a more stable heading calculation
-        const prevPoints = trackPointsRef.current.slice(-5);
-        const avgDx = prevPoints.reduce((sum, p, i, arr) => {
-          if (i === 0) return sum;
-          return sum + (p.x - arr[i-1].x);
-        }, 0) / (prevPoints.length - 1);
-        
-        const avgDy = prevPoints.reduce((sum, p, i, arr) => {
-          if (i === 0) return sum;
-          return sum + (p.y - arr[i-1].y);
-        }, 0) / (prevPoints.length - 1);
-        
-        heading = Math.atan2(avgDy, avgDx);
-      } else if (trackPointsRef.current.length >= 2) {
-        // Fallback for when we don't have enough points yet
+      // For the very beginning, establish an initial heading eastward (0 degrees)
+      if (trackPointsRef.current.length === 1) {
+        heading = 0; // Start heading east (positive X axis)
+      }
+      // Otherwise, get heading from previous movement
+      else if (trackPointsRef.current.length >= 2) {
         const prevPoint = trackPointsRef.current[trackPointsRef.current.length - 2];
         const dx = lastPositionRef.current.x - prevPoint.x;
         const dy = lastPositionRef.current.y - prevPoint.y;
-        heading = Math.atan2(dy, dx);
+        
+        // Use previous movement direction as base heading
+        if (dx !== 0 || dy !== 0) {
+          heading = Math.atan2(dy, dx);
+        }
       }
       
-      // Apply a smaller yaw rate influence
-      // Reduced from full influence to 25% to prevent accumulated errors
-      heading += (yawRate * Math.PI / 180) * timeDelta * 0.25;
+      // Apply a very small yaw rate influence - just enough to indicate direction changes
+      // but not enough to cause spiraling
+      const yawInfluence = 0.05; // Reduced from 0.1 to 0.05
+      heading += (yawRate * Math.PI / 180) * timeDelta * yawInfluence;
       
-      // Calculate distance traveled
+      // Distance traveled in this step
       const distance = velocity * timeDelta;
       
-      // Apply accelerations to update position
-      // First, move in the heading direction
-      let nextX = lastX + distance * Math.cos(heading);
-      let nextY = lastY + distance * Math.sin(heading);
+      // Simple movement in the heading direction, with minimal lateral offset
+      newX = lastX + distance * Math.cos(heading);
+      newY = lastY + distance * Math.sin(heading);
       
-      // Then apply lateral acceleration (perpendicular to heading)
-      // This creates the proper cornering effect
-      const lateralFactor = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel), 10) / 10;
-      nextX += distance * lateralFactor * -Math.sin(heading);
-      nextY += distance * lateralFactor * Math.cos(heading);
-      
-      // Apply longitudinal acceleration (along heading)
-      // This creates proper acceleration/braking effect
-      const longFactor = Math.sign(longitudinalAccel) * Math.min(Math.abs(longitudinalAccel), 10) / 20;
-      nextX += distance * longFactor * Math.cos(heading);
-      nextY += distance * longFactor * Math.sin(heading);
-      
-      // Update positions
-      newX = nextX;
-      newY = nextY;
+      // Apply a very small lateral acceleration effect (reduced significantly)
+      // This is just enough to show the track shape without distorting it
+      const lateralFactor = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel), 5) / 50; // Reduced from 1/30 to 1/50
+      newX += distance * lateralFactor * -Math.sin(heading);
+      newY += distance * lateralFactor * Math.cos(heading);
       
       // Force track to close as we near completion of the lap
       // This helps ensure the track properly connects back to the start
       if (trackPointsRef.current.length > 20) {
-        // If we're near the end of the lap (over 95%) and started near the beginning,
+        // If we're near the end of the lap (over 98%) and started near the beginning,
         // start gradually pulling the track toward the starting point
-        if (lapDistPct > 0.95 && startLapDistPctRef.current < 0.05) {
+        if (lapDistPct > 0.98 && startLapDistPctRef.current < 0.02) {
           const firstPoint = trackPointsRef.current[0];
-          const closingFactor = (lapDistPct - 0.95) / 0.05; // 0 at 95%, 1 at 100%
+          const closingFactor = (lapDistPct - 0.98) / 0.02; // 0 at 98%, 1 at 100%
           
           // Pull toward the first point with increasing strength
           newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
@@ -232,9 +214,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       // For tracks where start position is near 0: we went from high pct to low pct
       // For tracks where start position is elsewhere: we're back to the same pct
       const completedLap = 
-        (lapStartPosition < 0.05 && lapDistPct > 0.95 && lastPositionRef.current?.lapDistPct < 0.05) || 
-        (Math.abs(lapDistPct - lapStartPosition) < 0.02 && 
-         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.01);
+        (lapStartPosition < 0.02 && lapDistPct > 0.98 && lastPositionRef.current?.lapDistPct < 0.02) || 
+        (Math.abs(lapDistPct - lapStartPosition) < 0.01 && 
+         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.005);
          
       if (completedLap) {
         stopRecording();
@@ -268,33 +250,37 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const lastPoint = points[points.length - 1];
     
     // If the track doesn't naturally close, add a final connecting point
-    if (Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2)) > 5) {
+    if (Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2)) > 2) {
       points.push({
         ...firstPoint,
         lapDistPct: 1.0
       });
     }
     
-    // Then smooth the track using a simple moving average to reduce noise
+    // Apply light smoothing to reduce noise while preserving track shape
     const smoothedPoints: TrackPoint[] = [];
-    const windowSize = 3;
+    const windowSize = 3; // Reduced from 5 to 3 for less aggressive smoothing
     
     for (let i = 0; i < points.length; i++) {
       let sumX = 0;
       let sumY = 0;
-      let count = 0;
+      let weightSum = 0;
       
-      // Average the current point with nearby points
+      // Use weighted moving average, giving more weight to closer points
       for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
-        sumX += points[j].x;
-        sumY += points[j].y;
-        count++;
+        // Calculate distance-based weight (closer points have higher weight)
+        const distance = Math.abs(i - j);
+        const weight = distance === 0 ? 3 : 1 / (distance + 0.5); // More weight on the current point
+        
+        sumX += points[j].x * weight;
+        sumY += points[j].y * weight;
+        weightSum += weight;
       }
       
       smoothedPoints.push({
         ...points[i],
-        x: sumX / count,
-        y: sumY / count
+        x: sumX / weightSum,
+        y: sumY / weightSum
       });
     }
     
