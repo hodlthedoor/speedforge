@@ -29,6 +29,10 @@ export interface TelemetryData {
   g_force_lon?: number;
   car_slip_angle_deg?: number;
   
+  // Track Position
+  lap_dist_pct?: number;
+  lap_dist?: number;
+  
   // Timing
   current_lap_time?: number;
   last_lap_time?: number;
@@ -214,6 +218,10 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'position':
     case 'lap_completed':
       return `${value}`;
+    case 'lap_dist':
+      return `${value.toFixed(1)}m`;
+    case 'lap_dist_pct':
+      return `${(value * 100).toFixed(1)}%`;
     default:
       return `${value}`;
   }
@@ -242,7 +250,9 @@ export function getMetricName(metric: string): string {
     'best_lap_time': 'Best Lap',
     'position': 'Position',
     'lap_completed': 'Lap',
-    'shift_indicator_pct': 'Shift Indicator'
+    'shift_indicator_pct': 'Shift Indicator',
+    'lap_dist': 'Lap Distance',
+    'lap_dist_pct': 'Track Position'
   };
   
   return metricNames[metric] || metric;

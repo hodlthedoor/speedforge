@@ -33,6 +33,10 @@ pub struct TelemetryData {
     pub g_force_lon: f32,
     pub car_slip_angle_deg: f32,
     
+    // Track Position
+    pub lap_dist_pct: f32,
+    pub lap_dist: f32,
+    
     // Timing
     pub current_lap_time: f32,
     pub last_lap_time: f32,
@@ -205,6 +209,10 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     if vx.abs() > 0.1 {
         data.car_slip_angle_deg = (vy / vx).atan() * 180.0 / PI;
     }
+    
+    // Track Position
+    data.lap_dist_pct = TryInto::<f32>::try_into(telem.get("LapDistPct").unwrap_or(Value::FLOAT(0.0))).unwrap();
+    data.lap_dist = TryInto::<f32>::try_into(telem.get("LapDist").unwrap_or(Value::FLOAT(0.0))).unwrap();
     
     // Timing
     data.current_lap_time = TryInto::<f32>::try_into(telem.get("LapCurrentLapTime").unwrap_or(Value::FLOAT(0.0))).unwrap();
@@ -380,8 +388,20 @@ pub fn format_telemetry_display(data: &TelemetryData) -> String {
     display.push_str(&format!("Vertical Accel: {:.2}m/s²\n", data.vertical_accel_ms2));
     display.push_str(&format!("G-Force: Lon:{:.2}G Lat:{:.2}G\n", data.g_force_lon, data.g_force_lat));
     
-    if data.car_slip_angle_deg != 0.0 {
+    if data.car_slip_angle_deg.abs() > 0.01 {
         display.push_str(&format!("Car Slip Angle: {:.2}°\n", data.car_slip_angle_deg));
+    }
+    
+    // Add track position display
+    display.push_str("\n=== TRACK POSITION ===\n");
+    display.push_str(&format!("Lap Distance: {:.1}m\n", data.lap_dist));
+    display.push_str(&format!("Track Position: {:.1}%\n", data.lap_dist_pct * 100.0));
+    
+    // Add location data display
+    if data.lat != 0.0 || data.lon != 0.0 {
+        display.push_str("\n=== LOCATION ===\n");
+        display.push_str(&format!("Latitude: {:.6}\n", data.lat));
+        display.push_str(&format!("Longitude: {:.6}\n", data.lon));
     }
     
     // Timing

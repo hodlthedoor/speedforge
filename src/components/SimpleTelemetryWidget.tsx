@@ -27,7 +27,9 @@ const availableMetrics = [
   { id: 'last_lap_time', name: 'Last Lap' },
   { id: 'best_lap_time', name: 'Best Lap' },
   { id: 'position', name: 'Position' },
-  { id: 'lap_completed', name: 'Lap' }
+  { id: 'lap_completed', name: 'Lap' },
+  { id: 'lap_dist', name: 'Lap Distance' },
+  { id: 'lap_dist_pct', name: 'Track Position' }
 ];
 
 export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({ 
