@@ -9,6 +9,7 @@ interface BaseWidgetProps {
   className?: string;
   opacity?: number;
   children: React.ReactNode;
+  onClose?: () => void;
 }
 
 const BaseWidget: React.FC<BaseWidgetProps> = ({
@@ -17,7 +18,8 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
   initialPosition = { x: 100, y: 100 },
   className = '',
   opacity = 1,
-  children
+  children,
+  onClose
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

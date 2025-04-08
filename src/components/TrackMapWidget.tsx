@@ -329,32 +329,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
 
   const renderControls = () => (
     <div className="track-map-controls flex space-x-2 mt-2">
-      {mapBuildingState === 'idle' && (
-        <button className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 rounded" onClick={startRecording}>
-          Start Recording
-        </button>
-      )}
-      {mapBuildingState === 'recording' && (
-        <button className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded" onClick={stopRecording}>
-          Stop Recording
-        </button>
-      )}
-      {mapBuildingState === 'complete' && (
-        <button className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded" onClick={startRecording}>
-          Re-record Track
-        </button>
-      )}
-      {mapBuildingState === 'complete' && (
-        <select
-          className="px-2 py-1 text-xs bg-gray-700 rounded"
-          value={colorMode}
-          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
-        >
-          <option value="none">Default Color</option>
-          <option value="curvature">Color by Curvature</option>
-          <option value="acceleration">Color by Acceleration</option>
-        </select>
-      )}
+      {/* Controls removed */}
     </div>
   );
 
@@ -367,22 +342,6 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           height="300"
           className="bg-gray-800/80 rounded"
         />
-        {renderControls()}
-        {mapBuildingState === 'idle' && (
-          <div className="text-sm text-gray-300 text-center mt-2">
-            Drive near start/finish line to begin mapping
-          </div>
-        )}
-        {mapBuildingState === 'recording' && (
-          <div className="text-sm text-gray-300 text-center mt-2">
-            Recording track data - Complete a lap to finish
-          </div>
-        )}
-        {mapBuildingState === 'complete' && trackPoints.length > 0 && (
-          <div className="text-sm text-gray-300 text-center mt-2">
-            Track map complete with {trackPoints.length} points
-          </div>
-        )}
       </div>
     </BaseWidget>
   );
