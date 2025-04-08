@@ -135,7 +135,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       newX = 0;
       newY = 0;
     }
-    // If we have a previous point, calculate new position using a simpler approach
+    // Use inertia-based model for track points
     else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
@@ -143,51 +143,79 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
       
-      // Calculate heading - simplified to use mainly lap_dist_pct as the primary source of truth
+      // Use a completely different approach:
+      // 1. Primarily rely on the lap_dist_pct for track shape
+      // 2. Use minimal turning input from vehicle
+      
+      // Extract direction of movement from previous points
       let heading = 0;
       
-      // For the very beginning, establish an initial heading eastward (0 degrees)
+      // For the very beginning, establish an initial heading eastward
       if (trackPointsRef.current.length === 1) {
         heading = 0; // Start heading east (positive X axis)
-      }
+      } 
       // Otherwise, get heading from previous movement
       else if (trackPointsRef.current.length >= 2) {
-        const prevPoint = trackPointsRef.current[trackPointsRef.current.length - 2];
-        const dx = lastPositionRef.current.x - prevPoint.x;
-        const dy = lastPositionRef.current.y - prevPoint.y;
+        // Use last 3 points for a more stable heading (if available)
+        const numPointsToUse = Math.min(3, trackPointsRef.current.length - 1);
+        const startIdx = trackPointsRef.current.length - 1 - numPointsToUse;
         
-        // Use previous movement direction as base heading
-        if (dx !== 0 || dy !== 0) {
-          heading = Math.atan2(dy, dx);
+        // Average the heading over the last few points
+        let sumDx = 0;
+        let sumDy = 0;
+        
+        for (let i = startIdx; i < trackPointsRef.current.length - 1; i++) {
+          const p1 = trackPointsRef.current[i];
+          const p2 = trackPointsRef.current[i + 1];
+          sumDx += p2.x - p1.x;
+          sumDy += p2.y - p1.y;
+        }
+        
+        // Use the average heading
+        if (sumDx !== 0 || sumDy !== 0) {
+          heading = Math.atan2(sumDy, sumDx);
         }
       }
       
-      // Apply a very small yaw rate influence - just enough to indicate direction changes
-      // but not enough to cause spiraling
-      const yawInfluence = 0.05; // Reduced from 0.1 to 0.05
+      // EXTREMELY minimal yaw influence - just enough to indicate turning
+      // This prevents spiral artifacts entirely
+      const yawInfluence = Math.min(0.02, 1 / (velocity + 1)); // Even less influence at higher speeds
       heading += (yawRate * Math.PI / 180) * timeDelta * yawInfluence;
       
-      // Distance traveled in this step
+      // Base movement is just in the heading direction, scaled by velocity
+      // This is the primary shape driver - simply moving forward at the current speed
       const distance = velocity * timeDelta;
-      
-      // Simple movement in the heading direction, with minimal lateral offset
       newX = lastX + distance * Math.cos(heading);
       newY = lastY + distance * Math.sin(heading);
       
-      // Apply a very small lateral acceleration effect (reduced significantly)
-      // This is just enough to show the track shape without distorting it
-      const lateralFactor = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel), 5) / 50; // Reduced from 1/30 to 1/50
-      newX += distance * lateralFactor * -Math.sin(heading);
-      newY += distance * lateralFactor * Math.cos(heading);
+      // Add minimal lateral adjustment to hint at track curvature without distorting
+      // Use the actual change in lap_dist_pct to decide how much to curve the track
+      if (trackPointsRef.current.length > 5) {
+        const lapDistDelta = Math.abs(lapDistPct - lastPositionRef.current.lapDistPct);
+        
+        // Only apply this correction when moving significantly around the track
+        // This helps avoid artifacts when the car is stationary or moving very slowly
+        if (lapDistDelta > 0.001) {
+          // Scale factor based on how far along track we've moved (keeps corners proportional)
+          const cornerFactor = 0.0005 / Math.max(0.001, lapDistDelta);
+          
+          // Minimal lateral influence, capped to prevent extreme values
+          const maxLateralInfluence = 0.5;
+          const lateralInfluence = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel) / 20, maxLateralInfluence);
+          
+          // Apply a very small perpendicular adjustment based on lateral acceleration
+          newX += distance * lateralInfluence * -Math.sin(heading) * cornerFactor;
+          newY += distance * lateralInfluence * Math.cos(heading) * cornerFactor;
+        }
+      }
       
-      // Force track to close as we near completion of the lap
-      // This helps ensure the track properly connects back to the start
+      // Force track to close as we near completion of the lap (only when we're near the start)
       if (trackPointsRef.current.length > 20) {
-        // If we're near the end of the lap (over 98%) and started near the beginning,
+        // If we're near the end of the lap (over 99%) and started near the beginning,
         // start gradually pulling the track toward the starting point
-        if (lapDistPct > 0.98 && startLapDistPctRef.current < 0.02) {
+        if (lapDistPct > 0.99 && startLapDistPctRef.current < 0.01) {
           const firstPoint = trackPointsRef.current[0];
-          const closingFactor = (lapDistPct - 0.98) / 0.02; // 0 at 98%, 1 at 100%
+          const closingFactor = (lapDistPct - 0.99) / 0.01; // 0 at 99%, 1 at 100%
           
           // Pull toward the first point with increasing strength
           newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
@@ -214,9 +242,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       // For tracks where start position is near 0: we went from high pct to low pct
       // For tracks where start position is elsewhere: we're back to the same pct
       const completedLap = 
-        (lapStartPosition < 0.02 && lapDistPct > 0.98 && lastPositionRef.current?.lapDistPct < 0.02) || 
-        (Math.abs(lapDistPct - lapStartPosition) < 0.01 && 
-         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.005);
+        (lapStartPosition < 0.01 && lapDistPct > 0.99 && lastPositionRef.current?.lapDistPct < 0.01) || 
+        (Math.abs(lapDistPct - lapStartPosition) < 0.005 && 
+         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.003);
          
       if (completedLap) {
         stopRecording();
@@ -257,30 +285,30 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       });
     }
     
-    // Apply light smoothing to reduce noise while preserving track shape
+    // Apply extremely lightweight smoothing
     const smoothedPoints: TrackPoint[] = [];
-    const windowSize = 3; // Reduced from 5 to 3 for less aggressive smoothing
+    const windowSize = 2; // Minimal smoothing window - just enough to remove jitter
     
     for (let i = 0; i < points.length; i++) {
-      let sumX = 0;
-      let sumY = 0;
-      let weightSum = 0;
+      // Simple box filter - just average with adjacent points
+      let sumX = points[i].x;
+      let sumY = points[i].y;
+      let count = 1;
       
-      // Use weighted moving average, giving more weight to closer points
       for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
-        // Calculate distance-based weight (closer points have higher weight)
-        const distance = Math.abs(i - j);
-        const weight = distance === 0 ? 3 : 1 / (distance + 0.5); // More weight on the current point
-        
-        sumX += points[j].x * weight;
-        sumY += points[j].y * weight;
-        weightSum += weight;
+        if (j !== i) {
+          // Use a rapidly decreasing weight for further points
+          const weight = 0.5 / (Math.abs(i - j));
+          sumX += points[j].x * weight;
+          sumY += points[j].y * weight;
+          count += weight;
+        }
       }
       
       smoothedPoints.push({
         ...points[i],
-        x: sumX / weightSum,
-        y: sumY / weightSum
+        x: sumX / count,
+        y: sumY / count
       });
     }
     
