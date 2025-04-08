@@ -22,14 +22,13 @@ interface TrackPoint {
   lapDistPct: number;
   curvature?: number;
   longitudinalAccel?: number;
-  heading?: number;  // Car's heading in radians
+  heading?: number;
 }
 
 interface TrackPosition {
   lapDistPct: number;
 }
 
-// Map building state
 type MapBuildingState = 'idle' | 'recording' | 'complete';
 
 const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ 
@@ -38,19 +37,20 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   onStateChange,
   externalControls 
 }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
-  const trackPointsRef = useRef<TrackPoint[]>([]);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const lastPositionRef = useRef<TrackPoint | null>(null);
+  const trackPointsRef = useRef<TrackPoint[]>([]);
+  const mapCompleteRef = useRef<boolean>(false);
+  const startLapDistPctRef = useRef<number>(-1);
+  const lastTimeRef = useRef<number | null>(null);
+
+  const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
   const [currentPosition, setCurrentPosition] = useState<TrackPosition>({ lapDistPct: 0 });
-  const mapCompleteRef = useRef<boolean>(false);
-  const startLapDistPctRef = useRef<number>(-1); // Reference to track starting position
   const [colorMode, setColorMode] = useState<'curvature' | 'acceleration' | 'none'>('none');
   const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
-  
-  // Use telemetry data with relevant metrics for track mapping
+
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: [
       'lateral_accel_ms2', 
@@ -61,765 +61,326 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       'yaw_rate_deg_s',
       'VelocityX',
       'VelocityY',
-      'VelocityZ',
-      'VelocityX_ST',
-      'VelocityY_ST',
-      'VelocityZ_ST'
+      'VelocityZ'
     ],
     throttleUpdates: true,
     updateInterval: 50
   });
 
-  // Auto-start recording when conditions are met
+  useEffect(() => {
+    return () => {
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'idle') return;
-
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
-    
-    // Auto-start recording when:
-    // 1. Car is moving reasonably fast (above 10 m/s or ~36 km/h)
-    // 2. We're near the start/finish line (within 5% of 0.0 or 1.0)
-    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95)) {
-      console.log('Auto-starting track recording');
-      startRecording();
-    }
+    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95)) startRecording();
   }, [telemetryData, mapBuildingState]);
 
-  // Start recording track data
   const startRecording = useCallback(() => {
     trackPointsRef.current = [];
     setTrackPoints([]);
     lastPositionRef.current = null;
     mapCompleteRef.current = false;
-    
-    // Store the starting lap distance percentage
-    const currentLapDistPct = telemetryData?.lap_dist_pct || 0;
-    startLapDistPctRef.current = currentLapDistPct;
-    
+    lastTimeRef.current = null;
+    startLapDistPctRef.current = telemetryData?.lap_dist_pct || 0;
     setMapBuildingState('recording');
-    console.log('Started recording track map data');
   }, [telemetryData]);
 
-  // Stop recording and finalize track
   const stopRecording = useCallback(() => {
     setMapBuildingState('complete');
     mapCompleteRef.current = true;
-    
-    // Normalize the track to close the loop
     if (trackPointsRef.current.length > 10) {
       const normalizedTrack = normalizeTrack([...trackPointsRef.current]);
       setTrackPoints(normalizedTrack);
-      console.log(`Track map completed with ${normalizedTrack.length} points`);
     }
   }, []);
 
-  // Process telemetry data to build track map using velocity vectors
+  const normalizeTrack = useCallback((points: TrackPoint[]): TrackPoint[] => {
+    if (points.length < 10) return points;
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const distToClose = Math.sqrt((lastPoint.x - firstPoint.x)**2 + (lastPoint.y - firstPoint.y)**2);
+    if (distToClose > 2) {
+      points.push({ ...firstPoint, lapDistPct: 1.0 });
+    }
+    const smoothedPoints: TrackPoint[] = [];
+    const windowSize = 2;
+    for (let i = 0; i < points.length; i++) {
+      const neighbors: TrackPoint[] = [];
+      for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
+        if (j !== i) neighbors.push(points[j]);
+      }
+      if (neighbors.length > 0) {
+        const avgX = neighbors.reduce((sum, p) => sum + p.x, 0) / neighbors.length;
+        const avgY = neighbors.reduce((sum, p) => sum + p.y, 0) / neighbors.length;
+        const dist = Math.sqrt((points[i].x - avgX)**2 + (points[i].y - avgY)**2);
+        const distThreshold = 5;
+        if (dist > distThreshold) {
+          smoothedPoints.push({
+            ...points[i],
+            x: points[i].x * 0.7 + avgX * 0.3,
+            y: points[i].y * 0.7 + avgY * 0.3
+          });
+        } else {
+          smoothedPoints.push(points[i]);
+        }
+      } else {
+        smoothedPoints.push(points[i]);
+      }
+    }
+    const xVals = smoothedPoints.map(p => p.x);
+    const yVals = smoothedPoints.map(p => p.y);
+    const minX = Math.min(...xVals);
+    const maxX = Math.max(...xVals);
+    const minY = Math.min(...yVals);
+    const maxY = Math.max(...yVals);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    return smoothedPoints.map(p => ({ ...p, x: p.x - centerX, y: p.y - centerY }));
+  }, []);
+
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'recording') return;
-
+    const now = performance.now();
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     const velocity = telemetryData.velocity_ms || 0;
     const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
     const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
-    
-    // Get velocity vectors from car's local coordinate system
-    // VelocityX = forward/backward (main direction of travel)
-    // VelocityY = left/right (side movement during turning)
-    const velForward = telemetryData.VelocityX || 0;  // Car's forward axis
-    const velSide = telemetryData.VelocityY || 0;     // Car's sideways axis
-    
-    // Skip if velocity is too low (car is nearly stationary)
+    const velForward = telemetryData.VelocityX || 0;
+    const velSide = telemetryData.VelocityY || 0;
     if (velocity < 5) return;
-    
-    // Calculate curvature (when speed is significant)
+    let timeDelta = 0.05;
+    if (lastTimeRef.current !== null) {
+      timeDelta = (now - lastTimeRef.current) / 1000;
+      if (timeDelta > 0.2) timeDelta = 0.05;
+    }
+    lastTimeRef.current = now;
     let curvature = 0;
-    if (velocity > 10) {
-      curvature = lateralAccel / (velocity * velocity);
-    }
-    
-    // Create new point - initially with relative positioning
-    let newX = 0;
-    let newY = 0;
-    
-    // If first point, set it at origin
+    if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
+    let newX = 0, newY = 0, currentHeading = 0;
     if (trackPointsRef.current.length === 0) {
-      newX = 0;
-      newY = 0;
-    }
-    // Use velocity vectors to calculate position changes
-    else if (lastPositionRef.current) {
-      const timeDelta = 0.05; // Based on update interval of 50ms
-      
-      // Get the last position and heading
+      newX = 0; newY = 0; currentHeading = 0;
+    } else if (lastPositionRef.current) {
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
-      
-      // Use Yaw rate to track car's heading over time
       const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
-      const yawRateRadSec = yawRateDegSec * Math.PI / 180;
-      const headingChange = yawRateRadSec * timeDelta;
-      
-      // Get or initialize car heading
-      let currentHeading = 0;
-      
-      // For first point, use arbitrary initial heading (east)
-      if (trackPointsRef.current.length === 1) {
-        currentHeading = 0; // Start heading east (positive X axis)
-      } 
-      // For subsequent points, use the stored heading from previous step
-      else if (lastPositionRef.current.heading !== undefined) {
-        currentHeading = lastPositionRef.current.heading;
-      }
-      
-      // Update heading based on yaw rate
-      currentHeading += headingChange;
-      
-      // Transform car's local velocity to world coordinates using car's heading
-      // Forward velocity component (VelocityX) along car's heading
-      // Side velocity component (VelocityY) perpendicular to car's heading
+      const yawRateRadSec = (yawRateDegSec * Math.PI) / 180;
+      currentHeading = lastPositionRef.current.heading || 0;
+      currentHeading += yawRateRadSec * timeDelta;
       const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
       const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
-      
-      // Update position in world coordinates
       newX = lastX + worldDx;
       newY = lastY + worldDy;
-      
-      // Force track to close as we near completion of the lap (only when we're near the start)
       if (trackPointsRef.current.length > 20) {
-        // If we're near the end of the lap (over 99%) and started near the beginning,
-        // start gradually pulling the track toward the starting point
-        if (lapDistPct > 0.99 && startLapDistPctRef.current < 0.01) {
+        const distFromStart = Math.min(
+          Math.abs(lapDistPct - startLapDistPctRef.current),
+          Math.abs(lapDistPct - startLapDistPctRef.current + 1),
+          Math.abs(lapDistPct - startLapDistPctRef.current - 1)
+        );
+        if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
           const firstPoint = trackPointsRef.current[0];
-          const closingFactor = (lapDistPct - 0.99) / 0.01; // 0 at 99%, 1 at 100%
-          
-          // Pull toward the first point with increasing strength
-          newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
-          newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+          const distX = newX - firstPoint.x;
+          const distY = newY - firstPoint.y;
+          const dist = Math.sqrt(distX * distX + distY * distY);
+          if (dist < 50) {
+            const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
+            newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
+            newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+          }
         }
       }
-      
-      // Create new track point, now including heading for future calculations
-      const newPoint: TrackPoint = {
-        x: newX,
-        y: newY,
-        lapDistPct: lapDistPct,
-        curvature: curvature,
-        longitudinalAccel: longitudinalAccel,
-        heading: currentHeading // Store heading for next point calculation
-      };
-      
-      // Update point
-      trackPointsRef.current = [...trackPointsRef.current, newPoint];
-      lastPositionRef.current = newPoint;
     }
-    else {
-      // Create initial track point at origin
-      const newPoint: TrackPoint = {
-        x: 0,
-        y: 0,
-        lapDistPct: lapDistPct,
-        curvature: curvature,
-        longitudinalAccel: longitudinalAccel,
-        heading: 0 // Initial heading (east)
-      };
-      
-      // Update reference without causing a state update
-      trackPointsRef.current = [...trackPointsRef.current, newPoint];
-      lastPositionRef.current = newPoint;
-    }
-    
-    // Detect if we've completed a lap (only after collecting some points)
+    const newPoint: TrackPoint = {
+      x: newX,
+      y: newY,
+      lapDistPct,
+      curvature,
+      longitudinalAccel,
+      heading: currentHeading
+    };
+    trackPointsRef.current = [...trackPointsRef.current, newPoint];
+    lastPositionRef.current = newPoint;
     if (trackPointsRef.current.length > 20) {
-      // Use stored start position for comparison to detect a complete lap
-      const lapStartPosition = startLapDistPctRef.current;
-      
-      // If we've completed a full lap (crossed start line)
-      // For tracks where start position is near 0: we went from high pct to low pct
-      // For tracks where start position is elsewhere: we're back to the same pct
-      const completedLap = 
-        (lapStartPosition < 0.01 && lapDistPct > 0.99 && lastPositionRef.current?.lapDistPct < 0.01) || 
-        (Math.abs(lapDistPct - lapStartPosition) < 0.005 && 
-         Math.abs(lapDistPct - lastPositionRef.current?.lapDistPct) > 0.003);
-         
+      const lapStart = startLapDistPctRef.current;
+      let completedLap = false;
+      if (lastPositionRef.current) {
+        completedLap = (
+          (lapStart < 0.05 && lapDistPct < 0.05 && lastPositionRef.current.lapDistPct > 0.95) ||
+          (lapStart > 0.95 && lapDistPct > 0.95 && lastPositionRef.current.lapDistPct < 0.05) ||
+          (Math.abs(lapDistPct - lapStart) < 0.01 && 
+           Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) > 0.01)
+        );
+      }
       if (completedLap) {
         stopRecording();
         return;
       }
     }
-    
-    // Only update state when we need to redraw
     if (!animationFrameId.current) {
       animationFrameId.current = requestAnimationFrame(() => {
         setTrackPoints([...trackPointsRef.current]);
         animationFrameId.current = null;
       });
     }
-    
-    // Always update current position for the car marker
     setCurrentPosition({ lapDistPct });
-    
   }, [telemetryData, mapBuildingState, stopRecording]);
 
-  // Normalize track to create a closed loop
-  const normalizeTrack = (points: TrackPoint[]): TrackPoint[] => {
-    if (points.length < 10) return points;
-    
-    // First, ensure the track is properly closed
-    const firstPoint = points[0];
-    const lastPoint = points[points.length - 1];
-    
-    // If the track doesn't naturally close, add a final connecting point
-    if (Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2)) > 2) {
-      points.push({
-        ...firstPoint,
-        lapDistPct: 1.0
-      });
-    }
-    
-    // Apply minimal smoothing to preserve track details
-    const smoothedPoints: TrackPoint[] = [];
-    const windowSize = 1; // Reduced from 2 to 1 for less smoothing
-    
-    for (let i = 0; i < points.length; i++) {
-      // Simple box filter but with very minimal smoothing
-      let sumX = points[i].x * 2; // Give current point twice the weight
-      let sumY = points[i].y * 2;
-      let count = 2; // Start with count of 2 due to doubled weight
-      
-      for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
-        if (j !== i) {
-          // Very minimal influence from adjacent points
-          const weight = 0.3 / (Math.abs(i - j)); // Reduced from 0.5 to 0.3
-          sumX += points[j].x * weight;
-          sumY += points[j].y * weight;
-          count += weight;
-        }
-      }
-      
-      smoothedPoints.push({
-        ...points[i],
-        x: sumX / count,
-        y: sumY / count
-      });
-    }
-    
-    // Adjust coordinates to center the track and ensure it closes
-    const minX = Math.min(...smoothedPoints.map(p => p.x));
-    const maxX = Math.max(...smoothedPoints.map(p => p.x));
-    const minY = Math.min(...smoothedPoints.map(p => p.y));
-    const maxY = Math.max(...smoothedPoints.map(p => p.y));
-    
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    
-    // Normalize points around center
-    return smoothedPoints.map(point => ({
-      ...point,
-      x: point.x - centerX,
-      y: point.y - centerY
-    }));
-  };
-
-  // Track current position when map is complete
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'complete') return;
     setCurrentPosition({ lapDistPct: telemetryData.lap_dist_pct || 0 });
   }, [telemetryData, mapBuildingState]);
 
-  // D3 drawing logic
-  const updateChart = useCallback(() => {
+  const renderTrackMap = useCallback(() => {
     if (!svgRef.current) return;
-
     const svg = d3.select(svgRef.current);
-    const width = 400;
-    const height = 300;
-    const margin = { top: 10, right: 10, bottom: 10, left: 10 };
-
-    // Clear previous content
+    const width = svgRef.current.clientWidth || 400;
+    const height = svgRef.current.clientHeight || 300;
     svg.selectAll('*').remove();
-    
-    // Create a group for the track
-    const trackGroup = svg.append('g');
-    
-    // Draw track if we have points
-    if (trackPoints.length > 5) {
-      // Scale track to fit in the SVG
-      const xValues = trackPoints.map(p => p.x);
-      const yValues = trackPoints.map(p => p.y);
-      
-      const xExtent = d3.extent(xValues) as [number, number];
-      const yExtent = d3.extent(yValues) as [number, number];
-      
-      // Calculate scale to maintain aspect ratio
-      const xRange = xExtent[1] - xExtent[0];
-      const yRange = yExtent[1] - yExtent[0];
-      const scale = Math.min(
-        (width - margin.left - margin.right) / xRange,
-        (height - margin.top - margin.bottom) / yRange
-      ) * 0.9; // 10% padding
-      
-      // Center the track in the available space
-      const centerX = (width - margin.left - margin.right) / 2 + margin.left;
-      const centerY = (height - margin.top - margin.bottom) / 2 + margin.top;
-      
-      // Create custom scales that maintain aspect ratio
-      const xScale = (x: number) => centerX + (x - (xExtent[0] + xExtent[1]) / 2) * scale;
-      const yScale = (y: number) => centerY + (y - (yExtent[0] + yExtent[1]) / 2) * scale;
-      
-      // Create line generator with proper interpolation for smooth curves
-      const line = d3.line<TrackPoint>()
-        .x(d => xScale(d.x))
-        .y(d => yScale(d.y))
-        .curve(d3.curveCatmullRom.alpha(0.3)); // Less aggressive smoothing
-      
-      // Draw track sectors
-      // Sector 1: 0-33%, Sector 2: 33-66%, Sector 3: 66-100%
-      const sector1Points = trackPoints.filter(p => p.lapDistPct >= 0 && p.lapDistPct < 0.33);
-      const sector2Points = trackPoints.filter(p => p.lapDistPct >= 0.33 && p.lapDistPct < 0.66);
-      const sector3Points = trackPoints.filter(p => p.lapDistPct >= 0.66 && p.lapDistPct <= 1);
-      
-      if (sector1Points.length > 0) {
-        trackGroup.append('path')
-          .datum(sector1Points)
-          .attr('fill', 'none')
-          .attr('stroke', '#4CAF50') // Green
-          .attr('stroke-width', 3)
-          .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round')
-          .attr('d', line);
-      }
-      
-      if (sector2Points.length > 0) {
-        trackGroup.append('path')
-          .datum(sector2Points)
-          .attr('fill', 'none')
-          .attr('stroke', '#FFEB3B') // Yellow
-          .attr('stroke-width', 3)
-          .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round')
-          .attr('d', line);
-      }
-      
-      if (sector3Points.length > 0) {
-        trackGroup.append('path')
-          .datum(sector3Points)
-          .attr('fill', 'none')
-          .attr('stroke', '#F44336') // Red
-          .attr('stroke-width', 3)
-          .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round')
-          .attr('d', line);
-      }
-      
-      // Highlight high lateral G corners with glowing markers
-      const highGPoints = trackPoints.filter(p => p.curvature && Math.abs(p.curvature) > 0.01);
-      highGPoints.forEach(point => {
-        const cornerMagnitude = Math.min(1, Math.abs(point.curvature || 0) * 100);
-        const cornerColor = point.curvature && point.curvature > 0 
-          ? 'rgba(255,100,100,0.7)' // Right turn (positive curvature)
-          : 'rgba(100,100,255,0.7)'; // Left turn (negative curvature)
-          
-        // Draw corner marker with size proportional to G force
-        trackGroup.append('circle')
-          .attr('cx', xScale(point.x))
-          .attr('cy', yScale(point.y))
-          .attr('r', 2 + cornerMagnitude * 3)
-          .attr('fill', cornerColor)
-          .attr('opacity', 0.5);
-      });
-      
-      // Add start/finish line
-      const startPoint = trackPoints.find(p => p.lapDistPct < 0.01);
-      if (startPoint) {
-        // Find direction by looking at next point
-        const nextPoint = trackPoints.find(p => p.lapDistPct > 0.01 && p.lapDistPct < 0.02);
-        if (nextPoint) {
-          const dx = nextPoint.x - startPoint.x;
-          const dy = nextPoint.y - startPoint.y;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          const unitX = dx / length;
-          const unitY = dy / length;
-          
-          // Perpendicular vector
-          const perpX = -unitY;
-          const perpY = unitX;
-          
-          // Draw start/finish line
-          trackGroup.append('line')
-            .attr('x1', xScale(startPoint.x + perpX * 5))
-            .attr('y1', yScale(startPoint.y + perpY * 5))
-            .attr('x2', xScale(startPoint.x - perpX * 5))
-            .attr('y2', yScale(startPoint.y - perpY * 5))
-            .attr('stroke', 'white')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '2,2');
-        }
-      }
-      
-      // Draw current position marker if map is complete
-      if (mapBuildingState === 'complete' || mapBuildingState === 'recording') {
-        // Find the closest point by lapDistPct
-        let closestPoint = trackPoints[0];
-        let minDist = 1;
-        
-        for (const point of trackPoints) {
-          const dist = Math.min(
-            Math.abs(point.lapDistPct - currentPosition.lapDistPct),
-            Math.abs(point.lapDistPct - currentPosition.lapDistPct + 1),
-            Math.abs(point.lapDistPct - currentPosition.lapDistPct - 1)
-          );
-          
-          if (dist < minDist) {
-            minDist = dist;
-            closestPoint = point;
-          }
-        }
-        
-        // Draw car position
-        trackGroup.append('circle')
-          .attr('cx', xScale(closestPoint.x))
-          .attr('cy', yScale(closestPoint.y))
-          .attr('r', 5)
-          .attr('fill', 'white')
-          .attr('stroke', 'black')
-          .attr('stroke-width', 1.5);
-        
-        // Add motion blur/trail behind car
-        const trailPoints = [];
-        let trailIndex = trackPoints.indexOf(closestPoint);
-        for (let i = 1; i <= 10; i++) {
-          const prevIndex = (trailIndex - i + trackPoints.length) % trackPoints.length;
-          trailPoints.push(trackPoints[prevIndex]);
-        }
-        
-        trailPoints.forEach((point, i) => {
-          const opacity = 0.8 - (i / 10) * 0.8;
-          const size = 4 - (i / 10) * 3;
-          
-          trackGroup.append('circle')
-            .attr('cx', xScale(point.x))
-            .attr('cy', yScale(point.y))
-            .attr('r', size)
-            .attr('fill', 'white')
-            .attr('opacity', opacity);
-        });
-      }
-      
-      // Add sector markers
-      [0.33, 0.66].forEach(sector => {
-        const sectorPoint = trackPoints.find(p => Math.abs(p.lapDistPct - sector) < 0.01);
-        if (sectorPoint) {
-          trackGroup.append('circle')
-            .attr('cx', xScale(sectorPoint.x))
-            .attr('cy', yScale(sectorPoint.y))
-            .attr('r', 3)
-            .attr('fill', 'white')
-            .attr('opacity', 0.8);
-        }
-      });
-      
-      // Add track percentage labels
-      [0, 0.25, 0.5, 0.75].forEach(pct => {
-        const labelPoint = trackPoints.find(p => Math.abs(p.lapDistPct - pct) < 0.01);
-        if (labelPoint) {
-          trackGroup.append('text')
-            .attr('x', xScale(labelPoint.x))
-            .attr('y', yScale(labelPoint.y) - 8)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '10px')
-            .attr('fill', 'rgba(255,255,255,0.7)')
-            .text(`${Math.round(pct * 100)}%`);
-        }
-      });
-      
-      // Add current percentage display
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height - 5)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '12px')
-        .attr('fill', 'white')
-        .text(`Position: ${(currentPosition.lapDistPct * 100).toFixed(1)}%`);
-      
-    } else if (mapBuildingState === 'recording') {
-      // Show recording status with a more visual representation
-      
-      // Progress bar background
-      svg.append('rect')
-        .attr('x', 50)
-        .attr('y', height / 2 - 40)
-        .attr('width', width - 100)
-        .attr('height', 4)
-        .attr('rx', 2)
-        .attr('fill', 'rgba(255, 255, 255, 0.2)');
-      
-      // Add percentage markers
-      [0, 0.25, 0.5, 0.75, 1].forEach(pct => {
-        // Marker dots
-        svg.append('circle')
-          .attr('cx', 50 + (width - 100) * pct)
-          .attr('y', height / 2 - 40)
-          .attr('r', pct === (telemetryData?.lap_dist_pct || 0) ? 5 : 3)
-          .attr('fill', pct <= (telemetryData?.lap_dist_pct || 0) ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)');
-          
-        // Percentage labels
-        svg.append('text')
-          .attr('x', 50 + (width - 100) * pct)
-          .attr('y', height / 2 - 50)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '10px')
-          .attr('fill', 'rgba(255, 255, 255, 0.7)')
-          .text(`${Math.round(pct * 100)}%`);
-      });
-      
-      // Progress bar fill based on current position
-      const currentPct = telemetryData?.lap_dist_pct || 0;
-      const progressWidth = Math.max(0, Math.min(1, currentPct)) * (width - 100);
-      
-      svg.append('rect')
-        .attr('x', 50)
-        .attr('y', height / 2 - 40)
-        .attr('width', progressWidth)
-        .attr('height', 4)
-        .attr('rx', 2)
-        .attr('fill', () => {
-          // Color changes as we progress
-          if (currentPct < 0.33) return '#4CAF50'; // Green
-          if (currentPct < 0.66) return '#FFEB3B'; // Yellow
-          return '#F44336'; // Red
-        });
-      
-      // Current position marker
-      svg.append('circle')
-        .attr('cx', 50 + progressWidth)
-        .attr('cy', height / 2 - 38)
-        .attr('r', 5)
-        .attr('fill', 'white');
-      
-      // Status text
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height / 2)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '16px')
-        .attr('fill', '#FFFFFF')
-        .text('Recording track data...');
-      
-      // Track position percentage
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height / 2 + 30)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '18px')
-        .attr('fill', '#FFFFFF')
-        .attr('font-weight', 'bold')
-        .text(`Position: ${(currentPct * 100).toFixed(1)}%`);
-      
-      // Display telemetry data
-      if (telemetryData) {
-        // Speed display
-        const speed = telemetryData.velocity_ms * 3.6; // to km/h
-        svg.append('text')
-          .attr('x', width / 2)
-          .attr('y', height / 2 + 60)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '14px')
-          .attr('fill', '#AAAAAA')
-          .text(`Speed: ${speed.toFixed(0)} km/h`);
-          
-        // Lateral G display
-        const lateralG = telemetryData.g_force_lat || 0;
-        svg.append('text')
-          .attr('x', width / 2 - 50)
-          .attr('y', height / 2 + 85)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '14px')
-          .attr('fill', Math.abs(lateralG) > 1.5 ? '#FFEB3B' : '#AAAAAA')
-          .text(`Lat G: ${lateralG.toFixed(2)}`);
-          
-        // Longitudinal G display
-        const longG = telemetryData.g_force_lon || 0;
-        svg.append('text')
-          .attr('x', width / 2 + 50)
-          .attr('y', height / 2 + 85)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '14px')
-          .attr('fill', Math.abs(longG) > 1.5 ? '#FFEB3B' : '#AAAAAA')
-          .text(`Lon G: ${longG.toFixed(2)}`);
-      }
-    } else {
-      // Show start instructions
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height / 2 - 20)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '16px')
-        .attr('fill', '#FFFFFF')
-        .text('Drive near start/finish line');
-        
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height / 2 + 10)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '14px')
-        .attr('fill', '#AAAAAA')
-        .text('Recording will start automatically');
-      
-      if (telemetryData?.velocity_ms) {
-        const speed = telemetryData.velocity_ms * 3.6; // Convert to km/h
-        svg.append('text')
-          .attr('x', width / 2)
-          .attr('y', height / 2 + 40)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '12px')
-          .attr('fill', speed > 30 ? '#4CAF50' : '#AAAAAA')
-          .text(`Current speed: ${speed.toFixed(1)} km/h`);
-      }
-    }
-  }, [trackPoints, mapBuildingState, currentPosition, telemetryData]);
+    if (trackPoints.length < 2) return;
 
-  // Update chart when data changes
-  useEffect(() => {
-    updateChart();
-  }, [updateChart]);
+    const xVals = trackPoints.map(d => d.x);
+    const yVals = trackPoints.map(d => d.y);
+    const xExtent = d3.extent(xVals) as [number, number];
+    const yExtent = d3.extent(yVals) as [number, number];
+    const xRange = xExtent[1] - xExtent[0];
+    const yRange = yExtent[1] - yExtent[0];
+    const maxRange = Math.max(xRange, yRange) || 1;
+    const padding = 10;
 
-  // Update chart with D3
-  useEffect(() => {
-    if (!svgRef.current || trackPoints.length === 0) return;
+    const xScale = d3.scaleLinear()
+      .domain([xExtent[0] - 0.05*maxRange, xExtent[0] + maxRange*1.05])
+      .range([padding, width - padding]);
+    const yScale = d3.scaleLinear()
+      .domain([yExtent[0] - 0.05*maxRange, yExtent[0] + maxRange*1.05])
+      .range([height - padding, padding]);
 
-    // Clear existing SVG
-    d3.select(svgRef.current).selectAll("*").remove();
-
-    // Create D3 selections
-    const svg = d3.select(svgRef.current);
-    const width = svgRef.current.clientWidth;
-    const height = svgRef.current.clientHeight;
-
-    // Get the bounding box of our track
-    const xValues = trackPoints.map(d => d.x);
-    const yValues = trackPoints.map(d => d.y);
-    const minX = Math.min(...xValues);
-    const maxX = Math.max(...xValues);
-    const minY = Math.min(...yValues);
-    const maxY = Math.max(...yValues);
-
-    // Calculate the scale to fit the track in the SVG with padding
-    const padding = 20;
-    const xScale = (width - 2 * padding) / (maxX - minX);
-    const yScale = (height - 2 * padding) / (maxY - minY);
-    const scale = Math.min(xScale, yScale);
-
-    // Calculate the center adjustment
-    const centerX = (width / 2) - (((maxX + minX) / 2) * scale);
-    const centerY = (height / 2) - (((maxY + minY) / 2) * scale);
-
-    // Create a group for the track
-    const trackGroup = svg.append("g")
-      .attr("transform", `translate(${centerX}, ${centerY})`);
-
-    // Define color scale for curvature
-    const curvatureColorScale = d3.scaleLinear<string>()
+    const curvatureScale = d3.scaleLinear<string>()
       .domain([-0.01, 0, 0.01])
-      .range(["#ff0000", "#ffffff", "#0000ff"]);
+      .range(["#3b82f6","#ffffff","#ef4444"]);
+    const accelScale = d3.scaleLinear<string>()
+      .domain([-10, -3, 0, 3, 10])
+      .range(["#ef4444","#fb923c","#ffffff","#4ade80","#22c55e"]);
 
-    // Define color scale for longitudinal acceleration (braking to acceleration)
-    const accelerationColorScale = d3.scaleLinear<string>()
-      .domain([-8, -2, 0, 2, 8]) 
-      .range(["#ff0000", "#ff9900", "#ffffff", "#66cc00", "#00cc00"]);
-
-    // Draw the track as a series of line segments with color based on both curvature and longitudinal accel
     for (let i = 1; i < trackPoints.length; i++) {
       const p1 = trackPoints[i - 1];
       const p2 = trackPoints[i];
-      
-      // Choose color based on user preference
-      let segmentColor;
-      if (colorMode === 'curvature') {
-        segmentColor = curvatureColorScale(p2.curvature || 0);
-      } else if (colorMode === 'acceleration') {
-        segmentColor = accelerationColorScale(p2.longitudinalAccel || 0);
-      } else {
-        segmentColor = "#ffffff"; // Default white
+      let strokeColor = "#ffffff";
+      if (colorMode === 'curvature' && p2.curvature !== undefined) {
+        strokeColor = curvatureScale(p2.curvature);
+      } else if (colorMode === 'acceleration' && p2.longitudinalAccel !== undefined) {
+        strokeColor = accelScale(p2.longitudinalAccel);
       }
-      
-      trackGroup.append("line")
-        .attr("x1", p1.x * scale)
-        .attr("y1", p1.y * scale)
-        .attr("x2", p2.x * scale)
-        .attr("y2", p2.y * scale)
-        .attr("stroke", segmentColor)
-        .attr("stroke-width", 2);
+      svg.append("line")
+        .attr("x1", xScale(p1.x))
+        .attr("y1", yScale(p1.y))
+        .attr("x2", xScale(p2.x))
+        .attr("y2", yScale(p2.y))
+        .attr("stroke", strokeColor)
+        .attr("stroke-width", 2.5)
+        .attr("stroke-linecap", "round");
     }
 
-    // Draw a marker at the start/finish line
-    if (trackPoints.length > 0) {
-      trackGroup.append("circle")
-        .attr("cx", trackPoints[0].x * scale)
-        .attr("cy", trackPoints[0].y * scale)
+    if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
+      const carPos = trackPoints[currentPositionIndex];
+      svg.append("circle")
+        .attr("cx", xScale(carPos.x))
+        .attr("cy", yScale(carPos.y))
         .attr("r", 5)
-        .attr("fill", "#00ff00");
+        .attr("fill", "#fbbf24");
     }
+  }, [trackPoints, colorMode, currentPositionIndex]);
 
-    // Draw the current position
-    if (currentPositionIndex >= 0 && currentPositionIndex < trackPoints.length) {
-      const currentPoint = trackPoints[currentPositionIndex];
-      trackGroup.append("circle")
-        .attr("cx", currentPoint.x * scale)
-        .attr("cy", currentPoint.y * scale)
-        .attr("r", 7)
-        .attr("fill", "#ffff00");
-    }
-  }, [trackPoints, currentPositionIndex, colorMode]);
+  useEffect(() => {
+    renderTrackMap();
+  }, [renderTrackMap]);
 
-  // Update current position marker when lap distance changes
   useEffect(() => {
     if (trackPoints.length > 0 && currentPosition.lapDistPct !== undefined) {
-      // Find the closest track point to the current lap distance percentage
-      const index = trackPoints.findIndex(point => 
-        point.lapDistPct >= currentPosition.lapDistPct
-      );
-      setCurrentPositionIndex(index !== -1 ? index : -1);
+      let closestIndex = 0;
+      let minDistance = Number.MAX_VALUE;
+      for (let i = 0; i < trackPoints.length; i++) {
+        const distDirect = Math.abs(trackPoints[i].lapDistPct - currentPosition.lapDistPct);
+        const distWrapLow = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct + 1));
+        const distWrapHigh = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct - 1));
+        const dist = Math.min(distDirect, distWrapLow, distWrapHigh);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestIndex = i;
+        }
+      }
+      setCurrentPositionIndex(closestIndex);
     } else {
       setCurrentPositionIndex(-1);
     }
   }, [currentPosition.lapDistPct, trackPoints]);
 
-  // Sync with external controls
   useEffect(() => {
-    if (externalControls?.mapBuildingState) {
-      setMapBuildingState(externalControls.mapBuildingState);
-    }
-    if (externalControls?.colorMode) {
-      setColorMode(externalControls.colorMode);
-    }
+    if (externalControls?.mapBuildingState) setMapBuildingState(externalControls.mapBuildingState);
+    if (externalControls?.colorMode) setColorMode(externalControls.colorMode);
   }, [externalControls]);
 
-  // Notify parent component of state changes
   useEffect(() => {
-    onStateChange?.({
-      mapBuildingState,
-      colorMode
-    });
+    onStateChange?.({ mapBuildingState, colorMode });
   }, [mapBuildingState, colorMode, onStateChange]);
 
+  const renderControls = () => (
+    <div className="track-map-controls flex space-x-2 mt-2">
+      {mapBuildingState === 'idle' && (
+        <button className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 rounded" onClick={startRecording}>
+          Start Recording
+        </button>
+      )}
+      {mapBuildingState === 'recording' && (
+        <button className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded" onClick={stopRecording}>
+          Stop Recording
+        </button>
+      )}
+      {mapBuildingState === 'complete' && (
+        <button className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded" onClick={startRecording}>
+          Re-record Track
+        </button>
+      )}
+      {mapBuildingState === 'complete' && (
+        <select
+          className="px-2 py-1 text-xs bg-gray-700 rounded"
+          value={colorMode}
+          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
+        >
+          <option value="none">Default Color</option>
+          <option value="curvature">Color by Curvature</option>
+          <option value="acceleration">Color by Acceleration</option>
+        </select>
+      )}
+    </div>
+  );
+
   return (
-    <BaseWidget id={id} title="Track Map" className="track-map-widget">
+    <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
       <div className="track-map-container" style={{ height: '350px' }}>
         <svg
           ref={svgRef}
-          width={400}
-          height={300}
-          className="bg-gray-800/80"
+          width="100%"
+          height="300"
+          className="bg-gray-800/80 rounded"
         />
+        {renderControls()}
         {mapBuildingState === 'idle' && (
           <div className="text-sm text-gray-300 text-center mt-2">
-            Waiting for car movement near start/finish line...
+            Drive near start/finish line to begin mapping
           </div>
         )}
         {mapBuildingState === 'recording' && (
           <div className="text-sm text-gray-300 text-center mt-2">
-            Recording track data...
+            Recording track data - Complete a lap to finish
+          </div>
+        )}
+        {mapBuildingState === 'complete' && trackPoints.length > 0 && (
+          <div className="text-sm text-gray-300 text-center mt-2">
+            Track map complete with {trackPoints.length} points
           </div>
         )}
       </div>
@@ -827,4 +388,4 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   );
 };
 
-export default TrackMapWidget; 
+export default TrackMapWidget;
