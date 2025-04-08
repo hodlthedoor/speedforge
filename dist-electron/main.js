@@ -60,7 +60,7 @@ function createWindows() {
       win.setAlwaysOnTop(true);
     }
     win.setIgnoreMouseEvents(true, { forward: true });
-    win.setTitle("SpeedForge (click-through:true)");
+    win.setTitle("Speedforge (click-through:true)");
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
     win.loadURL(mainUrl);
     windows.push(win);
@@ -151,6 +151,7 @@ function setupIpcListeners() {
   });
 }
 app.whenReady().then(() => {
+  app.setName("Speedforge");
   createWindows();
   setupIpcListeners();
   stayOnTopInterval = setInterval(() => {
@@ -173,7 +174,7 @@ app.whenReady().then(() => {
       const newState = !isCurrentlyClickThrough;
       console.log(`Global shortcut toggling click-through from ${isCurrentlyClickThrough} to ${newState}`);
       win.webContents.send("app:toggle-click-through", newState);
-      win.setTitle(`SpeedForge (click-through:${newState})`);
+      win.setTitle(`Speedforge (click-through:${newState})`);
     }
   });
   const displays = screen.getAllDisplays();

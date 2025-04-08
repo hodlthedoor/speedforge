@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { Widget } from './Widget';
 import { SimpleTelemetryWidget, availableMetrics } from './SimpleTelemetryWidget';
 import { v4 as uuidv4 } from 'uuid';
 import PedalTraceWidget from './PedalTraceWidget';
 import ShiftIndicatorWidget from './ShiftIndicatorWidget';
+import TrackMapWidget from './TrackMapWidget';
 
 interface WidgetData {
   id: string;
-  type: 'default' | 'telemetry' | 'pedal-trace' | 'shift-indicator';
+  type: 'default' | 'telemetry' | 'pedal-trace' | 'shift-indicator' | 'track-map';
   title: string;
   content?: string;
   metric?: string;
@@ -122,6 +123,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       title: 'Shift Indicator',
       content: (
         <ShiftIndicatorWidget
+          id={widgetId}
+          onClose={() => closeWidget(widgetId)}
+        />
+      )
+    };
+    onAddWidget(widget);
+  };
+
+  const addTrackMapWidget = () => {
+    const widgetId = `track-map-${Date.now()}`;
+    const widget = {
+      id: widgetId,
+      type: 'track-map',
+      title: 'Track Map',
+      content: (
+        <TrackMapWidget
           id={widgetId}
           onClose={() => closeWidget(widgetId)}
         />
@@ -346,6 +363,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   onClick={addShiftIndicatorWidget}
                 >
                   Shift Indicator
+                </button>
+                <button 
+                  className="btn btn-sm btn-secondary metric-btn"
+                  onClick={addTrackMapWidget}
+                >
+                  Track Map
                 </button>
               </div>
             </div>

@@ -3,6 +3,10 @@ import './App.css';
 import SimpleControlPanel from './components/SimpleControlPanel';
 import ClickThroughHint from './components/ClickThroughHint';
 import { WebSocketService } from './services/WebSocketService';
+import { SimpleTelemetryWidget } from './components/SimpleTelemetryWidget';
+import PedalTraceWidget from './components/PedalTraceWidget';
+import ShiftIndicatorWidget from './components/ShiftIndicatorWidget';
+import TrackMapWidget from './components/TrackMapWidget';
 
 function App() {
   // Initialize WebSocketService
@@ -175,11 +179,41 @@ function App() {
       ) : null}
       
       {/* Widgets are rendered at app level, separate from control panel */}
-      {widgets.map(widget => (
-        <React.Fragment key={widget.id}>
-          {widget.content}
-        </React.Fragment>
-      ))}
+      {widgets.map(widget => {
+        // Render the appropriate widget based on type
+        let widgetContent;
+        if (widget.type === 'telemetry' && widget.metric) {
+          widgetContent = <SimpleTelemetryWidget 
+            id={widget.id} 
+            name={widget.title}
+            metric={widget.metric}
+            onClose={() => handleCloseWidget(widget.id)}
+          />;
+        } else if (widget.type === 'pedal-trace') {
+          widgetContent = <PedalTraceWidget 
+            id={widget.id}
+            onClose={() => handleCloseWidget(widget.id)}
+          />;
+        } else if (widget.type === 'shift-indicator') {
+          widgetContent = <ShiftIndicatorWidget 
+            id={widget.id}
+            onClose={() => handleCloseWidget(widget.id)}
+          />;
+        } else if (widget.type === 'track-map') {
+          widgetContent = <TrackMapWidget 
+            id={widget.id}
+            onClose={() => handleCloseWidget(widget.id)}
+          />;
+        } else {
+          widgetContent = widget.content || 'Widget content';
+        }
+        
+        return (
+          <React.Fragment key={widget.id}>
+            {widgetContent}
+          </React.Fragment>
+        );
+      })}
       
       {/* When click-through is enabled, show a small indicator to disable it */}
       {isClickThrough && (
