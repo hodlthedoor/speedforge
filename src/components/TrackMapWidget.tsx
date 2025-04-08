@@ -179,7 +179,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       
       // EXTREMELY minimal yaw influence - just enough to indicate turning
       // This prevents spiral artifacts entirely
-      const yawInfluence = Math.min(0.02, 1 / (velocity + 1)); // Even less influence at higher speeds
+      const yawInfluence = Math.min(0.05, 2 / (velocity + 1)); // Increased from 0.02 to 0.05, velocity scaling increased
       heading += (yawRate * Math.PI / 180) * timeDelta * yawInfluence;
       
       // Base movement is just in the heading direction, scaled by velocity
@@ -188,7 +188,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       newX = lastX + distance * Math.cos(heading);
       newY = lastY + distance * Math.sin(heading);
       
-      // Add minimal lateral adjustment to hint at track curvature without distorting
+      // Add more pronounced lateral adjustment to better capture track curvature
       // Use the actual change in lap_dist_pct to decide how much to curve the track
       if (trackPointsRef.current.length > 5) {
         const lapDistDelta = Math.abs(lapDistPct - lastPositionRef.current.lapDistPct);
@@ -197,13 +197,15 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
         // This helps avoid artifacts when the car is stationary or moving very slowly
         if (lapDistDelta > 0.001) {
           // Scale factor based on how far along track we've moved (keeps corners proportional)
-          const cornerFactor = 0.0005 / Math.max(0.001, lapDistDelta);
+          // Increased the base factor from 0.0005 to 0.002 (4x more sensitive)
+          const cornerFactor = 0.002 / Math.max(0.001, lapDistDelta);
           
-          // Minimal lateral influence, capped to prevent extreme values
-          const maxLateralInfluence = 0.5;
-          const lateralInfluence = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel) / 20, maxLateralInfluence);
+          // Increased lateral influence with higher cap
+          const maxLateralInfluence = 1.0; // Doubled from 0.5
+          // Reduced divisor from 20 to 10 to make it more sensitive
+          const lateralInfluence = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel) / 10, maxLateralInfluence);
           
-          // Apply a very small perpendicular adjustment based on lateral acceleration
+          // Apply a stronger perpendicular adjustment based on lateral acceleration
           newX += distance * lateralInfluence * -Math.sin(heading) * cornerFactor;
           newY += distance * lateralInfluence * Math.cos(heading) * cornerFactor;
         }
@@ -285,20 +287,20 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       });
     }
     
-    // Apply extremely lightweight smoothing
+    // Apply minimal smoothing to preserve track details
     const smoothedPoints: TrackPoint[] = [];
-    const windowSize = 2; // Minimal smoothing window - just enough to remove jitter
+    const windowSize = 1; // Reduced from 2 to 1 for less smoothing
     
     for (let i = 0; i < points.length; i++) {
-      // Simple box filter - just average with adjacent points
-      let sumX = points[i].x;
-      let sumY = points[i].y;
-      let count = 1;
+      // Simple box filter but with very minimal smoothing
+      let sumX = points[i].x * 2; // Give current point twice the weight
+      let sumY = points[i].y * 2;
+      let count = 2; // Start with count of 2 due to doubled weight
       
       for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
         if (j !== i) {
-          // Use a rapidly decreasing weight for further points
-          const weight = 0.5 / (Math.abs(i - j));
+          // Very minimal influence from adjacent points
+          const weight = 0.3 / (Math.abs(i - j)); // Reduced from 0.5 to 0.3
           sumX += points[j].x * weight;
           sumY += points[j].y * weight;
           count += weight;
