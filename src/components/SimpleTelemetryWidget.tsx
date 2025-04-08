@@ -34,13 +34,10 @@ const availableMetrics = [
   { id: 'lon', name: 'Longitude' },
   { id: 'lap_dist', name: 'Lap Distance' },
   { id: 'lap_dist_pct', name: 'Track Position' },
-  // Velocity vectors for debugging and track mapping
-  { id: 'VelocityX', name: 'Velocity X (World)' },
-  { id: 'VelocityY', name: 'Velocity Y (World)' },
-  { id: 'VelocityZ', name: 'Velocity Z (World)' },
-  { id: 'VelocityX_ST', name: 'Velocity X (Track)' },
-  { id: 'VelocityY_ST', name: 'Velocity Y (Track)' },
-  { id: 'VelocityZ_ST', name: 'Velocity Z (Track)' }
+  // Velocity vectors for track mapping
+  { id: 'VelocityX', name: 'Forward Velocity' },
+  { id: 'VelocityY', name: 'Side Velocity' },
+  { id: 'VelocityZ', name: 'Vertical Velocity' }
 ];
 
 export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({ 

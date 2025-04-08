@@ -22,6 +22,7 @@ interface TrackPoint {
   lapDistPct: number;
   curvature?: number;
   longitudinalAccel?: number;
+  heading?: number;  // Car's heading in radians
 }
 
 interface TrackPosition {
@@ -122,9 +123,13 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
     const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
     
-    // Get velocity vectors - try both regular and session-transformed
-    const velX = telemetryData.VelocityX_ST ?? telemetryData.VelocityX ?? 0;
-    const velY = telemetryData.VelocityY_ST ?? telemetryData.VelocityY ?? 0;
+    // Get velocity vectors from car's local coordinate system
+    // VelocityX = forward/backward (main direction of travel)
+    // VelocityY = left/right (side movement during turning)
+    // VelocityZ = up/down (elevation changes)
+    const velForward = telemetryData.VelocityX || 0;  // Car's forward axis
+    const velSide = telemetryData.VelocityY || 0;     // Car's sideways axis
+    const velUp = telemetryData.VelocityZ || 0;       // Car's vertical axis
     
     // Skip if velocity is too low (car is nearly stationary)
     if (velocity < 5) return;
@@ -144,7 +149,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       newX = 0;
       newY = 0;
     }
-    // Use direct velocity vectors for position updates
+    // Use velocity vectors to calculate position changes
     else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
@@ -152,32 +157,39 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
       
-      // If we have velocity vectors, use them directly for accurate movement
-      if (velX !== 0 || velY !== 0) {
-        // Calculate the 2D vector magnitude for scaling
-        const vectorMag = Math.sqrt(velX * velX + velY * velY);
-        
-        // Only update if we have meaningful velocity
-        if (vectorMag > 0.1) {
-          // Normalize and scale by the time delta and speed
-          const distance = velocity * timeDelta;
-          const scaleFactor = distance / vectorMag;
-          
-          // Update position based on velocity direction
-          newX = lastX + (velX * scaleFactor);
-          newY = lastY + (velY * scaleFactor);
-        } else {
-          // For very low speeds, just maintain position
-          newX = lastX;
-          newY = lastY;
-        }
-      } else {
-        // Fallback only if velocity vectors aren't available
-        const heading = Math.atan2(lastPositionRef.current.y, lastPositionRef.current.x);
-        const distance = velocity * timeDelta;
-        newX = lastX + (distance * Math.cos(heading));
-        newY = lastY + (distance * Math.sin(heading));
+      // When using car's local coordinates:
+      // - We need to transform them to world coordinates
+      // - We need to maintain a "heading" for the car to enable this transformation
+      
+      // Use Yaw rate to track car's heading over time
+      const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
+      const yawRateRadSec = yawRateDegSec * Math.PI / 180;
+      const headingChange = yawRateRadSec * timeDelta;
+      
+      // Get or initialize car heading
+      let currentHeading = 0;
+      
+      // For first point, use arbitrary initial heading (east)
+      if (trackPointsRef.current.length === 1) {
+        currentHeading = 0; // Start heading east (positive X axis)
+      } 
+      // For subsequent points, use the stored heading from previous step
+      else if (lastPositionRef.current.heading !== undefined) {
+        currentHeading = lastPositionRef.current.heading;
       }
+      
+      // Update heading based on yaw rate
+      currentHeading += headingChange;
+      
+      // Transform car's local velocity to world coordinates using car's heading
+      // Forward velocity component (VelocityX) along car's heading
+      // Side velocity component (VelocityY) perpendicular to car's heading
+      const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
+      const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
+      
+      // Update position in world coordinates
+      newX = lastX + worldDx;
+      newY = lastY + worldDy;
       
       // Force track to close as we near completion of the lap (only when we're near the start)
       if (trackPointsRef.current.length > 20) {
@@ -192,16 +204,35 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
         }
       }
+      
+      // Create new track point, now including heading for future calculations
+      const newPoint: TrackPoint & { heading?: number } = {
+        x: newX,
+        y: newY,
+        lapDistPct: lapDistPct,
+        curvature: curvature,
+        longitudinalAccel: longitudinalAccel,
+        heading: currentHeading // Store heading for next point calculation
+      };
+      
+      // Update point
+      trackPointsRef.current = [...trackPointsRef.current, newPoint];
+      lastPositionRef.current = newPoint;
     }
-    
-    // Create new track point
-    const newPoint: TrackPoint = {
-      x: newX,
-      y: newY,
-      lapDistPct: lapDistPct,
-      curvature: curvature,
-      longitudinalAccel: longitudinalAccel // Store longitudinal acceleration in track points
-    };
+    else {
+      // Create new track point
+      const newPoint: TrackPoint = {
+        x: newX,
+        y: newY,
+        lapDistPct: lapDistPct,
+        curvature: curvature,
+        longitudinalAccel: longitudinalAccel
+      };
+      
+      // Update reference without causing a state update
+      trackPointsRef.current = [...trackPointsRef.current, newPoint];
+      lastPositionRef.current = newPoint;
+    }
     
     // Detect if we've completed a lap (only after collecting some points)
     if (trackPointsRef.current.length > 20) {
@@ -221,10 +252,6 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
         return;
       }
     }
-    
-    // Update reference without causing a state update
-    trackPointsRef.current = [...trackPointsRef.current, newPoint];
-    lastPositionRef.current = newPoint;
     
     // Only update state when we need to redraw
     if (!animationFrameId.current) {

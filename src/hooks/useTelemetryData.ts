@@ -15,12 +15,9 @@ export interface TelemetryData {
   track_surface?: string;
   
   // Velocity Vectors
-  VelocityX?: number;     // World-space X velocity component
-  VelocityY?: number;     // World-space Y velocity component
-  VelocityZ?: number;     // World-space Z velocity component
-  VelocityX_ST?: number;  // Session-transformed X velocity component
-  VelocityY_ST?: number;  // Session-transformed Y velocity component
-  VelocityZ_ST?: number;  // Session-transformed Z velocity component
+  VelocityX?: number;     // Forward/backward velocity (car's local X axis)
+  VelocityY?: number;     // Left/right velocity (car's local Y axis)
+  VelocityZ?: number;     // Up/down velocity (car's local Z axis)
   
   // Driver Inputs
   throttle_pct?: number;
@@ -243,9 +240,6 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'VelocityX':
     case 'VelocityY':
     case 'VelocityZ':
-    case 'VelocityX_ST':
-    case 'VelocityY_ST':
-    case 'VelocityZ_ST':
       return `${value.toFixed(3)} m/s`;
     default:
       return `${value}`;
@@ -282,12 +276,9 @@ export function getMetricName(metric: string): string {
     'lon': 'Longitude',
     'lap_dist': 'Lap Distance',
     'lap_dist_pct': 'Track Position',
-    'VelocityX': 'Velocity X (World)',
-    'VelocityY': 'Velocity Y (World)',
-    'VelocityZ': 'Velocity Z (World)',
-    'VelocityX_ST': 'Velocity X (Track)',
-    'VelocityY_ST': 'Velocity Y (Track)',
-    'VelocityZ_ST': 'Velocity Z (Track)'
+    'VelocityX': 'Forward Velocity',
+    'VelocityY': 'Side Velocity',
+    'VelocityZ': 'Vertical Velocity'
   };
   
   return metricNames[metric] || metric;
