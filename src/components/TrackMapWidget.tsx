@@ -126,10 +126,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     // Get velocity vectors from car's local coordinate system
     // VelocityX = forward/backward (main direction of travel)
     // VelocityY = left/right (side movement during turning)
-    // VelocityZ = up/down (elevation changes)
     const velForward = telemetryData.VelocityX || 0;  // Car's forward axis
     const velSide = telemetryData.VelocityY || 0;     // Car's sideways axis
-    const velUp = telemetryData.VelocityZ || 0;       // Car's vertical axis
     
     // Skip if velocity is too low (car is nearly stationary)
     if (velocity < 5) return;
@@ -153,13 +151,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
-      // Get the last position
+      // Get the last position and heading
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
-      
-      // When using car's local coordinates:
-      // - We need to transform them to world coordinates
-      // - We need to maintain a "heading" for the car to enable this transformation
       
       // Use Yaw rate to track car's heading over time
       const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
@@ -206,7 +200,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       }
       
       // Create new track point, now including heading for future calculations
-      const newPoint: TrackPoint & { heading?: number } = {
+      const newPoint: TrackPoint = {
         x: newX,
         y: newY,
         lapDistPct: lapDistPct,
@@ -220,13 +214,14 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       lastPositionRef.current = newPoint;
     }
     else {
-      // Create new track point
+      // Create initial track point at origin
       const newPoint: TrackPoint = {
-        x: newX,
-        y: newY,
+        x: 0,
+        y: 0,
         lapDistPct: lapDistPct,
         curvature: curvature,
-        longitudinalAccel: longitudinalAccel
+        longitudinalAccel: longitudinalAccel,
+        heading: 0 // Initial heading (east)
       };
       
       // Update reference without causing a state update
