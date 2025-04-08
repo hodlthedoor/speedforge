@@ -13,6 +13,7 @@ interface TrackPoint {
   y: number;
   lapDistPct: number;
   curvature?: number;
+  longitudinalAccel?: number;
 }
 
 // Map building state
@@ -28,6 +29,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   const [currentPosition, setCurrentPosition] = useState<number>(0);
   const mapCompleteRef = useRef<boolean>(false);
   const startLapDistPctRef = useRef<number>(-1); // Reference to track starting position
+  const [colorMode, setColorMode] = useState<'curvature' | 'acceleration' | 'none'>('none');
+  const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
   
   // Use telemetry data with relevant metrics for track mapping
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -110,20 +113,65 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
     let newX = 0;
     let newY = 0;
     
+    // If first point, set it at origin
+    if (trackPointsRef.current.length === 0) {
+      newX = 0;
+      newY = 0;
+    }
     // If we have a previous point, calculate new position
-    if (lastPositionRef.current) {
+    else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
-      // Simple dead reckoning - more sophisticated methods can be implemented
-      const heading = Math.atan2(lastPositionRef.current.y, lastPositionRef.current.x) + 
-                      (yawRate * Math.PI / 180) * timeDelta;
+      // Get the last position and current heading
+      const lastX = lastPositionRef.current.x;
+      const lastY = lastPositionRef.current.y;
+      
+      // Calculate heading based on velocity and lateral acceleration
+      // This approach uses the yaw rate to update the heading directly
+      // Rather than incorrectly using atan2 on the position
+      let heading = 0;
+      
+      // Get heading from the previous 2 points if we have them
+      if (trackPointsRef.current.length >= 2) {
+        const prevPoint = trackPointsRef.current[trackPointsRef.current.length - 2];
+        const dx = lastPositionRef.current.x - prevPoint.x;
+        const dy = lastPositionRef.current.y - prevPoint.y;
+        heading = Math.atan2(dy, dx);
+      }
+      
+      // Update heading based on yaw rate
+      heading += (yawRate * Math.PI / 180) * timeDelta;
       
       // Calculate distance traveled
       const distance = velocity * timeDelta;
       
-      // Update position
-      newX = lastPositionRef.current.x + distance * Math.cos(heading);
-      newY = lastPositionRef.current.y + distance * Math.sin(heading);
+      // Apply lateral acceleration effect (makes corners more pronounced)
+      const lateralDisplacement = 0.5 * lateralAccel * timeDelta * timeDelta;
+      
+      // Apply longitudinal acceleration effect (affects acceleration/braking zones)
+      const longitudinalDisplacement = 0.5 * longitudinalAccel * timeDelta * timeDelta;
+      
+      // Update position - move forward in heading direction and offset by both lateral and longitudinal acceleration
+      newX = lastX + distance * Math.cos(heading) - lateralDisplacement * Math.sin(heading) + longitudinalDisplacement * Math.cos(heading);
+      newY = lastY + distance * Math.sin(heading) + lateralDisplacement * Math.cos(heading) + longitudinalDisplacement * Math.sin(heading);
+      
+      // Amplify the effect of corners for better visualization
+      if (Math.abs(lateralAccel) > 1) {
+        const cornerAmplification = 1.0 + (Math.abs(lateralAccel) / 20); // Amplify based on lateral G
+        const deltaX = newX - lastX;
+        const deltaY = newY - lastY;
+        newX = lastX + deltaX * cornerAmplification;
+        newY = lastY + deltaY * cornerAmplification;
+      }
+      
+      // Amplify the effect of acceleration/braking zones
+      if (Math.abs(longitudinalAccel) > 2) {
+        const accelBrakeAmplification = 1.0 + (Math.abs(longitudinalAccel) / 30); // Amplify based on longitudinal G
+        const deltaX = newX - lastX;
+        const deltaY = newY - lastY;
+        newX = lastX + deltaX * accelBrakeAmplification;
+        newY = lastY + deltaY * accelBrakeAmplification;
+      }
     }
     
     // Create new track point
@@ -131,7 +179,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
       x: newX,
       y: newY,
       lapDistPct: lapDistPct,
-      curvature: curvature
+      curvature: curvature,
+      longitudinalAccel: longitudinalAccel // Store longitudinal acceleration in track points
     };
     
     // Detect if we've completed a lap (only after collecting some points)
@@ -174,17 +223,40 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   const normalizeTrack = (points: TrackPoint[]): TrackPoint[] => {
     if (points.length < 10) return points;
     
+    // First, smooth the track using a simple moving average to reduce noise
+    const smoothedPoints: TrackPoint[] = [];
+    const windowSize = 3;
+    
+    for (let i = 0; i < points.length; i++) {
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      
+      // Average the current point with nearby points
+      for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
+        sumX += points[j].x;
+        sumY += points[j].y;
+        count++;
+      }
+      
+      smoothedPoints.push({
+        ...points[i],
+        x: sumX / count,
+        y: sumY / count
+      });
+    }
+    
     // Adjust coordinates to center the track and ensure it closes
-    const minX = Math.min(...points.map(p => p.x));
-    const maxX = Math.max(...points.map(p => p.x));
-    const minY = Math.min(...points.map(p => p.y));
-    const maxY = Math.max(...points.map(p => p.y));
+    const minX = Math.min(...smoothedPoints.map(p => p.x));
+    const maxX = Math.max(...smoothedPoints.map(p => p.x));
+    const minY = Math.min(...smoothedPoints.map(p => p.y));
+    const maxY = Math.max(...smoothedPoints.map(p => p.y));
     
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
     
     // Normalize points around center
-    return points.map(point => ({
+    return smoothedPoints.map(point => ({
       ...point,
       x: point.x - centerX,
       y: point.y - centerY
@@ -237,11 +309,11 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
       const xScale = (x: number) => centerX + (x - (xExtent[0] + xExtent[1]) / 2) * scale;
       const yScale = (y: number) => centerY + (y - (yExtent[0] + yExtent[1]) / 2) * scale;
       
-      // Create line generator
+      // Create line generator with proper interpolation for smooth curves
       const line = d3.line<TrackPoint>()
         .x(d => xScale(d.x))
         .y(d => yScale(d.y))
-        .curve(d3.curveCatmullRom.alpha(0.5));
+        .curve(d3.curveCatmullRom.alpha(0.3)); // Less aggressive smoothing
       
       // Draw track sectors
       // Sector 1: 0-33%, Sector 2: 33-66%, Sector 3: 66-100%
@@ -281,6 +353,23 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
           .attr('stroke-linecap', 'round')
           .attr('d', line);
       }
+      
+      // Highlight high lateral G corners with glowing markers
+      const highGPoints = trackPoints.filter(p => p.curvature && Math.abs(p.curvature) > 0.01);
+      highGPoints.forEach(point => {
+        const cornerMagnitude = Math.min(1, Math.abs(point.curvature || 0) * 100);
+        const cornerColor = point.curvature && point.curvature > 0 
+          ? 'rgba(255,100,100,0.7)' // Right turn (positive curvature)
+          : 'rgba(100,100,255,0.7)'; // Left turn (negative curvature)
+          
+        // Draw corner marker with size proportional to G force
+        trackGroup.append('circle')
+          .attr('cx', xScale(point.x))
+          .attr('cy', yScale(point.y))
+          .attr('r', 2 + cornerMagnitude * 3)
+          .attr('fill', cornerColor)
+          .attr('opacity', 0.5);
+      });
       
       // Add start/finish line
       const startPoint = trackPoints.find(p => p.lapDistPct < 0.01);
@@ -396,7 +485,61 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         .text(`Position: ${(currentPosition * 100).toFixed(1)}%`);
       
     } else if (mapBuildingState === 'recording') {
-      // Show recording status
+      // Show recording status with a more visual representation
+      
+      // Progress bar background
+      svg.append('rect')
+        .attr('x', 50)
+        .attr('y', height / 2 - 40)
+        .attr('width', width - 100)
+        .attr('height', 4)
+        .attr('rx', 2)
+        .attr('fill', 'rgba(255, 255, 255, 0.2)');
+      
+      // Add percentage markers
+      [0, 0.25, 0.5, 0.75, 1].forEach(pct => {
+        // Marker dots
+        svg.append('circle')
+          .attr('cx', 50 + (width - 100) * pct)
+          .attr('y', height / 2 - 40)
+          .attr('r', pct === (telemetryData?.lap_dist_pct || 0) ? 5 : 3)
+          .attr('fill', pct <= (telemetryData?.lap_dist_pct || 0) ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)');
+          
+        // Percentage labels
+        svg.append('text')
+          .attr('x', 50 + (width - 100) * pct)
+          .attr('y', height / 2 - 50)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px')
+          .attr('fill', 'rgba(255, 255, 255, 0.7)')
+          .text(`${Math.round(pct * 100)}%`);
+      });
+      
+      // Progress bar fill based on current position
+      const currentPct = telemetryData?.lap_dist_pct || 0;
+      const progressWidth = Math.max(0, Math.min(1, currentPct)) * (width - 100);
+      
+      svg.append('rect')
+        .attr('x', 50)
+        .attr('y', height / 2 - 40)
+        .attr('width', progressWidth)
+        .attr('height', 4)
+        .attr('rx', 2)
+        .attr('fill', () => {
+          // Color changes as we progress
+          if (currentPct < 0.33) return '#4CAF50'; // Green
+          if (currentPct < 0.66) return '#FFEB3B'; // Yellow
+          return '#F44336'; // Red
+        });
+      
+      // Current position marker
+      svg.append('circle')
+        .attr('cx', 50 + progressWidth)
+        .attr('cy', height / 2 - 38)
+        .attr('r', 5)
+        .attr('fill', 'white');
+      
+      // Status text
       svg.append('text')
         .attr('x', width / 2)
         .attr('y', height / 2)
@@ -405,15 +548,47 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
         .attr('fill', '#FFFFFF')
         .text('Recording track data...');
       
-      // Show lap percentage
-      if (telemetryData?.lap_dist_pct) {
+      // Track position percentage
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', height / 2 + 30)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '18px')
+        .attr('fill', '#FFFFFF')
+        .attr('font-weight', 'bold')
+        .text(`Position: ${(currentPct * 100).toFixed(1)}%`);
+      
+      // Display telemetry data
+      if (telemetryData) {
+        // Speed display
+        const speed = telemetryData.velocity_ms * 3.6; // to km/h
         svg.append('text')
           .attr('x', width / 2)
-          .attr('y', height / 2 + 30)
+          .attr('y', height / 2 + 60)
           .attr('text-anchor', 'middle')
           .attr('font-size', '14px')
           .attr('fill', '#AAAAAA')
-          .text(`Track position: ${(telemetryData.lap_dist_pct * 100).toFixed(1)}%`);
+          .text(`Speed: ${speed.toFixed(0)} km/h`);
+          
+        // Lateral G display
+        const lateralG = telemetryData.g_force_lat || 0;
+        svg.append('text')
+          .attr('x', width / 2 - 50)
+          .attr('y', height / 2 + 85)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '14px')
+          .attr('fill', Math.abs(lateralG) > 1.5 ? '#FFEB3B' : '#AAAAAA')
+          .text(`Lat G: ${lateralG.toFixed(2)}`);
+          
+        // Longitudinal G display
+        const longG = telemetryData.g_force_lon || 0;
+        svg.append('text')
+          .attr('x', width / 2 + 50)
+          .attr('y', height / 2 + 85)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '14px')
+          .attr('fill', Math.abs(longG) > 1.5 ? '#FFEB3B' : '#AAAAAA')
+          .text(`Lon G: ${longG.toFixed(2)}`);
       }
     } else {
       // Show start instructions
@@ -450,6 +625,107 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ id, onClose }) => {
   useEffect(() => {
     updateChart();
   }, [updateChart]);
+
+  // Update chart with D3
+  useEffect(() => {
+    if (!svgRef.current || trackPoints.length === 0) return;
+
+    // Clear existing SVG
+    d3.select(svgRef.current).selectAll("*").remove();
+
+    // Create D3 selections
+    const svg = d3.select(svgRef.current);
+    const width = svgRef.current.clientWidth;
+    const height = svgRef.current.clientHeight;
+
+    // Get the bounding box of our track
+    const xValues = trackPoints.map(d => d.x);
+    const yValues = trackPoints.map(d => d.y);
+    const minX = Math.min(...xValues);
+    const maxX = Math.max(...xValues);
+    const minY = Math.min(...yValues);
+    const maxY = Math.max(...yValues);
+
+    // Calculate the scale to fit the track in the SVG with padding
+    const padding = 20;
+    const xScale = (width - 2 * padding) / (maxX - minX);
+    const yScale = (height - 2 * padding) / (maxY - minY);
+    const scale = Math.min(xScale, yScale);
+
+    // Calculate the center adjustment
+    const centerX = (width / 2) - (((maxX + minX) / 2) * scale);
+    const centerY = (height / 2) - (((maxY + minY) / 2) * scale);
+
+    // Create a group for the track
+    const trackGroup = svg.append("g")
+      .attr("transform", `translate(${centerX}, ${centerY})`);
+
+    // Define color scale for curvature
+    const curvatureColorScale = d3.scaleLinear<string>()
+      .domain([-0.01, 0, 0.01])
+      .range(["#ff0000", "#ffffff", "#0000ff"]);
+
+    // Define color scale for longitudinal acceleration (braking to acceleration)
+    const accelerationColorScale = d3.scaleLinear<string>()
+      .domain([-8, -2, 0, 2, 8]) 
+      .range(["#ff0000", "#ff9900", "#ffffff", "#66cc00", "#00cc00"]);
+
+    // Draw the track as a series of line segments with color based on both curvature and longitudinal accel
+    for (let i = 1; i < trackPoints.length; i++) {
+      const p1 = trackPoints[i - 1];
+      const p2 = trackPoints[i];
+      
+      // Choose color based on user preference
+      let segmentColor;
+      if (colorMode === 'curvature') {
+        segmentColor = curvatureColorScale(p2.curvature || 0);
+      } else if (colorMode === 'acceleration') {
+        segmentColor = accelerationColorScale(p2.longitudinalAccel || 0);
+      } else {
+        segmentColor = "#ffffff"; // Default white
+      }
+      
+      trackGroup.append("line")
+        .attr("x1", p1.x * scale)
+        .attr("y1", p1.y * scale)
+        .attr("x2", p2.x * scale)
+        .attr("y2", p2.y * scale)
+        .attr("stroke", segmentColor)
+        .attr("stroke-width", 2);
+    }
+
+    // Draw a marker at the start/finish line
+    if (trackPoints.length > 0) {
+      trackGroup.append("circle")
+        .attr("cx", trackPoints[0].x * scale)
+        .attr("cy", trackPoints[0].y * scale)
+        .attr("r", 5)
+        .attr("fill", "#00ff00");
+    }
+
+    // Draw the current position
+    if (currentPositionIndex >= 0 && currentPositionIndex < trackPoints.length) {
+      const currentPoint = trackPoints[currentPositionIndex];
+      trackGroup.append("circle")
+        .attr("cx", currentPoint.x * scale)
+        .attr("cy", currentPoint.y * scale)
+        .attr("r", 7)
+        .attr("fill", "#ffff00");
+    }
+  }, [trackPoints, currentPositionIndex, colorMode]);
+
+  // Update current position marker when lap distance changes
+  useEffect(() => {
+    if (trackPoints.length > 0 && currentPosition?.lapDistPct !== undefined) {
+      // Find the closest track point to the current lap distance percentage
+      const index = trackPoints.findIndex(point => 
+        point.lapDistPct >= currentPosition.lapDistPct
+      );
+      setCurrentPositionIndex(index !== -1 ? index : -1);
+    } else {
+      setCurrentPositionIndex(-1);
+    }
+  }, [currentPosition?.lapDistPct, trackPoints]);
 
   return (
     <BaseWidget id={id} title="Track Map" className="track-map-widget">
