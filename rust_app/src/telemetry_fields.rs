@@ -18,6 +18,14 @@ pub struct TelemetryData {
     pub on_pit_road: bool,
     pub track_surface: String,
     
+    // Velocity Vectors
+    pub VelocityX: f32,     // World-space X velocity component
+    pub VelocityY: f32,     // World-space Y velocity component
+    pub VelocityZ: f32,     // World-space Z velocity component
+    pub VelocityX_ST: f32,  // Session-transformed X velocity component
+    pub VelocityY_ST: f32,  // Session-transformed Y velocity component
+    pub VelocityZ_ST: f32,  // Session-transformed Z velocity component
+    
     // Driver Inputs
     pub throttle_pct: f32,
     pub brake_pct: f32,
@@ -174,6 +182,7 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         if let Ok(vel_x_val) = TryInto::<f32>::try_into(vel_x) {
             vx = vel_x_val;
             raw_values.insert("VelocityX".to_string(), serde_json::json!(vx));
+            data.VelocityX = vx;
         }
     }
     
@@ -181,6 +190,7 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         if let Ok(vel_y_val) = TryInto::<f32>::try_into(vel_y) {
             vy = vel_y_val;
             raw_values.insert("VelocityY".to_string(), serde_json::json!(vy));
+            data.VelocityY = vy;
         }
     }
     
@@ -188,6 +198,29 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         if let Ok(vel_z_val) = TryInto::<f32>::try_into(vel_z) {
             vz = vel_z_val;
             raw_values.insert("VelocityZ".to_string(), serde_json::json!(vz));
+            data.VelocityZ = vz;
+        }
+    }
+    
+    // Get session-transformed velocity components
+    if let Ok(vel_x_st) = telem.get("VelocityX_ST") {
+        if let Ok(vel_x_st_val) = TryInto::<f32>::try_into(vel_x_st) {
+            data.VelocityX_ST = vel_x_st_val;
+            raw_values.insert("VelocityX_ST".to_string(), serde_json::json!(vel_x_st_val));
+        }
+    }
+    
+    if let Ok(vel_y_st) = telem.get("VelocityY_ST") {
+        if let Ok(vel_y_st_val) = TryInto::<f32>::try_into(vel_y_st) {
+            data.VelocityY_ST = vel_y_st_val;
+            raw_values.insert("VelocityY_ST".to_string(), serde_json::json!(vel_y_st_val));
+        }
+    }
+    
+    if let Ok(vel_z_st) = telem.get("VelocityZ_ST") {
+        if let Ok(vel_z_st_val) = TryInto::<f32>::try_into(vel_z_st) {
+            data.VelocityZ_ST = vel_z_st_val;
+            raw_values.insert("VelocityZ_ST".to_string(), serde_json::json!(vel_z_st_val));
         }
     }
     

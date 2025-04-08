@@ -57,7 +57,13 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       'lap_dist_pct',
       'lap_dist',
       'velocity_ms',
-      'yaw_rate_deg_s'
+      'yaw_rate_deg_s',
+      'VelocityX',
+      'VelocityY',
+      'VelocityZ',
+      'VelocityX_ST',
+      'VelocityY_ST',
+      'VelocityZ_ST'
     ],
     throttleUpdates: true,
     updateInterval: 50
@@ -107,7 +113,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     }
   }, []);
 
-  // Process telemetry data to build track map
+  // Process telemetry data to build track map using velocity vectors
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'recording') return;
 
@@ -115,7 +121,10 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const velocity = telemetryData.velocity_ms || 0;
     const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
     const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
-    const yawRate = telemetryData.yaw_rate_deg_s || 0;
+    
+    // Get velocity vectors - try both regular and session-transformed
+    const velX = telemetryData.VelocityX_ST ?? telemetryData.VelocityX ?? 0;
+    const velY = telemetryData.VelocityY_ST ?? telemetryData.VelocityY ?? 0;
     
     // Skip if velocity is too low (car is nearly stationary)
     if (velocity < 5) return;
@@ -135,7 +144,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       newX = 0;
       newY = 0;
     }
-    // Use inertia-based model for track points
+    // Use direct velocity vectors for position updates
     else if (lastPositionRef.current) {
       const timeDelta = 0.05; // Based on update interval of 50ms
       
@@ -143,72 +152,31 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       const lastX = lastPositionRef.current.x;
       const lastY = lastPositionRef.current.y;
       
-      // Use a completely different approach:
-      // 1. Primarily rely on the lap_dist_pct for track shape
-      // 2. Use minimal turning input from vehicle
-      
-      // Extract direction of movement from previous points
-      let heading = 0;
-      
-      // For the very beginning, establish an initial heading eastward
-      if (trackPointsRef.current.length === 1) {
-        heading = 0; // Start heading east (positive X axis)
-      } 
-      // Otherwise, get heading from previous movement
-      else if (trackPointsRef.current.length >= 2) {
-        // Use last 3 points for a more stable heading (if available)
-        const numPointsToUse = Math.min(3, trackPointsRef.current.length - 1);
-        const startIdx = trackPointsRef.current.length - 1 - numPointsToUse;
+      // If we have velocity vectors, use them directly for accurate movement
+      if (velX !== 0 || velY !== 0) {
+        // Calculate the 2D vector magnitude for scaling
+        const vectorMag = Math.sqrt(velX * velX + velY * velY);
         
-        // Average the heading over the last few points
-        let sumDx = 0;
-        let sumDy = 0;
-        
-        for (let i = startIdx; i < trackPointsRef.current.length - 1; i++) {
-          const p1 = trackPointsRef.current[i];
-          const p2 = trackPointsRef.current[i + 1];
-          sumDx += p2.x - p1.x;
-          sumDy += p2.y - p1.y;
-        }
-        
-        // Use the average heading
-        if (sumDx !== 0 || sumDy !== 0) {
-          heading = Math.atan2(sumDy, sumDx);
-        }
-      }
-      
-      // EXTREMELY minimal yaw influence - just enough to indicate turning
-      // This prevents spiral artifacts entirely
-      const yawInfluence = Math.min(0.05, 2 / (velocity + 1)); // Increased from 0.02 to 0.05, velocity scaling increased
-      heading += (yawRate * Math.PI / 180) * timeDelta * yawInfluence;
-      
-      // Base movement is just in the heading direction, scaled by velocity
-      // This is the primary shape driver - simply moving forward at the current speed
-      const distance = velocity * timeDelta;
-      newX = lastX + distance * Math.cos(heading);
-      newY = lastY + distance * Math.sin(heading);
-      
-      // Add more pronounced lateral adjustment to better capture track curvature
-      // Use the actual change in lap_dist_pct to decide how much to curve the track
-      if (trackPointsRef.current.length > 5) {
-        const lapDistDelta = Math.abs(lapDistPct - lastPositionRef.current.lapDistPct);
-        
-        // Only apply this correction when moving significantly around the track
-        // This helps avoid artifacts when the car is stationary or moving very slowly
-        if (lapDistDelta > 0.001) {
-          // Scale factor based on how far along track we've moved (keeps corners proportional)
-          // Increased the base factor from 0.0005 to 0.002 (4x more sensitive)
-          const cornerFactor = 0.002 / Math.max(0.001, lapDistDelta);
+        // Only update if we have meaningful velocity
+        if (vectorMag > 0.1) {
+          // Normalize and scale by the time delta and speed
+          const distance = velocity * timeDelta;
+          const scaleFactor = distance / vectorMag;
           
-          // Increased lateral influence with higher cap
-          const maxLateralInfluence = 1.0; // Doubled from 0.5
-          // Reduced divisor from 20 to 10 to make it more sensitive
-          const lateralInfluence = Math.sign(lateralAccel) * Math.min(Math.abs(lateralAccel) / 10, maxLateralInfluence);
-          
-          // Apply a stronger perpendicular adjustment based on lateral acceleration
-          newX += distance * lateralInfluence * -Math.sin(heading) * cornerFactor;
-          newY += distance * lateralInfluence * Math.cos(heading) * cornerFactor;
+          // Update position based on velocity direction
+          newX = lastX + (velX * scaleFactor);
+          newY = lastY + (velY * scaleFactor);
+        } else {
+          // For very low speeds, just maintain position
+          newX = lastX;
+          newY = lastY;
         }
+      } else {
+        // Fallback only if velocity vectors aren't available
+        const heading = Math.atan2(lastPositionRef.current.y, lastPositionRef.current.x);
+        const distance = velocity * timeDelta;
+        newX = lastX + (distance * Math.cos(heading));
+        newY = lastY + (distance * Math.sin(heading));
       }
       
       // Force track to close as we near completion of the lap (only when we're near the start)
