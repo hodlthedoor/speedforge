@@ -37,6 +37,10 @@ pub struct TelemetryData {
     pub lap_dist_pct: f32,
     pub lap_dist: f32,
     
+    // Location
+    pub lat: f64,
+    pub lon: f64,
+    
     // Timing
     pub current_lap_time: f32,
     pub last_lap_time: f32,
@@ -213,6 +217,23 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     // Track Position
     data.lap_dist_pct = TryInto::<f32>::try_into(telem.get("LapDistPct").unwrap_or(Value::FLOAT(0.0))).unwrap();
     data.lap_dist = TryInto::<f32>::try_into(telem.get("LapDist").unwrap_or(Value::FLOAT(0.0))).unwrap();
+    
+    // Location
+    if let Ok(lat_value) = telem.get("Lat") {
+        data.lat = TryInto::<f64>::try_into(lat_value).unwrap_or(0.0);
+    } else if let Ok(lat_value) = telem.get("Latitude") {
+        data.lat = TryInto::<f64>::try_into(lat_value).unwrap_or(0.0);
+    } else if let Ok(lat_value) = telem.get("GPSLat") {
+        data.lat = TryInto::<f64>::try_into(lat_value).unwrap_or(0.0);
+    }
+    
+    if let Ok(lon_value) = telem.get("Lon") {
+        data.lon = TryInto::<f64>::try_into(lon_value).unwrap_or(0.0);
+    } else if let Ok(lon_value) = telem.get("Longitude") {
+        data.lon = TryInto::<f64>::try_into(lon_value).unwrap_or(0.0);
+    } else if let Ok(lon_value) = telem.get("GPSLon") {
+        data.lon = TryInto::<f64>::try_into(lon_value).unwrap_or(0.0);
+    }
     
     // Timing
     data.current_lap_time = TryInto::<f32>::try_into(telem.get("LapCurrentLapTime").unwrap_or(Value::FLOAT(0.0))).unwrap();

@@ -22,12 +22,16 @@ const availableMetrics = [
   { id: 'clutch_pct', name: 'Clutch' },
   { id: 'g_force_lat', name: 'Lateral G' },
   { id: 'g_force_lon', name: 'Longitudinal G' },
+  { id: 'lateral_accel_ms2', name: 'Lateral Accel (m/s²)' },
+  { id: 'longitudinal_accel_ms2', name: 'Longitudinal Accel (m/s²)' },
   { id: 'fuel_level', name: 'Fuel Level' },
   { id: 'current_lap_time', name: 'Current Lap' },
   { id: 'last_lap_time', name: 'Last Lap' },
   { id: 'best_lap_time', name: 'Best Lap' },
   { id: 'position', name: 'Position' },
   { id: 'lap_completed', name: 'Lap' },
+  { id: 'lat', name: 'Latitude' },
+  { id: 'lon', name: 'Longitude' },
   { id: 'lap_dist', name: 'Lap Distance' },
   { id: 'lap_dist_pct', name: 'Track Position' }
 ];

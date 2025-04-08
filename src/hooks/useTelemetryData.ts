@@ -33,6 +33,10 @@ export interface TelemetryData {
   lap_dist_pct?: number;
   lap_dist?: number;
   
+  // Location
+  lat?: number;
+  lon?: number;
+  
   // Timing
   current_lap_time?: number;
   last_lap_time?: number;
@@ -218,10 +222,16 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'position':
     case 'lap_completed':
       return `${value}`;
+    case 'lat':
+    case 'lon':
+      return `${value.toFixed(6)}`;
     case 'lap_dist':
       return `${value.toFixed(1)}m`;
     case 'lap_dist_pct':
       return `${(value * 100).toFixed(1)}%`;
+    case 'lateral_accel_ms2':
+    case 'longitudinal_accel_ms2':
+      return `${value.toFixed(2)} m/s²`;
     default:
       return `${value}`;
   }
@@ -243,6 +253,8 @@ export function getMetricName(metric: string): string {
     'clutch_pct': 'Clutch',
     'g_force_lat': 'Lateral G',
     'g_force_lon': 'Longitudinal G',
+    'lateral_accel_ms2': 'Lateral Acceleration',
+    'longitudinal_accel_ms2': 'Longitudinal Acceleration',
     'fuel_level': 'Fuel Level',
     'fuel_pct': 'Fuel Percentage',
     'current_lap_time': 'Current Lap',
@@ -251,6 +263,8 @@ export function getMetricName(metric: string): string {
     'position': 'Position',
     'lap_completed': 'Lap',
     'shift_indicator_pct': 'Shift Indicator',
+    'lat': 'Latitude',
+    'lon': 'Longitude',
     'lap_dist': 'Lap Distance',
     'lap_dist_pct': 'Track Position'
   };
