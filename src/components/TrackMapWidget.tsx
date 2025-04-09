@@ -88,11 +88,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     const trackSurface = telemetryData.PlayerTrackSurface as number;
-    
-    // Simplified auto-start recording - just need speed and to be on track
-    if (speed > 5 && trackSurface === TrackSurface.OnTrack) {
-      startRecording();
-    }
+    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95) && trackSurface === TrackSurface.OnTrack) startRecording();
   }, [telemetryData, mapBuildingState]);
 
   const startRecording = useCallback(() => {
@@ -109,7 +105,9 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     setMapBuildingState('complete');
     mapCompleteRef.current = true;
     if (trackPointsRef.current.length > 10) {
-      const normalizedTrack = normalizeTrack([...trackPointsRef.current]);
+      // Sort points by lap distance percentage to ensure correct order
+      const sortedPoints = [...trackPointsRef.current].sort((a, b) => a.lapDistPct - b.lapDistPct);
+      const normalizedTrack = normalizeTrack(sortedPoints);
       setTrackPoints(normalizedTrack);
     }
   }, []);
@@ -250,8 +248,71 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
 
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'complete') return;
-    setCurrentPosition({ lapDistPct: telemetryData.lap_dist_pct || 0 });
+    
+    // Update current position based on telemetry lap distance when track is complete
+    const lapDistPct = telemetryData.lap_dist_pct || 0;
+    setCurrentPosition({ lapDistPct });
   }, [telemetryData, mapBuildingState]);
+
+  const findPositionAtLapDistance = useCallback((lapDistPct: number): TrackPoint | null => {
+    if (trackPoints.length === 0) return null;
+    
+    // Handle wrap-around at start/finish line
+    let targetDist = lapDistPct;
+    if (targetDist > 1) targetDist -= 1;
+    if (targetDist < 0) targetDist += 1;
+    
+    // First, try to find exact match
+    const exactMatch = trackPoints.find(p => Math.abs(p.lapDistPct - targetDist) < 0.001);
+    if (exactMatch) return exactMatch;
+    
+    // Find the two closest points and interpolate
+    let prevPoint = trackPoints[0];
+    let nextPoint = trackPoints[0];
+    
+    for (let i = 0; i < trackPoints.length; i++) {
+      if (trackPoints[i].lapDistPct <= targetDist && 
+          (i === trackPoints.length - 1 || trackPoints[i+1].lapDistPct > targetDist)) {
+        prevPoint = trackPoints[i];
+        nextPoint = i < trackPoints.length - 1 ? trackPoints[i+1] : trackPoints[0];
+        break;
+      }
+    }
+    
+    // Handle case where target is before first point or after last point
+    if (targetDist < trackPoints[0].lapDistPct) {
+      prevPoint = trackPoints[trackPoints.length - 1];
+      nextPoint = trackPoints[0];
+    }
+    
+    // Calculate interpolation factor
+    let t = 0;
+    const prevDist = prevPoint.lapDistPct;
+    const nextDist = nextPoint.lapDistPct;
+    
+    if (nextDist < prevDist) { // Handling wrap around 0/1 boundary
+      if (targetDist >= prevDist) {
+        t = (targetDist - prevDist) / ((1 - prevDist) + nextDist);
+      } else {
+        t = ((1 - prevDist) + targetDist) / ((1 - prevDist) + nextDist);
+      }
+    } else {
+      t = (targetDist - prevDist) / (nextDist - prevDist);
+    }
+    
+    // Clamp t between 0 and 1
+    t = Math.max(0, Math.min(1, t));
+    
+    // Interpolate position
+    return {
+      x: prevPoint.x * (1 - t) + nextPoint.x * t,
+      y: prevPoint.y * (1 - t) + nextPoint.y * t,
+      lapDistPct: targetDist,
+      heading: prevPoint.heading, // Just use the heading from the previous point
+      curvature: prevPoint.curvature,
+      longitudinalAccel: prevPoint.longitudinalAccel
+    };
+  }, [trackPoints]);
 
   const renderTrackMap = useCallback(() => {
     if (!svgRef.current) return;
@@ -363,7 +424,36 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       }
     }
 
-    if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
+    if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
+      // When track is complete, use lap_dist_pct to position the car
+      const carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
+      
+      if (carPos) {
+        svg.append("circle")
+          .attr("cx", xScale(carPos.x))
+          .attr("cy", yScale(carPos.y))
+          .attr("r", 5)
+          .attr("fill", "#fbbf24");
+          
+        // Add direction indicator to show heading
+        if (carPos.heading !== undefined) {
+          const headingLength = 8;
+          // Calculate endpoint using the heading angle
+          const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
+          const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
+          
+          // Draw heading indicator line
+          svg.append("line")
+            .attr("x1", xScale(carPos.x))
+            .attr("y1", yScale(carPos.y))
+            .attr("x2", headingX)
+            .attr("y2", headingY)
+            .attr("stroke", "#fbbf24")
+            .attr("stroke-width", 2);
+        }
+      }
+    } else if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
+      // During recording, use the current position index
       const carPos = trackPoints[currentPositionIndex];
       svg.append("circle")
         .attr("cx", xScale(carPos.x))
@@ -388,14 +478,14 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           .attr("stroke-width", 2);
       }
     }
-  }, [trackPoints, colorMode, currentPositionIndex]);
+  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
   useEffect(() => {
     renderTrackMap();
   }, [renderTrackMap]);
 
   useEffect(() => {
-    if (trackPoints.length > 0 && currentPosition.lapDistPct !== undefined) {
+    if (trackPoints.length > 0 && currentPosition.lapDistPct !== undefined && mapBuildingState === 'recording') {
       let closestIndex = 0;
       let minDistance = Number.MAX_VALUE;
       for (let i = 0; i < trackPoints.length; i++) {
@@ -412,7 +502,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     } else {
       setCurrentPositionIndex(-1);
     }
-  }, [currentPosition.lapDistPct, trackPoints]);
+  }, [currentPosition.lapDistPct, trackPoints, mapBuildingState]);
 
   useEffect(() => {
     if (externalControls?.mapBuildingState) setMapBuildingState(externalControls.mapBuildingState);
@@ -444,6 +534,19 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           height="300"
           className="bg-gray-800/80 rounded"
         />
+      </div>
+      
+      {/* Minimal controls - just color mode */}
+      <div className="track-map-controls flex justify-center mt-2">
+        <select 
+          value={colorMode} 
+          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
+          className="px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600"
+        >
+          <option value="none">No Color</option>
+          <option value="curvature">Curvature</option>
+          <option value="acceleration">Acceleration</option>
+        </select>
       </div>
     </BaseWidget>
   );
