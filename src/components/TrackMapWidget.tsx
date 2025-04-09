@@ -1,16 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import BaseWidget from './BaseWidget';
+import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
-
-// Track Surface enum
-enum TrackSurface {
-  OffTrack = 0,
-  PitStall = 1,
-  PitLane = 2,
-  OnTrack = 3,
-  NotInWorld = 4
-}
+import { TrackSurface } from '../types/telemetry';
+import { useTrackMapControls } from '../widgets/TrackMapControls';
+import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
+import { useWidgetControls } from '../widgets/BaseWidget';
+import { withControls } from '../widgets/WidgetRegistryAdapter';
 
 interface TrackMapWidgetProps {
   id: string;
@@ -40,7 +36,7 @@ interface TrackPosition {
 
 type MapBuildingState = 'idle' | 'recording' | 'complete';
 
-const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({ 
+const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({ 
   id, 
   onClose,
   onStateChange,
@@ -577,8 +573,14 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   }, [currentPosition.lapDistPct, trackPoints, mapBuildingState]);
 
   useEffect(() => {
-    if (externalControls?.mapBuildingState) setMapBuildingState(externalControls.mapBuildingState);
-    if (externalControls?.colorMode) setColorMode(externalControls.colorMode);
+    if (externalControls) {
+      if (externalControls.mapBuildingState !== undefined) {
+        setMapBuildingState(externalControls.mapBuildingState);
+      }
+      if (externalControls.colorMode !== undefined) {
+        setColorMode(externalControls.colorMode);
+      }
+    }
   }, [externalControls]);
 
   useEffect(() => {
@@ -598,8 +600,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   };
 
   return (
-    <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
-      <div className="track-map-container" style={{ height: '300px', width: '100%' }}>
+    <Widget id={id} title="Track Map" className="w-auto max-w-[600px]" onClose={onClose}>
+      <div className="w-full max-w-[550px] h-[300px]">
         {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             {lapInvalidated ? (
@@ -643,8 +645,54 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           />
         )}
       </div>
-    </BaseWidget>
+    </Widget>
   );
 };
+
+// Get the controls for the track map widget
+const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
+  const mapBuildingState = widgetState.mapBuildingState || 'idle';
+  const colorMode = widgetState.colorMode || 'none';
+  
+  const controls: WidgetControlDefinition[] = [
+    {
+      type: 'select' as WidgetControlType,
+      id: 'colorMode',
+      label: 'Color Mode',
+      value: colorMode,
+      options: [
+        { value: 'none', label: 'Default' },
+        { value: 'curvature', label: 'Curvature' },
+        { value: 'acceleration', label: 'Acceleration' }
+      ],
+      onChange: (value) => updateWidget({ colorMode: value })
+    }
+  ];
+  
+  if (mapBuildingState === 'recording') {
+    controls.push({
+      type: 'button' as WidgetControlType,
+      id: 'stopRecording',
+      label: 'Stop Recording',
+      value: undefined,
+      options: [],
+      onChange: () => updateWidget({ mapBuildingState: 'complete' })
+    });
+  } else if (mapBuildingState === 'complete') {
+    controls.push({
+      type: 'button' as WidgetControlType,
+      id: 'startRecording',
+      label: 'Start New Recording',
+      value: undefined,
+      options: [],
+      onChange: () => updateWidget({ mapBuildingState: 'idle' })
+    });
+  }
+  
+  return controls;
+};
+
+// Create the enhanced component with static controls
+const TrackMapWidget = withControls(TrackMapWidgetComponent, getTrackMapControls);
 
 export default TrackMapWidget;

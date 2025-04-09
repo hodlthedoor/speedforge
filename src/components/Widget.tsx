@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
+import BaseWidget from './BaseWidget';
 
 export interface WidgetProps {
   title: string;
@@ -7,9 +8,17 @@ export interface WidgetProps {
   onClose?: () => void;
   children?: React.ReactNode;
   id: string;
+  className?: string;
 }
 
-export const Widget: React.FC<WidgetProps> = ({ title, initialPosition, onClose, children, id }) => {
+export const Widget: React.FC<WidgetProps> = ({ 
+  title, 
+  initialPosition, 
+  onClose, 
+  children, 
+  id,
+  className = ''
+}) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
   
   // Listen for highlight events
@@ -56,30 +65,16 @@ export const Widget: React.FC<WidgetProps> = ({ title, initialPosition, onClose,
   return (
     <BaseDraggableComponent 
       initialPosition={defaultPosition} 
-      className="widget-component-wrapper"
+      className="z-10"
     >
-      <div 
-        className={`widget-component ${isHighlighted ? 'widget-highlighted' : ''}`}
-        onClick={handleWidgetClick}
+      <BaseWidget
+        id={id}
+        title={title}
+        onClose={handleClose}
+        className={`${className} ${isHighlighted ? 'shadow-blue-500/50 animate-pulse' : ''}`}
       >
-        <div className="widget-header drag-handle">
-          <h3>{title}</h3>
-          {onClose && (
-            <button 
-              className="widget-close-btn" 
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent click from bubbling to parent
-                handleClose();
-              }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-        <div className="widget-content">
-          {children}
-        </div>
-      </div>
+        {children}
+      </BaseWidget>
     </BaseDraggableComponent>
   );
 };

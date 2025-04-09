@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { WebSocketService } from '../services/WebSocketService';
+import { 
+  formatBatteryLevel, 
+  formatFuel, 
+  formatGear, 
+  formatLapTime,
+  formatPosition, 
+  formatSpeed, 
+  formatTemperature, 
+  formatTorque
+} from '../utils/formatters';
+import { TrackSurface } from '../types/telemetry';
 
 // Typescript interface for telemetry data
 export interface TelemetryData {
@@ -13,6 +24,8 @@ export interface TelemetryData {
   shift_indicator_pct?: number;
   on_pit_road?: boolean;
   track_surface?: string;
+  PlayerTrackSurfaceStatus?: string;
+  PlayerTrackSurface?: TrackSurface;
   
   // Velocity Vectors
   VelocityX?: number;     // Forward/backward velocity (car's local X axis)

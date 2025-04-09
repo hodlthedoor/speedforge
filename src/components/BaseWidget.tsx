@@ -1,29 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import BaseDraggableComponent from './BaseDraggableComponent';
 import { WebSocketService } from '../services/WebSocketService';
 
-interface BaseWidgetProps {
+// Base props that all widgets must accept
+export interface BaseWidgetProps {
   id: string;
-  title?: string;
-  initialPosition?: { x: number, y: number };
+  onClose: () => void;
   className?: string;
-  opacity?: number;
-  children: React.ReactNode;
-  onClose?: () => void;
+  title?: string;
 }
 
-const BaseWidget: React.FC<BaseWidgetProps> = ({
+const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   id,
-  title,
-  initialPosition = { x: 100, y: 100 },
+  onClose,
   className = '',
-  opacity = 1,
-  children,
-  onClose
+  title = 'Widget',
+  children
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentOpacity, setCurrentOpacity] = useState(opacity);
+  const [currentOpacity, setCurrentOpacity] = useState(1);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -47,42 +42,37 @@ const BaseWidget: React.FC<BaseWidgetProps> = ({
     };
   }, [id]);
 
+  // Handle click on the widget to bring it to front via custom event
+  const handleWidgetClick = () => {
+    const event = new CustomEvent('widget:clicked', { detail: { widgetId: id } });
+    window.dispatchEvent(event);
+  };
+
   return (
-    <BaseDraggableComponent
-      initialPosition={initialPosition}
-      className={`interactive overflow-hidden ${className}`}
+    <div 
+      className={`drag-handle w-auto max-w-[500px] bg-slate-800/80 rounded-lg shadow-lg backdrop-blur-md overflow-hidden m-0 border border-slate-600/30 ${className}`}
+      style={{ opacity: currentOpacity }}
+      onClick={handleWidgetClick}
     >
-      <div 
-        className="bg-gray-900 rounded-lg shadow-lg drag-handle min-w-[200px] min-h-[100px] flex flex-col"
-        style={{ opacity: currentOpacity }}
-        onClick={() => {
-          // Emit widget:clicked event
-          const event = new CustomEvent('widget:clicked', { 
-            detail: { widgetId: id }
-          });
-          window.dispatchEvent(event);
-        }}
-      >
-        <div className="flex-1 flex items-center justify-center p-4">
-          {isLoading ? (
-            <div className="text-center">
-              {title && <p className="text-sm font-medium text-gray-400 mb-4">{title}</p>}
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-              <p className="mt-2 text-sm text-gray-400">Connecting to telemetry...</p>
-            </div>
-          ) : !isConnected ? (
-            <div className="text-center">
-              {title && <p className="text-sm font-medium text-gray-400 mb-4">{title}</p>}
-              <div className="rounded-full h-3 w-3 bg-red-500 mx-auto animate-pulse"></div>
-              <p className="mt-2 text-sm font-medium text-red-400">Disconnected</p>
-              <p className="text-xs text-gray-500">Attempting to reconnect...</p>
-            </div>
-          ) : (
-            children
-          )}
-        </div>
+      <div className="p-3 min-w-[200px] max-w-full min-h-[100px] max-h-[500px] overflow-auto">
+        {isLoading ? (
+          <div className="text-center">
+            <div className="text-sm font-medium text-slate-300 mb-2">{title}</div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-400">Connecting to telemetry...</p>
+          </div>
+        ) : !isConnected ? (
+          <div className="text-center">
+            <div className="text-sm font-medium text-slate-300 mb-2">{title}</div>
+            <div className="rounded-full h-3 w-3 bg-red-500 mx-auto animate-pulse"></div>
+            <p className="mt-2 text-sm font-medium text-red-400">Disconnected</p>
+            <p className="text-xs text-gray-500">Attempting to reconnect...</p>
+          </div>
+        ) : (
+          children
+        )}
       </div>
-    </BaseDraggableComponent>
+    </div>
   );
 };
 

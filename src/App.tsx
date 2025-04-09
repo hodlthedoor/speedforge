@@ -7,6 +7,8 @@ import { SimpleTelemetryWidget } from './components/SimpleTelemetryWidget';
 import PedalTraceWidget from './components/PedalTraceWidget';
 import ShiftIndicatorWidget from './components/ShiftIndicatorWidget';
 import TrackMapWidget from './components/TrackMapWidget';
+import WidgetRegistry from './widgets/WidgetRegistry';
+import { v4 as uuidv4 } from 'uuid';
 
 function App() {
   // Initialize WebSocketService
@@ -59,7 +61,7 @@ function App() {
   }, []);
   
   // Toggle click-through mode state
-  const [isClickThrough, setIsClickThrough] = useState(true);
+  const [isClickThrough, setIsClickThrough] = useState(false);
   const clickThroughRef = useRef(false);
   
   // Track window width for positioning
@@ -206,47 +208,45 @@ function App() {
       
       {/* Widgets are rendered at app level, separate from control panel */}
       {widgets.map(widget => {
-        // Render the appropriate widget based on type
-        let widgetContent;
-        if (widget.type === 'telemetry' && widget.metric) {
-          widgetContent = <SimpleTelemetryWidget 
-            id={widget.id} 
-            name={widget.title}
-            metric={widget.metric}
-            onClose={() => handleCloseWidget(widget.id)}
-          />;
-        } else if (widget.type === 'pedal-trace') {
-          widgetContent = <PedalTraceWidget 
-            id={widget.id}
-            onClose={() => handleCloseWidget(widget.id)}
-          />;
-        } else if (widget.type === 'shift-indicator') {
-          widgetContent = <ShiftIndicatorWidget 
-            id={widget.id}
-            onClose={() => handleCloseWidget(widget.id)}
-          />;
-        } else if (widget.type === 'track-map') {
-          widgetContent = <TrackMapWidget 
-            id={widget.id}
-            onClose={() => handleCloseWidget(widget.id)}
-            externalControls={widget.externalControls}
-            onStateChange={(state) => {
+        // Get the widget component from registry
+        const widgetDef = WidgetRegistry.get(widget.type);
+        
+        if (widgetDef) {
+          // Create widget with component from registry
+          const WidgetComponent = widgetDef.component;
+          const widgetProps = {
+            id: widget.id,
+            onClose: () => handleCloseWidget(widget.id),
+            ...widget.options,
+            ...widget.externalControls
+          };
+          
+          // Add special props for track-map widget
+          if (widget.type === 'track-map') {
+            widgetProps.onStateChange = (state: any) => {
               // Update widgets for state tracking in the control panel
               const stateEvent = new CustomEvent('track-map:state', {
                 detail: { widgetId: widget.id, state }
               });
               window.dispatchEvent(stateEvent);
-            }}
-          />;
-        } else {
-          widgetContent = widget.content || 'Widget content';
+            };
+          }
+          
+          return (
+            <React.Fragment key={widget.id}>
+              <WidgetComponent {...widgetProps} />
+            </React.Fragment>
+          );
+        } else if (widget.content) {
+          // Fallback for legacy widgets
+          return (
+            <React.Fragment key={widget.id}>
+              {widget.content}
+            </React.Fragment>
+          );
         }
         
-        return (
-          <React.Fragment key={widget.id}>
-            {widgetContent}
-          </React.Fragment>
-        );
+        return null;
       })}
       
       {/* When click-through is enabled, show a small indicator to disable it */}

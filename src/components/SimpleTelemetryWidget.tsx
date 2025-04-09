@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import BaseWidget from './BaseWidget';
+import Widget from './Widget';
 import { useTelemetryData, formatTelemetryValue, getMetricName } from '../hooks/useTelemetryData';
 
 interface SimpleTelemetryWidgetProps {
@@ -50,12 +50,6 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   // Use the new hook with the specific metric we want to track
   const { data, connected } = useTelemetryData(id, { metrics: [metric] });
   
-  // Generate a random position if none provided
-  const defaultPosition = initialPosition || {
-    x: 200 + Math.random() * 300,
-    y: 200 + Math.random() * 200
-  };
-  
   const handleClose = () => {
     if (onClose) {
       onClose(id);
@@ -67,7 +61,8 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
     if (!data) {
       return (
         <div className="telemetry-content">
-          <div className="status-message">Waiting for data...</div>
+          <div className="text-sm font-medium mb-1">{getMetricName(metric)}</div>
+          <div className="text-sm text-gray-400">Waiting for data...</div>
         </div>
       );
     }
@@ -85,15 +80,16 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   };
 
   return (
-    <BaseWidget 
+    <Widget 
       id={id} 
       title={name}
-      initialPosition={defaultPosition}
+      initialPosition={initialPosition}
+      onClose={() => handleClose()}
       className="telemetry-widget-wrapper"
     >
       <div className="telemetry-widget">
         {renderContent()}
       </div>
-    </BaseWidget>
+    </Widget>
   );
 }; 

@@ -49,45 +49,24 @@ h1 {
   line-height: 1.1;
 }
 
-/* Remove widget styling that could add backgrounds */
-.widget-container {
-  background-color: transparent !important; 
-  color: white;
-  overflow: hidden;
-  border-radius: 0.5rem;
+/* Helper utility for draggable components */
+.drag-handle {
+  cursor: move; /* Fallback for older browsers */
+  cursor: grab;
 }
 
-/* Widget styling - prevent ALL widget scrolling with high specificity */
-.widget-container,
-.widget-wrapper,
-div[class*="Widget"],
-div[class*="widget"] {
-  overflow: hidden !important;
+.drag-handle:active {
+  cursor: grabbing;
 }
-
-
 
 /* Hide scrollbars on widgets for Windows */
-.widget-container::-webkit-scrollbar {
+::-webkit-scrollbar {
   display: none;
 }
 
-.widget-content,
-.widget-container,
-.widget-wrapper {
-  margin: 0 !important;
-  padding: 0 !important;
-  border: none !important;
-  box-sizing: border-box;
-}
-
-/* Keep control panel scrollable */
-.control-panel-old {
-  background-color: #f3f4f6; /* bg-gray-100 */
-  padding: 1rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  overflow-y: auto !important; /* Force vertical scrolling */
-  max-height: calc(100vh - 6rem); /* Allow room for margins and headers */
-}
-
+/* Utility for animation */
+@keyframes widget-pulse {
+  0% { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.8), 0 4px 12px rgba(0, 0, 0, 0.3); }
+  100% { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3); }
+} 

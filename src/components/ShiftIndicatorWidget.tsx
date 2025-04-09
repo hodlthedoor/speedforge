@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import BaseWidget from './BaseWidget';
+import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface ShiftIndicatorWidgetProps {
@@ -149,7 +149,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   }, [updateChart]);
 
   return (
-    <BaseWidget id={id} title="Shift Indicator" className="p-0">
+    <Widget id={id} title="Shift Indicator" className="p-0" onClose={onClose}>
       <div className="w-full h-full">
         <svg
           ref={svgRef}
@@ -159,7 +159,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
           style={{ pointerEvents: 'none' }}
         />
       </div>
-    </BaseWidget>
+    </Widget>
   );
 };
 

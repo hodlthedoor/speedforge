@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
-import BaseWidget from './BaseWidget';
+import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface PedalTraceWidgetProps {
@@ -113,14 +113,14 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   }, [updateChart]);
 
   return (
-    <BaseWidget id={id} title="Pedal Trace" className="">
+    <Widget id={id} title="Pedal Trace" onClose={onClose}>
       <svg
         ref={svgRef}
         width={400}
         height={200}
         className="bg-transparent"
       />
-    </BaseWidget>
+    </Widget>
   );
 };
 

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import PedalTraceWidget from './PedalTraceWidget';
 import ShiftIndicatorWidget from './ShiftIndicatorWidget';
 import TrackMapWidget from './TrackMapWidget';
+import WidgetRegistry from '../widgets/WidgetRegistry';
 
 interface WidgetData {
   id: string;
@@ -79,141 +80,90 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   }, []);
   
   // Update track map widget controls
-  const updateTrackMapState = useCallback((widgetId: string, updates: Partial<TrackMapWidgetState>) => {
-    const event = new CustomEvent('track-map:control', { 
-      detail: { widgetId, updates }
-    });
-    window.dispatchEvent(event);
-  }, []);
+  const updateWidgetState = useCallback((widgetId: string, updates: any) => {
+    // Check if it's a track map widget and dispatch event
+    if (activeWidgets.find(w => w.id === widgetId && w.type === 'track-map')) {
+      const event = new CustomEvent('track-map:control', { 
+        detail: { widgetId, updates }
+      });
+      window.dispatchEvent(event);
+    }
+    
+    // For other widget types, we can implement their update logic here
+  }, [activeWidgets]);
   
   // Start new track recording
   const handleStartRecording = useCallback((widgetId: string) => {
-    updateTrackMapState(widgetId, { mapBuildingState: 'idle' });
-  }, [updateTrackMapState]);
+    updateWidgetState(widgetId, { mapBuildingState: 'idle' });
+  }, [updateWidgetState]);
   
   // Stop current recording
   const handleStopRecording = useCallback((widgetId: string) => {
-    updateTrackMapState(widgetId, { mapBuildingState: 'complete' });
-  }, [updateTrackMapState]);
+    updateWidgetState(widgetId, { mapBuildingState: 'complete' });
+  }, [updateWidgetState]);
   
   // Change visualization mode
   const handleChangeColorMode = useCallback((widgetId: string, mode: 'curvature' | 'acceleration' | 'none') => {
-    updateTrackMapState(widgetId, { colorMode: mode });
-  }, [updateTrackMapState]);
+    updateWidgetState(widgetId, { colorMode: mode });
+  }, [updateWidgetState]);
+  
+  // Get all registered widget types with definitions
+  const widgetDefinitions = useCallback(() => {
+    const definitions = WidgetRegistry.getAllDefinitions();
+    // Filter out telemetry widgets since they have their own section
+    const filteredDefs = { ...definitions };
+    delete filteredDefs['telemetry'];
+    return filteredDefs;
+  }, []);
+
+  // Group widgets by category
+  const widgetsByCategory = useCallback(() => {
+    const defs = widgetDefinitions();
+    const categories: Record<string, any[]> = {};
+    
+    Object.entries(defs).forEach(([type, def]) => {
+      const category = def.category || 'Other';
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push({ type, ...def });
+    });
+    
+    return categories;
+  }, [widgetDefinitions]);
   
   // Now that we've defined the necessary functions, we can create other widget functions
   
-  const addWidget = () => {
+  // Generic function to add any widget type from the registry
+  const addWidgetFromRegistry = useCallback((type: string, customOptions?: any) => {
     if (!onAddWidget) return;
     
+    const widgetDef = WidgetRegistry.get(type);
+    if (!widgetDef) {
+      console.warn(`Widget type "${type}" not found in registry`);
+      return;
+    }
+    
     const id = uuidv4();
-    const widgetData = {
+    const widget = {
       id,
-      type: 'default',
-      title: 'New Widget',
-      text: 'Widget content goes here',
+      type,
+      title: widgetDef.defaultTitle,
+      options: { 
+        ...widgetDef.defaultOptions,
+        ...customOptions 
+      },
       enabled: true
     };
     
-    const widgetContent = (
-      <Widget
-        key={id}
-        id={id}
-        title={widgetData.title}
-        onClose={() => closeWidget(id)}
-      >
-        {widgetData.text}
-      </Widget>
-    );
-    
-    onAddWidget({
-      ...widgetData,
-      content: widgetContent
-    });
-    
-    // Auto-select the new widget
-    setSelectedWidget(widgetData);
-  };
-
-  const addTelemetryWidget = (metric: string, name: string) => {
-    if (!onAddWidget) return;
-    
-    const id = uuidv4();
-    const widgetData = {
-      id,
-      type: 'telemetry',
-      title: name,
-      metric: metric,
-      enabled: true
-    };
-    
-    const widgetContent = (
-      <SimpleTelemetryWidget
-        key={id}
-        id={id}
-        name={name}
-        metric={metric}
-        onClose={() => closeWidget(id)}
-      />
-    );
-    
-    onAddWidget({
-      ...widgetData,
-      content: widgetContent
-    });
-    
-    // Auto-select the new widget
-    setSelectedWidget(widgetData);
-  };
-
-  const addPedalTraceWidget = () => {
-    const widgetId = `pedal-trace-${Date.now()}`;
-    const widget = {
-      id: widgetId,
-      type: 'pedal-trace',
-      title: 'Pedal Traces',
-      content: (
-        <PedalTraceWidget
-          id={widgetId}
-          onClose={() => closeWidget(widgetId)}
-        />
-      )
-    };
     onAddWidget(widget);
-  };
+    setSelectedWidget(widget);
+  }, [onAddWidget]);
 
-  const addShiftIndicatorWidget = () => {
-    const widgetId = `shift-indicator-${Date.now()}`;
-    const widget = {
-      id: widgetId,
-      type: 'shift-indicator',
-      title: 'Shift Indicator',
-      content: (
-        <ShiftIndicatorWidget
-          id={widgetId}
-          onClose={() => closeWidget(widgetId)}
-        />
-      )
-    };
-    onAddWidget(widget);
-  };
-
-  const addTrackMapWidget = useCallback(() => {
-    const widgetId = `track-map-${Date.now()}`;
-    const widget = {
-      id: widgetId,
-      type: 'track-map',
-      title: 'Track Map',
-      content: (
-        <TrackMapWidget
-          id={widgetId}
-          onClose={() => closeWidget(widgetId)}
-          onStateChange={(state) => handleTrackMapStateChange(widgetId, state)}
-        />
-      )
-    };
-    onAddWidget(widget);
-  }, [onAddWidget, closeWidget, handleTrackMapStateChange]);
+  // Add telemetry widget (special case that requires metric info)
+  const addTelemetryWidget = useCallback((metric: string, name: string) => {
+    addWidgetFromRegistry('telemetry', { metric, name });
+  }, [addWidgetFromRegistry]);
 
   // Set the selected widget and highlight it
   const selectWidget = (widget: any) => {
@@ -276,43 +226,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     return () => window.removeEventListener('app:toggle-click-through', handleToggleFromApp);
   }, []);
 
-  // Debug: Monitor focus-related events
-  useEffect(() => {
-    const handleFocus = () => {
-      console.log('DEBUG: Window focus event');
-    };
-    
-    const handleBlur = () => {
-      console.log('DEBUG: Window blur event');
-    };
-    
-    const handleFocusin = (e: FocusEvent) => {
-      console.log(`DEBUG: Focus-in event on: ${(e.target as any)?.tagName || 'unknown'}`);
-    };
-    
-    const handleFocusout = (e: FocusEvent) => {
-      console.log(`DEBUG: Focus-out event from: ${(e.target as any)?.tagName || 'unknown'}`);
-    };
-    
-    const handleMousedown = (e: MouseEvent) => {
-      console.log(`DEBUG: Mouse down on: ${(e.target as any)?.className || 'unknown'}`);
-    };
-    
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-    document.addEventListener('focusin', handleFocusin);
-    document.addEventListener('focusout', handleFocusout);
-    document.addEventListener('mousedown', handleMousedown);
-    
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-      document.removeEventListener('focusin', handleFocusin);
-      document.removeEventListener('focusout', handleFocusout);
-      document.removeEventListener('mousedown', handleMousedown);
-    };
-  }, []);
-
   // Add telemetry widget options toggle with debug
   const toggleTelemetryOptions = () => {
     console.log(`Telemetry options toggle: ${!showTelemetryOptions}`);
@@ -332,22 +245,14 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     // If running in Electron, also toggle via the API
     if (window.electronAPI) {
       console.log(`SimpleControlPanel: requesting Electron to set click-through to ${newValue}`);
-      window.electronAPI.app.toggleClickThrough(newValue)
-        .then(response => {
-          console.log('Electron click-through response:', response);
-        })
-        .catch(error => {
-          console.error('Error toggling click-through via Electron:', error);
-        });
+      window.electronAPI.app.toggleClickThrough(newValue);
     }
   };
 
   const quitApplication = () => {
     console.log('Quitting application');
     if (window.electronAPI) {
-      window.electronAPI.app.quit()
-        .then(result => console.log('Quit result:', result))
-        .catch(error => console.error('Error quitting:', error));
+      window.electronAPI.app.quit();
     }
   };
 
@@ -367,6 +272,65 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       detail: { widgetId, opacity: value }
     });
     window.dispatchEvent(event);
+  };
+
+  // Get controls for selected widget
+  const getWidgetControls = useCallback((widget: any) => {
+    if (!widget || !widget.type) return [];
+    
+    // Get widget state (if available)
+    const widgetState = widget.type === 'track-map' 
+      ? trackMapWidgetStates[widget.id] || {}
+      : {};
+      
+    // Get controls from registry
+    return WidgetRegistry.getWidgetControls(
+      widget.type,
+      widgetState,
+      (updates: any) => updateWidgetState(widget.id, updates)
+    );
+  }, [trackMapWidgetStates, updateWidgetState]);
+
+  // Render a control based on its type
+  const renderWidgetControl = (control: any) => {
+    // Check if conditional function exists and evaluates to false
+    if (control.conditional && !control.conditional(selectedWidget)) {
+      return null;
+    }
+    
+    switch (control.type) {
+      case 'button':
+        return (
+          <button 
+            key={control.id}
+            className="btn btn-sm btn-primary"
+            onClick={() => control.onChange(control.value)}
+          >
+            {control.label}
+          </button>
+        );
+        
+      case 'select':
+        return (
+          <div key={control.id} className="mt-2">
+            <label className="detail-label text-sm">{control.label}:</label>
+            <div className="flex gap-1 mt-1">
+              {control.options.map((option: any) => (
+                <button 
+                  key={option.value}
+                  className={`btn btn-xs ${control.value === option.value ? 'btn-info' : 'btn-outline'}`}
+                  onClick={() => control.onChange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+        
+      default:
+        return null;
+    }
   };
 
   return (
@@ -411,27 +375,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               Add Speedforge Widget
             </summary>
             <div className="telemetry-options">
-              <h3>Select Widget</h3>
-              <div className="metric-buttons">
-                <button 
-                  className="btn btn-sm btn-secondary metric-btn"
-                  onClick={addPedalTraceWidget}
-                >
-                  Pedal Traces
-                </button>
-                <button 
-                  className="btn btn-sm btn-secondary metric-btn"
-                  onClick={addShiftIndicatorWidget}
-                >
-                  Shift Indicator
-                </button>
-                <button 
-                  className="btn btn-sm btn-secondary metric-btn"
-                  onClick={addTrackMapWidget}
-                >
-                  Track Map
-                </button>
-              </div>
+              {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                <div key={category} className="widget-category mb-4">
+                  <h3 className="text-sm uppercase tracking-wider text-gray-400 mb-2">{category}</h3>
+                  <div className="metric-buttons">
+                    {widgets.map(widget => (
+                      <button 
+                        key={widget.type}
+                        className="btn btn-sm btn-secondary metric-btn"
+                        onClick={() => addWidgetFromRegistry(widget.type)}
+                        title={widget.description}
+                      >
+                        {widget.defaultTitle}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </details>
           
@@ -466,62 +426,21 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 <span className="detail-label">Type:</span>
                 <span className="detail-value">{selectedWidget.type || 'default'}</span>
               </div>
-              {selectedWidget.type === 'telemetry' && selectedWidget.metric && (
+              {selectedWidget.options?.metric && (
                 <div className="widget-detail">
                   <span className="detail-label">Metric:</span>
-                  <span className="detail-value">{selectedWidget.metric}</span>
+                  <span className="detail-value">{selectedWidget.options.metric}</span>
                 </div>
               )}
               
-              {/* Track Map Specific Controls */}
-              {selectedWidget.type === 'track-map' && trackMapWidgetStates[selectedWidget.id] && (
+              {/* Dynamic Widget Controls from Registry */}
+              {getWidgetControls(selectedWidget).length > 0 && (
                 <div className="widget-controls mt-3">
                   <div className="flex flex-col gap-2">
-                    <span className="detail-label">Track Map Controls:</span>
+                    <span className="detail-label">Widget Controls:</span>
                     
-                    {/* Recording Controls */}
-                    <div className="flex gap-2 mt-1">
-                      {trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'recording' ? (
-                        <button 
-                          className="btn btn-sm btn-warning"
-                          onClick={() => handleStopRecording(selectedWidget.id)}>
-                          Stop Recording
-                        </button>
-                      ) : trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'complete' ? (
-                        <button 
-                          className="btn btn-sm btn-primary"
-                          onClick={() => handleStartRecording(selectedWidget.id)}>
-                          Record New Track
-                        </button>
-                      ) : (
-                        <div className="text-xs text-gray-300">
-                          Waiting for auto-recording...
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Visualization Mode */}
-                    {trackMapWidgetStates[selectedWidget.id].mapBuildingState === 'complete' && (
-                      <div className="mt-2">
-                        <span className="detail-label text-sm">Visualization Mode:</span>
-                        <div className="flex gap-1 mt-1">
-                          <button 
-                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'none' ? 'btn-info' : 'btn-outline'}`}
-                            onClick={() => handleChangeColorMode(selectedWidget.id, 'none')}>
-                            Sectors
-                          </button>
-                          <button 
-                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'curvature' ? 'btn-info' : 'btn-outline'}`}
-                            onClick={() => handleChangeColorMode(selectedWidget.id, 'curvature')}>
-                            Corners
-                          </button>
-                          <button 
-                            className={`btn btn-xs ${trackMapWidgetStates[selectedWidget.id].colorMode === 'acceleration' ? 'btn-info' : 'btn-outline'}`}
-                            onClick={() => handleChangeColorMode(selectedWidget.id, 'acceleration')}>
-                            Accel/Brake
-                          </button>
-                        </div>
-                      </div>
+                    {getWidgetControls(selectedWidget).map(control => 
+                      renderWidgetControl(control)
                     )}
                   </div>
                 </div>
