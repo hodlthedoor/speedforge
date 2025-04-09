@@ -431,34 +431,19 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     }
   };
 
-  const renderControls = () => (
-    <div className="track-map-controls flex space-x-2 mt-2">
-      <div className="flex items-center space-x-2">
-        {mapBuildingState === 'idle' && (
-          <button 
-            onClick={startRecording}
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-          >
-            Start Recording
-          </button>
-        )}
-        {mapBuildingState === 'recording' && (
-          <button 
-            onClick={stopRecording}
-            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-          >
-            Stop Recording
-          </button>
-        )}
-        {mapBuildingState === 'complete' && (
-          <button 
-            onClick={startRecording}
-            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-          >
-            Re-Record
-          </button>
-        )}
-        
+  return (
+    <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
+      <div className="track-map-container" style={{ height: '300px', width: '100%' }}>
+        <svg
+          ref={svgRef}
+          width="100%"
+          height="300"
+          className="bg-gray-800/80 rounded"
+        />
+      </div>
+      
+      {/* Minimal controls - just color mode */}
+      <div className="track-map-controls flex justify-center mt-2">
         <select 
           value={colorMode} 
           onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
@@ -468,32 +453,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           <option value="curvature">Curvature</option>
           <option value="acceleration">Acceleration</option>
         </select>
-        
-        {/* Track surface indicator */}
-        {telemetryData?.PlayerTrackSurface !== undefined && (
-          <div className={`px-2 py-1 text-xs rounded ${
-            telemetryData.PlayerTrackSurface === TrackSurface.OnTrack 
-              ? 'bg-green-600 text-white' 
-              : 'bg-yellow-600 text-white'
-          }`}>
-            {getTrackSurfaceName(telemetryData.PlayerTrackSurface as number)}
-          </div>
-        )}
       </div>
-    </div>
-  );
-
-  return (
-    <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
-      <div className="track-map-container" style={{ height: '300px' }}>
-        <svg
-          ref={svgRef}
-          width="100%"
-          height="300"
-          className="bg-gray-800/80 rounded"
-        />
-      </div>
-      {renderControls()}
     </BaseWidget>
   );
 };
