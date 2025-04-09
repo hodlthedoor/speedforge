@@ -246,6 +246,12 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
             const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
             newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
             newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+            
+            // We're very close to the start point, close the loop and stop recording
+            if (dist < 20 && trackPointsRef.current.length > 50) {
+              stopRecording();
+              return;
+            }
           }
         }
       }
@@ -263,14 +269,18 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     if (trackPointsRef.current.length > 20) {
       const lapStart = startLapDistPctRef.current;
       let completedLap = false;
+      
+      // Simplified lap completion detection - focus on crossing start/finish line
       if (lastPositionRef.current) {
-        completedLap = (
-          (lapStart < 0.05 && lapDistPct < 0.05 && lastPositionRef.current.lapDistPct > 0.95) ||
-          (lapStart > 0.95 && lapDistPct > 0.95 && lastPositionRef.current.lapDistPct < 0.05) ||
-          (Math.abs(lapDistPct - lapStart) < 0.01 && 
-           Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) > 0.01)
-        );
+        const lastLapPct = lastPositionRef.current.lapDistPct;
+        
+        // Check if we've crossed the start/finish line
+        if ((lastLapPct > 0.9 && lapDistPct < 0.1) || 
+            (lastLapPct < 0.1 && lapDistPct > 0.9)) {
+          completedLap = true;
+        }
       }
+      
       if (completedLap) {
         stopRecording();
         return;
