@@ -17,6 +17,7 @@ pub struct TelemetryData {
     pub shift_indicator_pct: f32,
     pub on_pit_road: bool,
     pub track_surface: String,
+    pub PlayerTrackSurface: i32,  // Raw numeric value
     
     // Velocity Vectors (Car Local Coordinates)
     pub VelocityX: f32,     // Forward/backward velocity (car's local X axis)
@@ -340,6 +341,9 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     
     // Track Surface - This information shows if you're off-track
     let track_surf_val = TryInto::<i32>::try_into(telem.get("PlayerTrackSurface").unwrap_or(Value::INT(0))).unwrap_or(0);
+    
+    // Store the raw numeric value
+    data.PlayerTrackSurface = track_surf_val;
     
     // Updated mapping based on actual observed values:
     // 0 = off road (grass), 1 = pit stall, 2 = pit lane, 3 = on track (road)

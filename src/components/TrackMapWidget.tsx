@@ -3,6 +3,15 @@ import * as d3 from 'd3';
 import BaseWidget from './BaseWidget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 
+// Track Surface enum
+enum TrackSurface {
+  OffTrack = 0,
+  PitStall = 1,
+  PitLane = 2,
+  OnTrack = 3,
+  NotInWorld = 4
+}
+
 interface TrackMapWidgetProps {
   id: string;
   onClose: () => void;
@@ -61,7 +70,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       'yaw_rate_deg_s',
       'VelocityX',
       'VelocityY',
-      'VelocityZ'
+      'VelocityZ',
+      'PlayerTrackSurface'
     ],
     throttleUpdates: true,
     updateInterval: 50
@@ -77,7 +87,8 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     if (!telemetryData || mapBuildingState !== 'idle') return;
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
-    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95)) startRecording();
+    const trackSurface = telemetryData.PlayerTrackSurface as number;
+    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95) && trackSurface === TrackSurface.OnTrack) startRecording();
   }, [telemetryData, mapBuildingState]);
 
   const startRecording = useCallback(() => {
@@ -152,7 +163,11 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
     const velForward = telemetryData.VelocityX || 0;
     const velSide = telemetryData.VelocityY || 0;
-    if (velocity < 5) return;
+    const trackSurface = telemetryData.PlayerTrackSurface as number;
+    
+    // Only record when on track and moving
+    if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) return;
+    
     let timeDelta = 0.05;
     if (lastTimeRef.current !== null) {
       timeDelta = (now - lastTimeRef.current) / 1000;
@@ -404,9 +419,67 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     onStateChange?.({ mapBuildingState, colorMode });
   }, [mapBuildingState, colorMode, onStateChange]);
 
+  // Helper function to get track surface display name
+  const getTrackSurfaceName = (surface: number): string => {
+    switch(surface) {
+      case TrackSurface.OnTrack: return "On Track";
+      case TrackSurface.OffTrack: return "Off Track";
+      case TrackSurface.PitLane: return "Pit Lane";
+      case TrackSurface.PitStall: return "Pit Stall";
+      case TrackSurface.NotInWorld: return "Not In World";
+      default: return `Unknown (${surface})`;
+    }
+  };
+
   const renderControls = () => (
     <div className="track-map-controls flex space-x-2 mt-2">
-      {/* Controls removed */}
+      <div className="flex items-center space-x-2">
+        {mapBuildingState === 'idle' && (
+          <button 
+            onClick={startRecording}
+            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          >
+            Start Recording
+          </button>
+        )}
+        {mapBuildingState === 'recording' && (
+          <button 
+            onClick={stopRecording}
+            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+          >
+            Stop Recording
+          </button>
+        )}
+        {mapBuildingState === 'complete' && (
+          <button 
+            onClick={startRecording}
+            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+          >
+            Re-Record
+          </button>
+        )}
+        
+        <select 
+          value={colorMode} 
+          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
+          className="px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600"
+        >
+          <option value="none">No Color</option>
+          <option value="curvature">Curvature</option>
+          <option value="acceleration">Acceleration</option>
+        </select>
+        
+        {/* Track surface indicator */}
+        {telemetryData?.PlayerTrackSurface !== undefined && (
+          <div className={`px-2 py-1 text-xs rounded ${
+            telemetryData.PlayerTrackSurface === TrackSurface.OnTrack 
+              ? 'bg-green-600 text-white' 
+              : 'bg-yellow-600 text-white'
+          }`}>
+            {getTrackSurfaceName(telemetryData.PlayerTrackSurface as number)}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -420,6 +493,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           className="bg-gray-800/80 rounded"
         />
       </div>
+      {renderControls()}
     </BaseWidget>
   );
 };
