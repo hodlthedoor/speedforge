@@ -441,19 +441,6 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           className="bg-gray-800/80 rounded"
         />
       </div>
-      
-      {/* Minimal controls - just color mode */}
-      <div className="track-map-controls flex justify-center mt-2">
-        <select 
-          value={colorMode} 
-          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
-          className="px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600"
-        >
-          <option value="none">No Color</option>
-          <option value="curvature">Curvature</option>
-          <option value="acceleration">Acceleration</option>
-        </select>
-      </div>
     </BaseWidget>
   );
 };
