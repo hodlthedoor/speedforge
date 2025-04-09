@@ -284,6 +284,66 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
         .attr("stroke-linecap", "round");
     }
 
+    // Draw start/finish line
+    if (trackPoints.length > 5) {
+      // Find the transition between high and low lap distance percentage
+      let startFinishIndex = -1;
+      for (let i = 1; i < trackPoints.length; i++) {
+        const p1 = trackPoints[i - 1];
+        const p2 = trackPoints[i];
+        
+        // Look for transition near 0/100% lap distance
+        if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
+            (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
+          startFinishIndex = i;
+          break;
+        }
+      }
+      
+      if (startFinishIndex !== -1) {
+        const p1 = trackPoints[startFinishIndex - 1];
+        const p2 = trackPoints[startFinishIndex];
+        
+        // Calculate a perpendicular line at the transition point
+        const x1 = xScale(p1.x);
+        const y1 = yScale(p1.y);
+        const x2 = xScale(p2.x);
+        const y2 = yScale(p2.y);
+        
+        // Find midpoint of the segment
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        
+        // Calculate perpendicular direction
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const perpX = -dy / len;
+        const perpY = dx / len;
+        
+        // Draw a perpendicular line segment
+        const lineLength = 15;
+        svg.append("line")
+          .attr("x1", mx - perpX * lineLength)
+          .attr("y1", my - perpY * lineLength)
+          .attr("x2", mx + perpX * lineLength)
+          .attr("y2", my + perpY * lineLength)
+          .attr("stroke", "#ffff00")
+          .attr("stroke-width", 3)
+          .attr("stroke-linecap", "round")
+          .attr("stroke-dasharray", "3,2");
+          
+        // Add a small "S/F" label
+        svg.append("text")
+          .attr("x", mx)
+          .attr("y", my - 10)
+          .attr("text-anchor", "middle")
+          .attr("fill", "#ffff00")
+          .attr("font-size", "10px")
+          .text("S/F");
+      }
+    }
+
     if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
       const carPos = trackPoints[currentPositionIndex];
       svg.append("circle")
@@ -291,6 +351,23 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
         .attr("cy", yScale(carPos.y))
         .attr("r", 5)
         .attr("fill", "#fbbf24");
+        
+      // Add direction indicator to show heading
+      if (carPos.heading !== undefined) {
+        const headingLength = 8;
+        // Calculate endpoint using the heading angle
+        const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
+        const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
+        
+        // Draw heading indicator line
+        svg.append("line")
+          .attr("x1", xScale(carPos.x))
+          .attr("y1", yScale(carPos.y))
+          .attr("x2", headingX)
+          .attr("y2", headingY)
+          .attr("stroke", "#fbbf24")
+          .attr("stroke-width", 2);
+      }
     }
   }, [trackPoints, colorMode, currentPositionIndex]);
 
