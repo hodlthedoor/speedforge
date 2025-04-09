@@ -88,7 +88,11 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     const trackSurface = telemetryData.PlayerTrackSurface as number;
-    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95) && trackSurface === TrackSurface.OnTrack) startRecording();
+    
+    // Simplified auto-start recording - just need speed and to be on track
+    if (speed > 5 && trackSurface === TrackSurface.OnTrack) {
+      startRecording();
+    }
   }, [telemetryData, mapBuildingState]);
 
   const startRecording = useCallback(() => {
