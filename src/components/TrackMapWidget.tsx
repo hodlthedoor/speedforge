@@ -53,12 +53,14 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   const mapCompleteRef = useRef<boolean>(false);
   const startLapDistPctRef = useRef<number>(-1);
   const lastTimeRef = useRef<number | null>(null);
+  const offTrackCountRef = useRef<number>(0);
 
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
   const [currentPosition, setCurrentPosition] = useState<TrackPosition>({ lapDistPct: 0 });
   const [colorMode, setColorMode] = useState<'curvature' | 'acceleration' | 'none'>('none');
   const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
+  const [lapInvalidated, setLapInvalidated] = useState<boolean>(false);
 
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: [
@@ -85,6 +87,10 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
 
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'idle') return;
+    
+    // Never restart recording if we've completed a lap previously
+    if (mapCompleteRef.current) return;
+    
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     const trackSurface = telemetryData.PlayerTrackSurface as number;
@@ -97,6 +103,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     lastPositionRef.current = null;
     mapCompleteRef.current = false;
     lastTimeRef.current = null;
+    offTrackCountRef.current = 0;
     startLapDistPctRef.current = telemetryData?.lap_dist_pct || 0;
     setMapBuildingState('recording');
   }, [telemetryData]);
@@ -110,6 +117,24 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       const normalizedTrack = normalizeTrack(sortedPoints);
       setTrackPoints(normalizedTrack);
     }
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    // Reset the state but don't set mapCompleteRef.current to true
+    // so we can start a new recording
+    trackPointsRef.current = [];
+    setTrackPoints([]);
+    lastPositionRef.current = null;
+    offTrackCountRef.current = 0;
+    setMapBuildingState('idle');
+    
+    // Set lap invalidated flag to show message
+    setLapInvalidated(true);
+    
+    // Clear the invalidated message after 5 seconds
+    setTimeout(() => {
+      setLapInvalidated(false);
+    }, 5000);
   }, []);
 
   const normalizeTrack = useCallback((points: TrackPoint[]): TrackPoint[] => {
@@ -166,6 +191,20 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
     const velForward = telemetryData.VelocityX || 0;
     const velSide = telemetryData.VelocityY || 0;
     const trackSurface = telemetryData.PlayerTrackSurface as number;
+    
+    // Check if the car is on track
+    if (trackSurface !== TrackSurface.OnTrack) {
+      offTrackCountRef.current += 1;
+      
+      // If we have 4 consecutive off-track datapoints, cancel the recording
+      if (offTrackCountRef.current >= 4) {
+        cancelRecording();
+        return;
+      }
+    } else {
+      // Reset off-track counter when back on track
+      offTrackCountRef.current = 0;
+    }
     
     // Only record when on track and moving
     if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) return;
@@ -244,7 +283,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
       });
     }
     setCurrentPosition({ lapDistPct });
-  }, [telemetryData, mapBuildingState, stopRecording]);
+  }, [telemetryData, mapBuildingState, stopRecording, cancelRecording]);
 
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'complete') return;
@@ -478,6 +517,29 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
           .attr("stroke-width", 2);
       }
     }
+    
+    // Add recording indicator in the bottom right if currently recording
+    if (mapBuildingState === 'recording') {
+      svg.append("circle")
+        .attr("cx", width - 15)
+        .attr("cy", height - 15)
+        .attr("r", 6)
+        .attr("fill", "#ef4444") // Red color
+        .attr("opacity", 0.8)
+        .attr("class", "recording-indicator")
+        .style("animation", "pulse 2s infinite");
+      
+      // Add a pulse animation for the recording indicator
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes pulse {
+          0% { opacity: 0.8; }
+          50% { opacity: 0.4; }
+          100% { opacity: 0.8; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
   useEffect(() => {
@@ -528,25 +590,48 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
   return (
     <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
       <div className="track-map-container" style={{ height: '300px', width: '100%' }}>
-        <svg
-          ref={svgRef}
-          width="100%"
-          height="300"
-          className="bg-gray-800/80 rounded"
-        />
-      </div>
-      
-      {/* Minimal controls - just color mode */}
-      <div className="track-map-controls flex justify-center mt-2">
-        <select 
-          value={colorMode} 
-          onChange={(e) => setColorMode(e.target.value as 'curvature' | 'acceleration' | 'none')}
-          className="px-2 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600"
-        >
-          <option value="none">No Color</option>
-          <option value="curvature">Curvature</option>
-          <option value="acceleration">Acceleration</option>
-        </select>
+        {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-4">
+            {lapInvalidated ? (
+              <>
+                <div className="text-red-400 text-lg mb-2">Lap Invalidated</div>
+                <div className="text-gray-500 text-sm">
+                  Recording stopped - car was off track for too long
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-gray-300 text-lg mb-2">Waiting to Start Recording</div>
+                <div className="text-gray-500 text-sm">
+                  Drive near start/finish line at &gt;10 m/s to begin
+                </div>
+              </>
+            )}
+            <div className="mt-4 flex items-center space-x-2">
+              {telemetryData?.PlayerTrackSurface !== undefined && (
+                <span className={`px-2 py-1 rounded text-xs ${
+                  telemetryData.PlayerTrackSurface === TrackSurface.OnTrack 
+                    ? 'bg-green-900 text-green-300' 
+                    : 'bg-yellow-900 text-yellow-300'
+                }`}>
+                  {getTrackSurfaceName(telemetryData.PlayerTrackSurface as number)}
+                </span>
+              )}
+              {telemetryData?.velocity_ms !== undefined && (
+                <span className="px-2 py-1 rounded text-xs bg-blue-900 text-blue-300">
+                  {Math.round(telemetryData.velocity_ms * 3.6)} km/h
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <svg
+            ref={svgRef}
+            width="100%"
+            height="300"
+            className="bg-gray-800/80 rounded"
+          />
+        )}
       </div>
     </BaseWidget>
   );
