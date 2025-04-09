@@ -335,7 +335,7 @@ const TrackMapWidget: React.FC<TrackMapWidgetProps> = ({
 
   return (
     <BaseWidget id={id} title="Track Map" className="track-map-widget" onClose={onClose}>
-      <div className="track-map-container" style={{ height: '350px' }}>
+      <div className="track-map-container" style={{ height: '300px' }}>
         <svg
           ref={svgRef}
           width="100%"
