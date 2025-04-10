@@ -16,6 +16,7 @@
     "@types/d3": "^7.4.3",
     "@types/uuid": "^10.0.0",
     "d3": "^7.9.0",
+    "pixi.js": "^8.9.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.5.0",
@@ -50,7 +51,10 @@
     "mac": {
       "category": "public.app-category.utilities",
       "artifactName": "Speedforge-${version}-${arch}.${ext}",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "darkModeSupport": true
     },
     "win": {
@@ -59,7 +63,10 @@
       "artifactName": "Speedforge-Setup-${version}.${ext}"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "executableName": "speedforge",
       "artifactName": "speedforge-${version}-${arch}.${ext}",
       "category": "Utility"

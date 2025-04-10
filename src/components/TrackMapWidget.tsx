@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import * as d3 from 'd3';
+import * as PIXI from 'pixi.js';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
@@ -41,7 +41,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   onStateChange,
   externalControls 
 }) => {
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const pixiContainerRef = useRef<HTMLDivElement | null>(null);
+  const pixiAppRef = useRef<PIXI.Application | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const lastPositionRef = useRef<TrackPoint | null>(null);
   const trackPointsRef = useRef<TrackPoint[]>([]);
@@ -75,6 +76,24 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     updateInterval: 50
   });
 
+  // Create PIXI app on mount
+  useEffect(() => {
+    if (pixiContainerRef.current && !pixiAppRef.current) {
+      const app = new PIXI.Application({
+        width: pixiContainerRef.current.clientWidth || 400,
+        height: 300,
+        backgroundColor: 0x1f2937, // roughly matching bg-gray-800/80
+        antialias: true
+      });
+      pixiContainerRef.current.appendChild(app.view);
+      pixiAppRef.current = app;
+    }
+    return () => {
+      pixiAppRef.current?.destroy(true, { children: true });
+      pixiAppRef.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
@@ -83,14 +102,14 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'idle') return;
-    
-    // Never restart recording if we've completed a lap previously
     if (mapCompleteRef.current) return;
     
     const speed = telemetryData.velocity_ms || 0;
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     const trackSurface = telemetryData.PlayerTrackSurface as number;
-    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95) && trackSurface === TrackSurface.OnTrack) startRecording();
+    if (speed > 10 && (lapDistPct < 0.05 || lapDistPct > 0.95) && trackSurface === TrackSurface.OnTrack) {
+      startRecording();
+    }
   }, [telemetryData, mapBuildingState]);
 
   const startRecording = useCallback(() => {
@@ -108,7 +127,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     setMapBuildingState('complete');
     mapCompleteRef.current = true;
     if (trackPointsRef.current.length > 10) {
-      // Sort points by lap distance percentage to ensure correct order
       const sortedPoints = [...trackPointsRef.current].sort((a, b) => a.lapDistPct - b.lapDistPct);
       const normalizedTrack = normalizeTrack(sortedPoints);
       setTrackPoints(normalizedTrack);
@@ -116,23 +134,15 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, []);
 
   const cancelRecording = useCallback(() => {
-    // Reset the state but don't set mapCompleteRef.current to true
-    // so we can start a new recording
     trackPointsRef.current = [];
     setTrackPoints([]);
     lastPositionRef.current = null;
     offTrackCountRef.current = 0;
     setMapBuildingState('idle');
-    
-    // Set lap invalidated flag to show message
     setLapInvalidated(true);
-    
-    // Clear any previous timer
     if (invalidationTimerRef.current) {
       window.clearTimeout(invalidationTimerRef.current);
     }
-    
-    // Clear the invalidated message after 5 seconds
     invalidationTimerRef.current = window.setTimeout(() => {
       setLapInvalidated(false);
       invalidationTimerRef.current = null;
@@ -143,7 +153,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     if (points.length < 10) return points;
     const firstPoint = points[0];
     const lastPoint = points[points.length - 1];
-    const distToClose = Math.sqrt((lastPoint.x - firstPoint.x)**2 + (lastPoint.y - firstPoint.y)**2);
+    const distToClose = Math.sqrt((lastPoint.x - firstPoint.x) ** 2 + (lastPoint.y - firstPoint.y) ** 2);
     if (distToClose > 2) {
       points.push({ ...firstPoint, lapDistPct: 1.0 });
     }
@@ -157,7 +167,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       if (neighbors.length > 0) {
         const avgX = neighbors.reduce((sum, p) => sum + p.x, 0) / neighbors.length;
         const avgY = neighbors.reduce((sum, p) => sum + p.y, 0) / neighbors.length;
-        const dist = Math.sqrt((points[i].x - avgX)**2 + (points[i].y - avgY)**2);
+        const dist = Math.sqrt((points[i].x - avgX) ** 2 + (points[i].y - avgY) ** 2);
         const distThreshold = 5;
         if (dist > distThreshold) {
           smoothedPoints.push({
@@ -184,13 +194,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, []);
 
   useEffect(() => {
-    // Skip processing if not recording or no telemetry data
     if (!telemetryData || mapBuildingState !== 'recording') return;
-    
-    // Avoid processing too often by checking if we already have a pending animation frame
     if (animationFrameId.current) return;
     
-    // Process telemetry data with requestAnimationFrame to limit how often we update
     animationFrameId.current = requestAnimationFrame(() => {
       const now = performance.now();
       const lapDistPct = telemetryData.lap_dist_pct || 0;
@@ -201,22 +207,17 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const velSide = telemetryData.VelocityY || 0;
       const trackSurface = telemetryData.PlayerTrackSurface as number;
       
-      // Check if the car is on track
       if (trackSurface !== TrackSurface.OnTrack) {
         offTrackCountRef.current += 1;
-        
-        // If we have 4 consecutive off-track datapoints, cancel the recording
         if (offTrackCountRef.current >= 4) {
           cancelRecording();
           animationFrameId.current = null;
           return;
         }
       } else {
-        // Reset off-track counter when back on track
         offTrackCountRef.current = 0;
       }
       
-      // Only record when on track and moving
       if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) {
         animationFrameId.current = null;
         return;
@@ -231,7 +232,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       let curvature = 0;
       if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
       
-      // Calculate position
       let newX = 0, newY = 0, currentHeading = 0;
       if (trackPointsRef.current.length === 0) {
         newX = 0; newY = 0; currentHeading = 0;
@@ -247,7 +247,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         newX = lastX + worldDx;
         newY = lastY + worldDy;
         
-        // Adjust points near the start to create a closed loop
         if (trackPointsRef.current.length > 20) {
           const distFromStart = Math.min(
             Math.abs(lapDistPct - startLapDistPctRef.current),
@@ -263,8 +262,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
               const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
               newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
               newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
-              
-              // We're very close to the start point, close the loop and stop recording
               if (dist < 20 && trackPointsRef.current.length > 50) {
                 stopRecording();
                 animationFrameId.current = null;
@@ -275,7 +272,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         }
       }
       
-      // Create the new track point
       const newPoint: TrackPoint = {
         x: newX,
         y: newY,
@@ -285,26 +281,18 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         heading: currentHeading
       };
       
-      // Update track points
       trackPointsRef.current = [...trackPointsRef.current, newPoint];
       lastPositionRef.current = newPoint;
       
-      // Check for lap completion
       if (trackPointsRef.current.length > 20) {
-        const lapStart = startLapDistPctRef.current;
         let completedLap = false;
-        
-        // Simplified lap completion detection - focus on crossing start/finish line
         if (lastPositionRef.current) {
           const lastLapPct = lastPositionRef.current.lapDistPct;
-          
-          // Check if we've crossed the start/finish line
           if ((lastLapPct > 0.9 && lapDistPct < 0.1) || 
               (lastLapPct < 0.1 && lapDistPct > 0.9)) {
             completedLap = true;
           }
         }
-        
         if (completedLap) {
           stopRecording();
           animationFrameId.current = null;
@@ -312,11 +300,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         }
       }
       
-      // Update visual state - do this less frequently
-      setTrackPoints(trackPointsRef.current.slice());
+      setTrackPoints([...trackPointsRef.current]);
       setCurrentPosition({ lapDistPct });
       
-      // Clear the animation frame ID so we can process the next update
       animationFrameId.current = null;
     });
     
@@ -330,8 +316,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'complete') return;
-    
-    // Update current position based on telemetry lap distance when track is complete
     const lapDistPct = telemetryData.lap_dist_pct || 0;
     setCurrentPosition({ lapDistPct });
   }, [telemetryData, mapBuildingState]);
@@ -339,40 +323,35 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   const findPositionAtLapDistance = useCallback((lapDistPct: number): TrackPoint | null => {
     if (trackPoints.length === 0) return null;
     
-    // Handle wrap-around at start/finish line
     let targetDist = lapDistPct;
     if (targetDist > 1) targetDist -= 1;
     if (targetDist < 0) targetDist += 1;
     
-    // First, try to find exact match
     const exactMatch = trackPoints.find(p => Math.abs(p.lapDistPct - targetDist) < 0.001);
     if (exactMatch) return exactMatch;
     
-    // Find the two closest points and interpolate
     let prevPoint = trackPoints[0];
     let nextPoint = trackPoints[0];
     
     for (let i = 0; i < trackPoints.length; i++) {
       if (trackPoints[i].lapDistPct <= targetDist && 
-          (i === trackPoints.length - 1 || trackPoints[i+1].lapDistPct > targetDist)) {
+          (i === trackPoints.length - 1 || trackPoints[i + 1].lapDistPct > targetDist)) {
         prevPoint = trackPoints[i];
-        nextPoint = i < trackPoints.length - 1 ? trackPoints[i+1] : trackPoints[0];
+        nextPoint = i < trackPoints.length - 1 ? trackPoints[i + 1] : trackPoints[0];
         break;
       }
     }
     
-    // Handle case where target is before first point or after last point
     if (targetDist < trackPoints[0].lapDistPct) {
       prevPoint = trackPoints[trackPoints.length - 1];
       nextPoint = trackPoints[0];
     }
     
-    // Calculate interpolation factor
     let t = 0;
     const prevDist = prevPoint.lapDistPct;
     const nextDist = nextPoint.lapDistPct;
     
-    if (nextDist < prevDist) { // Handling wrap around 0/1 boundary
+    if (nextDist < prevDist) {
       if (targetDist >= prevDist) {
         t = (targetDist - prevDist) / ((1 - prevDist) + nextDist);
       } else {
@@ -382,221 +361,158 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       t = (targetDist - prevDist) / (nextDist - prevDist);
     }
     
-    // Clamp t between 0 and 1
     t = Math.max(0, Math.min(1, t));
     
-    // Interpolate position
     return {
       x: prevPoint.x * (1 - t) + nextPoint.x * t,
       y: prevPoint.y * (1 - t) + nextPoint.y * t,
       lapDistPct: targetDist,
-      heading: prevPoint.heading, // Just use the heading from the previous point
+      heading: prevPoint.heading,
       curvature: prevPoint.curvature,
       longitudinalAccel: prevPoint.longitudinalAccel
     };
   }, [trackPoints]);
 
-  const renderTrackMap = useCallback(() => {
-    if (!svgRef.current) return;
-    const svg = d3.select(svgRef.current);
-    const width = svgRef.current.clientWidth || 400;
-    const height = svgRef.current.clientHeight || 300;
-    svg.selectAll('*').remove();
+  // PIXI rendering using Graphics (replacing d3)
+  const renderPixiMap = useCallback(() => {
+    const app = pixiAppRef.current;
+    if (!app) return;
+    app.stage.removeChildren();
     if (trackPoints.length < 2) return;
-
-    const xVals = trackPoints.map(d => d.x);
-    const yVals = trackPoints.map(d => d.y);
-    const xExtent = d3.extent(xVals) as [number, number];
-    const yExtent = d3.extent(yVals) as [number, number];
-    const xRange = xExtent[1] - xExtent[0];
-    const yRange = yExtent[1] - yExtent[0];
-    const maxRange = Math.max(xRange, yRange) || 1;
+    const width = app.screen.width;
+    const height = app.screen.height;
     const padding = 10;
+    const xVals = trackPoints.map(p => p.x);
+    const yVals = trackPoints.map(p => p.y);
+    const minX = Math.min(...xVals);
+    const maxX = Math.max(...xVals);
+    const minY = Math.min(...yVals);
+    const maxY = Math.max(...yVals);
+    const xRange = maxX - minX;
+    const yRange = maxY - minY;
+    const maxRange = Math.max(xRange, yRange) || 1;
+    const xDomainMin = minX - 0.05 * maxRange;
+    const xDomainMax = minX + maxRange * 1.05;
+    const yDomainMin = minY - 0.05 * maxRange;
+    const yDomainMax = minY + maxRange * 1.05;
+    const xScale = (x: number) => padding + ((x - xDomainMin) * (width - 2 * padding)) / (xDomainMax - xDomainMin);
+    const yScale = (y: number) => height - padding - ((y - yDomainMin) * (height - 2 * padding)) / (yDomainMax - yDomainMin);
 
-    const xScale = d3.scaleLinear()
-      .domain([xExtent[0] - 0.05*maxRange, xExtent[0] + maxRange*1.05])
-      .range([padding, width - padding]);
-    const yScale = d3.scaleLinear()
-      .domain([yExtent[0] - 0.05*maxRange, yExtent[0] + maxRange*1.05])
-      .range([height - padding, padding]);
+    const hexToNumber = (hex: string) => parseInt(hex.replace("#", ""), 16);
+    const getLineColor = (p: TrackPoint) => {
+      let color = "#ffffff";
+      if (colorMode === 'curvature' && p.curvature !== undefined) {
+        color = p.curvature < 0 ? "#3b82f6" : (p.curvature > 0 ? "#ef4444" : "#ffffff");
+      } else if (colorMode === 'acceleration' && p.longitudinalAccel !== undefined) {
+        const acc = p.longitudinalAccel;
+        if (acc <= -3) color = "#ef4444";
+        else if (acc < 0) color = "#fb923c";
+        else if (acc === 0) color = "#ffffff";
+        else if (acc <= 3) color = "#4ade80";
+        else color = "#22c55e";
+      }
+      return hexToNumber(color);
+    };
 
-    const curvatureScale = d3.scaleLinear<string>()
-      .domain([-0.01, 0, 0.01])
-      .range(["#3b82f6","#ffffff","#ef4444"]);
-    const accelScale = d3.scaleLinear<string>()
-      .domain([-10, -3, 0, 3, 10])
-      .range(["#ef4444","#fb923c","#ffffff","#4ade80","#22c55e"]);
-
+    const graphics = new PIXI.Graphics();
+    // Draw track lines
     for (let i = 1; i < trackPoints.length; i++) {
       const p1 = trackPoints[i - 1];
       const p2 = trackPoints[i];
-      let strokeColor = "#ffffff";
-      if (colorMode === 'curvature' && p2.curvature !== undefined) {
-        strokeColor = curvatureScale(p2.curvature);
-      } else if (colorMode === 'acceleration' && p2.longitudinalAccel !== undefined) {
-        strokeColor = accelScale(p2.longitudinalAccel);
-      }
-      svg.append("line")
-        .attr("x1", xScale(p1.x))
-        .attr("y1", yScale(p1.y))
-        .attr("x2", xScale(p2.x))
-        .attr("y2", yScale(p2.y))
-        .attr("stroke", strokeColor)
-        .attr("stroke-width", 2.5)
-        .attr("stroke-linecap", "round");
+      graphics.lineStyle(2.5, getLineColor(p2));
+      graphics.moveTo(xScale(p1.x), yScale(p1.y));
+      graphics.lineTo(xScale(p2.x), yScale(p2.y));
     }
-
+    
     // Draw start/finish line
     if (trackPoints.length > 5) {
-      // Find the transition between high and low lap distance percentage
       let startFinishIndex = -1;
       for (let i = 1; i < trackPoints.length; i++) {
         const p1 = trackPoints[i - 1];
         const p2 = trackPoints[i];
-        
-        // Look for transition near 0/100% lap distance
         if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
             (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
           startFinishIndex = i;
           break;
         }
       }
-      
       if (startFinishIndex !== -1) {
         const p1 = trackPoints[startFinishIndex - 1];
         const p2 = trackPoints[startFinishIndex];
-        
-        // Calculate a perpendicular line at the transition point
         const x1 = xScale(p1.x);
         const y1 = yScale(p1.y);
         const x2 = xScale(p2.x);
         const y2 = yScale(p2.y);
-        
-        // Find midpoint of the segment
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
-        
-        // Calculate perpendicular direction
         const dx = x2 - x1;
         const dy = y2 - y1;
-        const len = Math.sqrt(dx * dx + dy * dy);
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
         const perpX = -dy / len;
         const perpY = dx / len;
-        
-        // Draw a perpendicular line segment
         const lineLength = 15;
-        svg.append("line")
-          .attr("x1", mx - perpX * lineLength)
-          .attr("y1", my - perpY * lineLength)
-          .attr("x2", mx + perpX * lineLength)
-          .attr("y2", my + perpY * lineLength)
-          .attr("stroke", "#ffff00")
-          .attr("stroke-width", 3)
-          .attr("stroke-linecap", "round")
-          .attr("stroke-dasharray", "3,2");
-          
-        // Add a small "S/F" label
-        svg.append("text")
-          .attr("x", mx)
-          .attr("y", my - 10)
-          .attr("text-anchor", "middle")
-          .attr("fill", "#ffff00")
-          .attr("font-size", "10px")
-          .text("S/F");
+        graphics.lineStyle(3, hexToNumber("#ffff00"), 1);
+        graphics.moveTo(mx - perpX * lineLength, my - perpY * lineLength);
+        graphics.lineTo(mx + perpX * lineLength, my + perpY * lineLength);
+        // Add S/F label
+        const sfText = new PIXI.Text("S/F", { fontSize: 10, fill: "#ffff00" });
+        sfText.anchor.set(0.5);
+        sfText.x = mx;
+        sfText.y = my - 10;
+        app.stage.addChild(sfText);
       }
     }
-
+    
+    // Draw car
+    let carPos: TrackPoint | null = null;
     if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
-      // When track is complete, use lap_dist_pct to position the car
-      const carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
-      
-      if (carPos) {
-        svg.append("circle")
-          .attr("cx", xScale(carPos.x))
-          .attr("cy", yScale(carPos.y))
-          .attr("r", 5)
-          .attr("fill", "#fbbf24");
-          
-        // Add direction indicator to show heading
-        if (carPos.heading !== undefined) {
-          const headingLength = 8;
-          // Calculate endpoint using the heading angle
-          const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
-          const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
-          
-          // Draw heading indicator line
-          svg.append("line")
-            .attr("x1", xScale(carPos.x))
-            .attr("y1", yScale(carPos.y))
-            .attr("x2", headingX)
-            .attr("y2", headingY)
-            .attr("stroke", "#fbbf24")
-            .attr("stroke-width", 2);
-        }
-      }
+      carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
     } else if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
-      // During recording, use the current position index
-      const carPos = trackPoints[currentPositionIndex];
-      svg.append("circle")
-        .attr("cx", xScale(carPos.x))
-        .attr("cy", yScale(carPos.y))
-        .attr("r", 5)
-        .attr("fill", "#fbbf24");
-        
-      // Add direction indicator to show heading
+      carPos = trackPoints[currentPositionIndex];
+    }
+    if (carPos) {
+      graphics.beginFill(hexToNumber("#fbbf24"));
+      graphics.drawCircle(xScale(carPos.x), yScale(carPos.y), 5);
+      graphics.endFill();
       if (carPos.heading !== undefined) {
         const headingLength = 8;
-        // Calculate endpoint using the heading angle
         const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
         const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
-        
-        // Draw heading indicator line
-        svg.append("line")
-          .attr("x1", xScale(carPos.x))
-          .attr("y1", yScale(carPos.y))
-          .attr("x2", headingX)
-          .attr("y2", headingY)
-          .attr("stroke", "#fbbf24")
-          .attr("stroke-width", 2);
+        graphics.lineStyle(2, hexToNumber("#fbbf24"));
+        graphics.moveTo(xScale(carPos.x), yScale(carPos.y));
+        graphics.lineTo(headingX, headingY);
       }
     }
     
-    // Add recording indicator in the bottom right if currently recording
+    // Recording indicator
     if (mapBuildingState === 'recording') {
-      svg.append("circle")
-        .attr("cx", width - 15)
-        .attr("cy", height - 15)
-        .attr("r", 6)
-        .attr("fill", "#ef4444") // Red color
-        .attr("opacity", 0.8)
-        .attr("class", "recording-indicator");
+      graphics.beginFill(hexToNumber("#ef4444"), 0.8);
+      graphics.drawCircle(width - 15, height - 15, 6);
+      graphics.endFill();
     }
+    
+    app.stage.addChild(graphics);
   }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
-  // Optimize the track map rendering to avoid unnecessary re-renders
-  const debouncedRenderTrackMap = useCallback(() => {
-    if (!svgRef.current) return;
-    
-    // Only re-render if we don't have a pending animation frame
+  // Debounce PIXI re-rendering similar to previous implementation
+  const debouncedRenderPixiMap = useCallback(() => {
     if (!animationFrameId.current) {
       animationFrameId.current = requestAnimationFrame(() => {
-        renderTrackMap();
+        renderPixiMap();
         animationFrameId.current = null;
       });
     }
-  }, [renderTrackMap]);
+  }, [renderPixiMap]);
 
   useEffect(() => {
-    debouncedRenderTrackMap();
-    
-    // Clean up any animation frame on unmount
+    debouncedRenderPixiMap();
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
         animationFrameId.current = null;
       }
     };
-  }, [debouncedRenderTrackMap]);
+  }, [debouncedRenderPixiMap]);
 
   useEffect(() => {
     if (trackPoints.length === 0 || currentPosition.lapDistPct === undefined || mapBuildingState !== 'recording') {
@@ -604,16 +520,15 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       return;
     }
     
-    // Use requestAnimationFrame to limit how often this calculation runs
     if (!animationFrameId.current) {
       animationFrameId.current = requestAnimationFrame(() => {
         let closestIndex = 0;
         let minDistance = Number.MAX_VALUE;
         for (let i = 0; i < trackPoints.length; i++) {
-          const distDirect = Math.abs(trackPoints[i].lapDistPct - currentPosition.lapDistPct);
-          const distWrapLow = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct + 1));
-          const distWrapHigh = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct - 1));
-          const dist = Math.min(distDirect, distWrapLow, distWrapHigh);
+          const direct = Math.abs(trackPoints[i].lapDistPct - currentPosition.lapDistPct);
+          const wrapLow = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct + 1));
+          const wrapHigh = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct - 1));
+          const dist = Math.min(direct, wrapLow, wrapHigh);
           if (dist < minDistance) {
             minDistance = dist;
             closestIndex = i;
@@ -640,9 +555,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     onStateChange?.({ mapBuildingState, colorMode });
   }, [mapBuildingState, colorMode, onStateChange]);
 
-  // Helper function to get track surface display name
   const getTrackSurfaceName = (surface: number): string => {
-    switch(surface) {
+    switch (surface) {
       case TrackSurface.OnTrack: return "On Track";
       case TrackSurface.OffTrack: return "Off Track";
       case TrackSurface.PitLane: return "Pit Lane";
@@ -652,9 +566,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
   };
 
-  // Add a separate useEffect for the pulse animation to avoid creating new style elements on every render
+  // Create pulse animation style on mount if recording
   useEffect(() => {
-    // Create the pulse animation style only once
     const styleId = 'track-map-pulse-animation';
     if (!document.getElementById(styleId) && mapBuildingState === 'recording') {
       const style = document.createElement('style');
@@ -671,46 +584,32 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       `;
       document.head.appendChild(style);
     }
-    
     return () => {
-      // Clean up style element when component unmounts
-      if (document.getElementById(styleId) && mapBuildingState !== 'recording') {
-        const styleElement = document.getElementById(styleId);
-        if (styleElement) {
-          document.head.removeChild(styleElement);
-        }
+      const styleElement = document.getElementById(styleId);
+      if (styleElement && mapBuildingState !== 'recording') {
+        document.head.removeChild(styleElement);
       }
     };
   }, [mapBuildingState]);
 
-  // Improved cleanup function
   useEffect(() => {
     return () => {
-      // Clean up any animation frames when component unmounts
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
         animationFrameId.current = null;
       }
-      
-      // Clear the invalidation timer
       if (invalidationTimerRef.current) {
         clearTimeout(invalidationTimerRef.current);
         invalidationTimerRef.current = null;
       }
-      
-      // Reset any other state that might cause memory leaks
       trackPointsRef.current = [];
       lastPositionRef.current = null;
-      
-      // Make sure we clean up any DOM elements that might have been created
+      if (pixiContainerRef.current && pixiAppRef.current) {
+        pixiAppRef.current.stage.removeChildren();
+      }
       const styleElement = document.getElementById('track-map-pulse-animation');
       if (styleElement) {
         document.head.removeChild(styleElement);
-      }
-      
-      // Clean up D3 selections to avoid memory leaks
-      if (svgRef.current) {
-        d3.select(svgRef.current).selectAll('*').remove();
       }
     };
   }, []);
@@ -753,19 +652,13 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
             </div>
           </div>
         ) : (
-          <svg
-            ref={svgRef}
-            width="100%"
-            height="300"
-            className="bg-gray-800/80 rounded"
-          />
+          <div ref={pixiContainerRef} className="w-full h-full rounded" />
         )}
       </div>
     </Widget>
   );
 };
 
-// Get the controls for the track map widget
 const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   const mapBuildingState = widgetState.mapBuildingState || 'idle';
   const colorMode = widgetState.colorMode || 'none';
@@ -808,7 +701,6 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
   return controls;
 };
 
-// Create the enhanced component with static controls
 const TrackMapWidget = withControls(TrackMapWidgetComponent, getTrackMapControls);
 
 export default TrackMapWidget;
