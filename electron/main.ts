@@ -235,6 +235,54 @@ function setupIpcListeners() {
   });
 }
 
+// Clean up when all windows are closed
+app.on('window-all-closed', () => {
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
+  
+  if (process.platform !== 'darwin') app.quit();
+});
+
+// Re-create windows if activated and no windows exist
+app.on('activate', () => {
+  if (windows.length === 0) createWindows();
+});
+
+// Clean up before quitting
+app.on('before-quit', () => {
+  console.log('Performing cleanup before quit');
+  
+  // Clear the stay-on-top interval
+  if (stayOnTopInterval) {
+    clearInterval(stayOnTopInterval);
+    stayOnTopInterval = null;
+  }
+  
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
+  
+  // Remove all IPC handlers
+  ipcMain.removeHandler('app:quit');
+  ipcMain.removeHandler('app:toggleAutoNewWindows');
+  ipcMain.removeHandler('app:toggleClickThrough');
+  
+  // Close windows gracefully
+  for (const win of windows) {
+    try {
+      if (!win.isDestroyed()) {
+        win.removeAllListeners();
+        win.setClosable(true);
+        win.close();
+      }
+    } catch (error) {
+      console.error('Error closing window:', error);
+    }
+  }
+  
+  // Clear windows array
+  windows.length = 0;
+});
+
 // When Electron is ready
 app.whenReady().then(() => {
   // Set application name for process manager
@@ -278,126 +326,78 @@ app.whenReady().then(() => {
     }
   });
   
+  // Setup screen event listeners now that the app is ready
+  screen.on('display-added', (event, display) => {
+    console.log('New display detected:', display);
+    
+    // Only create window if auto-create is enabled
+    if (!autoCreateWindowsForNewDisplays) {
+      console.log('Auto-create new windows is disabled, skipping window creation for new display');
+      return;
+    }
+    
+    // Create a window for the newly added display
+    const win = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+      transparent: true,
+      backgroundColor: '#00000000',
+      frame: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: false,
+      fullscreen: false,
+      type: 'panel',
+      vibrancy: null as any,
+      visualEffectState: null as any,
+      focusable: true,
+      alwaysOnTop: true
+    });
+
+    // Set platform-specific settings
+    if (process.platform === 'darwin') {
+      win.setWindowButtonVisibility(false);
+      win.setAlwaysOnTop(true, 'screen-saver', 1);
+      win.setBackgroundColor('#00000000');
+      win.setOpacity(1.0);
+    } else if (process.platform === 'win32') {
+      win.setAlwaysOnTop(true, 'screen-saver');
+    } else {
+      win.setAlwaysOnTop(true);
+    }
+
+    // Start with click-through enabled
+    win.setIgnoreMouseEvents(true, { forward: true });
+    win.setTitle('Speedforge (click-through:true)');
+    
+    // Load the app
+    const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
+    win.loadURL(mainUrl);
+    
+    // Store the window reference
+    windows.push(win);
+    
+    console.log(`Created new window for display ${display.id}`);
+  });
+
+  screen.on('display-removed', (event, display) => {
+    console.log('Display removed:', display);
+    // Optional: You could close windows associated with this display
+    // For now, we'll leave them open as the user might want to reposition widgets
+  });
+  
   // Log display information for debugging
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
   console.log('Primary display:', primary);
   console.log('All displays:', displays);
-});
-
-// Clean up when all windows are closed
-app.on('window-all-closed', () => {
-  // Unregister global shortcuts
-  globalShortcut.unregisterAll();
-  
-  if (process.platform !== 'darwin') app.quit();
-});
-
-// Re-create windows if activated and no windows exist
-app.on('activate', () => {
-  if (windows.length === 0) createWindows();
-});
-
-// Add display-related events to handle monitors being added/removed
-screen.on('display-added', (event, display) => {
-  console.log('New display detected:', display);
-  
-  // Only create window if auto-create is enabled
-  if (!autoCreateWindowsForNewDisplays) {
-    console.log('Auto-create new windows is disabled, skipping window creation for new display');
-    return;
-  }
-  
-  // Create a window for the newly added display
-  const win = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      backgroundThrottling: false,
-    },
-    transparent: true,
-    backgroundColor: '#00000000',
-    frame: false,
-    skipTaskbar: true,
-    hasShadow: false,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: false,
-    fullscreen: false,
-    type: 'panel',
-    vibrancy: null as any,
-    visualEffectState: null as any,
-    focusable: true,
-    alwaysOnTop: true
-  });
-
-  // Set platform-specific settings
-  if (process.platform === 'darwin') {
-    win.setWindowButtonVisibility(false);
-    win.setAlwaysOnTop(true, 'screen-saver', 1);
-    win.setBackgroundColor('#00000000');
-    win.setOpacity(1.0);
-  } else if (process.platform === 'win32') {
-    win.setAlwaysOnTop(true, 'screen-saver');
-  } else {
-    win.setAlwaysOnTop(true);
-  }
-
-  // Start with click-through enabled
-  win.setIgnoreMouseEvents(true, { forward: true });
-  win.setTitle('Speedforge (click-through:true)');
-  
-  // Load the app
-  const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
-  win.loadURL(mainUrl);
-  
-  // Store the window reference
-  windows.push(win);
-  
-  console.log(`Created new window for display ${display.id}`);
-});
-
-screen.on('display-removed', (event, display) => {
-  console.log('Display removed:', display);
-  // Optional: You could close windows associated with this display
-  // For now, we'll leave them open as the user might want to reposition widgets
-});
-
-// Clean up before quitting
-app.on('before-quit', () => {
-  console.log('Performing cleanup before quit');
-  
-  // Clear the stay-on-top interval
-  if (stayOnTopInterval) {
-    clearInterval(stayOnTopInterval);
-    stayOnTopInterval = null;
-  }
-  
-  // Unregister global shortcuts
-  globalShortcut.unregisterAll();
-  
-  // Remove all IPC handlers
-  ipcMain.removeHandler('app:quit');
-  ipcMain.removeHandler('app:toggleAutoNewWindows');
-  ipcMain.removeHandler('app:toggleClickThrough');
-  
-  // Close windows gracefully
-  for (const win of windows) {
-    try {
-      if (!win.isDestroyed()) {
-        win.removeAllListeners();
-        win.setClosable(true);
-        win.close();
-      }
-    } catch (error) {
-      console.error('Error closing window:', error);
-    }
-  }
-  
-  // Clear windows array
-  windows.length = 0;
 });
