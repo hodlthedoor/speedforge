@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
-// Import the unsafe-eval module to enable support for environments that don't allow unsafe-eval
-import '@pixi/unsafe-eval';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
