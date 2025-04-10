@@ -616,10 +616,10 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               </button>
               
               <button 
-                className="btn btn-warning"
-                onClick={closeWindowAndWidgets}
+                className="btn btn-error mt-2"
+                onClick={quitApplication}
               >
-                Close This Window
+                Quit Application
               </button>
               
               {/* Display management section */}
@@ -644,13 +644,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   </div>
                 </div>
               )}
-              
-              <button 
-                className="btn btn-error mt-2"
-                onClick={quitApplication}
-              >
-                Quit Application
-              </button>
             </>
           )}
         </div>
