@@ -79,12 +79,37 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
     const controlPanelId = 'control-panel-' + Math.random().toString(36).substring(2, 10);
+    let firstConnection = true;
+    let wasConnected = false;
     
     webSocketService.addConnectionListener(controlPanelId, (connected) => {
       console.log(`Control panel received connection status: ${connected}`);
+      
+      // Skip the first disconnected event that happens before first connection
+      if (!connected && firstConnection) {
+        firstConnection = false;
+        return;
+      }
+      
       setWsConnected(connected);
+      
       if (connected) {
+        wasConnected = true;
         setReconnecting(false);
+      } else if (wasConnected) {
+        // Only close widgets if we were previously connected
+        // This means the monitor has actually closed, not just that we couldn't connect initially
+        console.log('Monitor disconnected - closing all widgets');
+        
+        // Close all active widgets
+        if (Array.isArray(activeWidgets)) {
+          activeWidgets.forEach(widget => {
+            if (widget.enabled) {
+              console.log(`Monitor disconnected, removing widget ${widget.id}`);
+              closeWidget(widget.id);
+            }
+          });
+        }
       }
     });
     
@@ -92,7 +117,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     return () => {
       webSocketService.removeListeners(controlPanelId);
     };
-  }, []);
+  }, [activeWidgets, closeWidget]);
   
   // Function to manually reconnect
   const handleReconnect = () => {
