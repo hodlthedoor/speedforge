@@ -380,27 +380,32 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       initialPosition={initialPosition}
       className={`w-[400px] max-h-[80vh] overflow-y-auto overflow-x-hidden scrollbar-none shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
     >
-      <div className="panel-header drag-handle w-full">
-        <h2>Control Panel</h2>
-      </div>
-      <div className="panel-content w-full px-4 py-3">
-        {/* WebSocket Status and Reconnect Button */}
-        <div className="flex items-center mb-3 p-2 border border-gray-700 rounded bg-gray-900/50">
-          <div className="flex items-center mr-2">
-            <div className={`w-3 h-3 rounded-full mr-2 ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-sm font-medium">
-              {wsConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
+      {/* Completely redesigned header with proper spacing */}
+      <div className="w-full flex items-center justify-between bg-gray-900/80 border-b border-gray-700 py-3 px-4 drag-handle">
+        <h2 className="text-base font-semibold">Control Panel</h2>
+        
+        <div className="flex items-center gap-2">
+          <div 
+            className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}
+            title={`WebSocket ${wsConnected ? 'Connected' : 'Disconnected'}`}
+          ></div>
+          
           <button 
-            className={`btn btn-sm ml-auto ${reconnecting ? 'btn-disabled' : wsConnected ? 'btn-success' : 'btn-warning'}`}
             onClick={handleReconnect}
             disabled={reconnecting}
+            title="Force WebSocket reconnection"
+            className={`text-xs rounded px-2 py-0.5 transition-colors ${
+              reconnecting 
+                ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+            }`}
           >
-            {reconnecting ? 'Reconnecting...' : 'Reconnect'}
+            {reconnecting ? '...' : 'Reconnect'}
           </button>
         </div>
-        
+      </div>
+
+      <div className="panel-content w-full px-4 py-3">
         <div className="control-buttons flex flex-col gap-2 w-full">
           <button 
             className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
@@ -409,6 +414,25 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             {clickThrough ? 'Show Panel' : 'Hide Panel'}
           </button>
           
+          <button 
+            className="btn btn-primary"
+            onClick={toggleTelemetryOptions}
+          >
+            {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
+          </button>
+          
+          {window.electronAPI && (
+            <button 
+              className="btn btn-error"
+              onClick={quitApplication}
+            >
+              Quit Application
+            </button>
+          )}
+        </div>
+        
+        {showTelemetryOptions && <div className="mt-4">
+          <h3 className="text-sm font-semibold mb-2">Display Options</h3>
           <details className="telemetry-details">
             <summary className="btn btn-primary telemetry-summary">
               Add Telemetry Widget
@@ -453,14 +477,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               ))}
             </div>
           </details>
-          
-          <button 
-            className="btn btn-danger"
-            onClick={quitApplication}
-          >
-            Quit Application
-          </button>
-        </div>
+        </div>}
         
         {/* Selected Widget Details Section */}
         {selectedWidget && (
