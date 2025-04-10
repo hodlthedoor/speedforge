@@ -81,12 +81,62 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     if (pixiContainerRef.current && !pixiAppRef.current) {
       const app = new PIXI.Application({
         width: pixiContainerRef.current.clientWidth || 400,
-        height: 300,
+        height: pixiContainerRef.current.clientHeight || 300,
         backgroundColor: 0x1f2937, // roughly matching bg-gray-800/80
-        antialias: true
+        antialias: true,
+        resolution: window.devicePixelRatio || 1,
       });
+      
+      app.view.style.display = 'block';
+      app.view.style.width = '100%';
+      app.view.style.height = '100%';
+      
+      // Clear container before appending
+      while (pixiContainerRef.current.firstChild) {
+        pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
+      }
+      
       pixiContainerRef.current.appendChild(app.view);
       pixiAppRef.current = app;
+      
+      // Add resize observer to handle container size changes
+      const resizeObserver = new ResizeObserver(() => {
+        if (pixiContainerRef.current && pixiAppRef.current) {
+          pixiAppRef.current.renderer.resize(
+            pixiContainerRef.current.clientWidth,
+            pixiContainerRef.current.clientHeight
+          );
+          // We'll trigger a render in the next animation frame
+          if (!animationFrameId.current) {
+            animationFrameId.current = requestAnimationFrame(() => {
+              if (pixiAppRef.current) {
+                // This will be defined later but we need to
+                // make sure not to call it during initialization
+                const render = () => {
+                  if (pixiAppRef.current && trackPoints.length >= 2) {
+                    // Basic render of background only during initialization
+                    pixiAppRef.current.stage.removeChildren();
+                    const graphics = new PIXI.Graphics();
+                    pixiAppRef.current.stage.addChild(graphics);
+                  }
+                };
+                render();
+              }
+              animationFrameId.current = null;
+            });
+          }
+        }
+      });
+      
+      if (pixiContainerRef.current) {
+        resizeObserver.observe(pixiContainerRef.current);
+      }
+      
+      return () => {
+        resizeObserver.disconnect();
+        pixiAppRef.current?.destroy(true, { children: true });
+        pixiAppRef.current = null;
+      };
     }
     return () => {
       pixiAppRef.current?.destroy(true, { children: true });
@@ -379,22 +429,33 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     if (!app) return;
     app.stage.removeChildren();
     if (trackPoints.length < 2) return;
+    
+    // Get the actual dimensions of the canvas
     const width = app.screen.width;
     const height = app.screen.height;
     const padding = 10;
-    const xVals = trackPoints.map(p => p.x);
-    const yVals = trackPoints.map(p => p.y);
+    
+    // Use a copy of trackPoints to avoid any mutation issues
+    const points = [...trackPoints];
+    const xVals = points.map(p => p.x);
+    const yVals = points.map(p => p.y);
     const minX = Math.min(...xVals);
     const maxX = Math.max(...xVals);
     const minY = Math.min(...yVals);
     const maxY = Math.max(...yVals);
     const xRange = maxX - minX;
     const yRange = maxY - minY;
+    
+    // Ensure we have a valid range
     const maxRange = Math.max(xRange, yRange) || 1;
+    
+    // Calculate domain with padding
     const xDomainMin = minX - 0.05 * maxRange;
-    const xDomainMax = minX + maxRange * 1.05;
+    const xDomainMax = maxX + 0.05 * maxRange;
     const yDomainMin = minY - 0.05 * maxRange;
-    const yDomainMax = minY + maxRange * 1.05;
+    const yDomainMax = maxY + 0.05 * maxRange;
+    
+    // Maintain aspect ratio by adjusting the scale
     const xScale = (x: number) => padding + ((x - xDomainMin) * (width - 2 * padding)) / (xDomainMax - xDomainMin);
     const yScale = (y: number) => height - padding - ((y - yDomainMin) * (height - 2 * padding)) / (yDomainMax - yDomainMin);
 
@@ -416,20 +477,20 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
     const graphics = new PIXI.Graphics();
     // Draw track lines
-    for (let i = 1; i < trackPoints.length; i++) {
-      const p1 = trackPoints[i - 1];
-      const p2 = trackPoints[i];
+    for (let i = 1; i < points.length; i++) {
+      const p1 = points[i - 1];
+      const p2 = points[i];
       graphics.lineStyle(2.5, getLineColor(p2));
       graphics.moveTo(xScale(p1.x), yScale(p1.y));
       graphics.lineTo(xScale(p2.x), yScale(p2.y));
     }
     
     // Draw start/finish line
-    if (trackPoints.length > 5) {
+    if (points.length > 5) {
       let startFinishIndex = -1;
-      for (let i = 1; i < trackPoints.length; i++) {
-        const p1 = trackPoints[i - 1];
-        const p2 = trackPoints[i];
+      for (let i = 1; i < points.length; i++) {
+        const p1 = points[i - 1];
+        const p2 = points[i];
         if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
             (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
           startFinishIndex = i;
@@ -437,8 +498,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         }
       }
       if (startFinishIndex !== -1) {
-        const p1 = trackPoints[startFinishIndex - 1];
-        const p2 = trackPoints[startFinishIndex];
+        const p1 = points[startFinishIndex - 1];
+        const p2 = points[startFinishIndex];
         const x1 = xScale(p1.x);
         const y1 = yScale(p1.y);
         const x2 = xScale(p2.x);
@@ -467,8 +528,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     let carPos: TrackPoint | null = null;
     if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
       carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
-    } else if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
-      carPos = trackPoints[currentPositionIndex];
+    } else if (currentPositionIndex >= 0 && points[currentPositionIndex]) {
+      carPos = points[currentPositionIndex];
     }
     if (carPos) {
       graphics.beginFill(hexToNumber("#fbbf24"));
@@ -492,18 +553,24 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
     
     app.stage.addChild(graphics);
-  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
+  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData?.lap_dist_pct, findPositionAtLapDistance]);
 
   // Debounce PIXI re-rendering similar to previous implementation
   const debouncedRenderPixiMap = useCallback(() => {
-    if (!animationFrameId.current) {
-      animationFrameId.current = requestAnimationFrame(() => {
-        renderPixiMap();
-        animationFrameId.current = null;
-      });
+    // Check if we have a valid app and track points before rendering
+    if (!pixiAppRef.current || trackPoints.length < 2) return;
+    
+    if (animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
     }
-  }, [renderPixiMap]);
+    
+    animationFrameId.current = requestAnimationFrame(() => {
+      renderPixiMap();
+      animationFrameId.current = null;
+    });
+  }, [renderPixiMap, trackPoints]);
 
+  // Add effect that triggers render when track points or map state changes
   useEffect(() => {
     debouncedRenderPixiMap();
     return () => {
@@ -512,7 +579,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         animationFrameId.current = null;
       }
     };
-  }, [debouncedRenderPixiMap]);
+  }, [debouncedRenderPixiMap, trackPoints, colorMode, mapBuildingState, currentPositionIndex, telemetryData]);
 
   useEffect(() => {
     if (trackPoints.length === 0 || currentPosition.lapDistPct === undefined || mapBuildingState !== 'recording') {
@@ -652,7 +719,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
             </div>
           </div>
         ) : (
-          <div ref={pixiContainerRef} className="w-full h-full rounded" />
+          <div ref={pixiContainerRef} className="w-full h-full rounded overflow-hidden" />
         )}
       </div>
     </Widget>
