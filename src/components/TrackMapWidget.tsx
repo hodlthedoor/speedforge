@@ -77,94 +77,205 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     updateInterval: 50
   });
 
-  // Create PIXI app on mount
+  // Add a dedicated debug function to render with basic graphics only - defined first
+  // to avoid circular dependencies
+  const forceBasicRender = useCallback(() => {
+    if (!pixiAppRef.current || trackPoints.length < 2) {
+      console.warn('Cannot force basic render: app or track points missing');
+      return;
+    }
+
+    console.log('Forcing basic render of track with', trackPoints.length, 'points');
+    
+    try {
+      const app = pixiAppRef.current;
+      
+      // Clear all children
+      while (app.stage.children.length > 0) {
+        app.stage.removeChildAt(0);
+      }
+      
+      // Create a simple graphics object
+      const g = new PIXI.Graphics();
+      
+      // Draw background
+      g.beginFill(0x333333);
+      g.drawRect(0, 0, app.renderer.width, app.renderer.height);
+      g.endFill();
+      
+      // Prepare to scale points
+      const points = [...trackPoints];
+      const xVals = points.map(p => p.x).filter(x => !isNaN(x));
+      const yVals = points.map(p => p.y).filter(y => !isNaN(y));
+      
+      if (xVals.length < 2 || yVals.length < 2) {
+        console.warn('Not enough valid coordinates for basic render');
+        return;
+      }
+      
+      const minX = Math.min(...xVals);
+      const maxX = Math.max(...xVals);
+      const minY = Math.min(...yVals);
+      const maxY = Math.max(...yVals);
+      
+      const width = app.renderer.width;
+      const height = app.renderer.height;
+      const padding = 20;
+      
+      // Simple scaling function
+      const scaleX = (x: number) => {
+        return padding + (x - minX) * (width - 2 * padding) / (maxX - minX || 1);
+      };
+      
+      const scaleY = (y: number) => {
+        return padding + (y - minY) * (height - 2 * padding) / (maxY - minY || 1);
+      };
+      
+      // Draw track outline
+      g.lineStyle(3, 0xFFFFFF);
+      
+      // Draw a test rectangle
+      g.drawRect(padding, padding, width - 2 * padding, height - 2 * padding);
+      
+      // Draw the actual track
+      g.lineStyle(2, 0x00AAFF);
+      
+      let firstPoint = true;
+      for (const point of points) {
+        if (isNaN(point.x) || isNaN(point.y)) continue;
+        
+        const x = scaleX(point.x);
+        const y = scaleY(point.y);
+        
+        if (firstPoint) {
+          g.moveTo(x, y);
+          firstPoint = false;
+        } else {
+          g.lineTo(x, y);
+        }
+      }
+      
+      // Add the graphics to the stage
+      app.stage.addChild(g);
+      
+      console.log('Basic render completed');
+    } catch (error) {
+      console.error('Error in basic render:', error);
+    }
+  }, [trackPoints]);
+
+  // Create PIXI app on mount - split the initialization from the rendering logic
   useEffect(() => {
     if (pixiContainerRef.current && !pixiAppRef.current) {
       try {
         console.log('Initializing PIXI application...');
-        // Initialize with simpler options for PIXI v8
-        const app = new PIXI.Application();
         
-        // Configure the renderer
-        app.renderer.background.color = 0x1f2937;
-        
-        // Wait for next tick to ensure container is properly sized
-        setTimeout(() => {
-          if (!pixiContainerRef.current) return;
-          
-          const width = pixiContainerRef.current.clientWidth || 400;
-          const height = pixiContainerRef.current.clientHeight || 300;
-          
-          console.log('Container size:', width, height);
-          app.renderer.resize(width, height);
-          
-          // Configure the canvas element
-          app.canvas.style.width = '100%';
-          app.canvas.style.height = '100%';
-          app.canvas.style.display = 'block';
-          
-          // Clear container and append the canvas
-          while (pixiContainerRef.current.firstChild) {
-            pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
-          }
-          
-          pixiContainerRef.current.appendChild(app.canvas);
-          pixiAppRef.current = app;
-          
-          // Add a simple debug graphics test to verify rendering works
-          const testGraphics = new PIXI.Graphics();
-          
-          // Draw a simple cross pattern to verify rendering
-          testGraphics.lineStyle(4, 0xff0000);
-          testGraphics.moveTo(20, 20);
-          testGraphics.lineTo(width - 20, height - 20);
-          
-          testGraphics.lineStyle(4, 0x00ff00);
-          testGraphics.moveTo(width - 20, 20);
-          testGraphics.lineTo(20, height - 20);
-          
-          app.stage.addChild(testGraphics);
-          
-          console.log('PIXI application initialized successfully');
-          pixiInitializedRef.current = true;
-          
-          // Add resize observer
-          const resizeObserver = new ResizeObserver(() => {
-            if (pixiContainerRef.current && pixiAppRef.current) {
-              const newWidth = pixiContainerRef.current.clientWidth || 400;
-              const newHeight = pixiContainerRef.current.clientHeight || 300;
-              
-              pixiAppRef.current.renderer.resize(newWidth, newHeight);
-              console.log('Resized to:', newWidth, newHeight);
-              
-              // Only trigger render if we have track points
-              if (trackPoints.length >= 2) {
-                debouncedRenderPixiMap();
-              }
+        // Initialize with proper options for PIXI v8
+        const initializePixi = async () => {
+          try {
+            // Create the application first
+            const app = new PIXI.Application();
+            
+            // Use the new async init pattern required in v8
+            await app.init({
+              backgroundColor: 0x1f2937,
+              antialias: true,
+              width: pixiContainerRef.current?.clientWidth || 400,
+              height: pixiContainerRef.current?.clientHeight || 300,
+            });
+            
+            console.log('PIXI init completed');
+            
+            if (!pixiContainerRef.current) {
+              console.warn('Container ref lost during async initialization');
+              return;
             }
-          });
-          
-          resizeObserver.observe(pixiContainerRef.current);
-          
-          // If we already have track points, render them
-          if (trackPoints.length >= 2) {
-            debouncedRenderPixiMap();
+            
+            const width = pixiContainerRef.current.clientWidth || 400;
+            const height = pixiContainerRef.current.clientHeight || 300;
+            
+            console.log('Container size:', width, height);
+            
+            // Configure the canvas element
+            app.canvas.style.width = '100%';
+            app.canvas.style.height = '100%';
+            app.canvas.style.display = 'block';
+            
+            // Clear container and append the canvas
+            while (pixiContainerRef.current.firstChild) {
+              pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
+            }
+            
+            pixiContainerRef.current.appendChild(app.canvas);
+            pixiAppRef.current = app;
+            
+            // Add a simple debug graphics test to verify rendering works
+            const testGraphics = new PIXI.Graphics();
+            
+            // Draw a simple cross pattern to verify rendering
+            testGraphics.lineStyle(4, 0xff0000);
+            testGraphics.moveTo(20, 20);
+            testGraphics.lineTo(width - 20, height - 20);
+            
+            testGraphics.lineStyle(4, 0x00ff00);
+            testGraphics.moveTo(width - 20, 20);
+            testGraphics.lineTo(20, height - 20);
+            
+            app.stage.addChild(testGraphics);
+            
+            console.log('PIXI application initialized successfully');
+            pixiInitializedRef.current = true;
+            
+            // Add resize observer
+            const resizeObserver = new ResizeObserver(() => {
+              if (pixiContainerRef.current && pixiAppRef.current) {
+                const newWidth = pixiContainerRef.current.clientWidth || 400;
+                const newHeight = pixiContainerRef.current.clientHeight || 300;
+                
+                pixiAppRef.current.renderer.resize(newWidth, newHeight);
+                console.log('Resized to:', newWidth, newHeight);
+                
+                // We'll use a local reference to the current trackPoints to avoid circular deps
+                if (trackPoints.length >= 2) {
+                  // Create a simple manually triggered render for resize events
+                  const render = () => {
+                    if (pixiAppRef.current && trackPoints.length >= 2) {
+                      forceBasicRender(); // Use our basic renderer as it's more reliable
+                    }
+                  };
+                  
+                  // Trigger rendering on next frame
+                  requestAnimationFrame(render);
+                }
+              }
+            });
+            
+            resizeObserver.observe(pixiContainerRef.current);
+            
+            return () => {
+              console.log('Cleaning up PIXI application');
+              resizeObserver.disconnect();
+              if (pixiAppRef.current) {
+                pixiAppRef.current.destroy(true);
+                pixiAppRef.current = null;
+              }
+              pixiInitializedRef.current = false;
+            };
+          } catch (error) {
+            console.error('Error in async PIXI initialization:', error);
+            pixiInitializedRef.current = false;
           }
-        }, 100); // Small delay to ensure DOM is ready
-        
-        return () => {
-          console.log('Cleaning up PIXI application');
-          if (pixiAppRef.current) {
-            pixiAppRef.current.destroy(true);
-            pixiAppRef.current = null;
-          }
-          pixiInitializedRef.current = false;
         };
+        
+        // Start the async initialization
+        initializePixi();
+        
       } catch (error) {
         console.error('Error initializing PIXI:', error);
         pixiInitializedRef.current = false;
       }
     }
+    
     return () => {
       if (pixiAppRef.current) {
         pixiAppRef.current.destroy(true);
@@ -172,7 +283,22 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
       pixiInitializedRef.current = false;
     };
-  }, [trackPoints]);
+  // Removed trackPoints dependency to prevent unnecessary re-initialization
+  }, [forceBasicRender]);
+
+  // Trigger a render whenever track points change and PIXI is ready
+  useEffect(() => {
+    if (pixiInitializedRef.current && trackPoints.length >= 2) {
+      console.log('Track points changed, triggering render');
+      
+      // Use a short timeout to ensure the state has settled
+      const timer = setTimeout(() => {
+        forceBasicRender();
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [trackPoints, forceBasicRender]);
 
   useEffect(() => {
     return () => {
@@ -475,172 +601,112 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
       
       // Clear the stage
-      app.stage.removeChildren();
+      while (app.stage.children.length > 0) {
+        app.stage.removeChildAt(0);
+      }
       
       if (trackPoints.length < 2) {
         console.log('Not enough track points to render map');
+        
+        // Add a simple placeholder/debug graphic
+        const placeholderGraphics = new PIXI.Graphics();
+        placeholderGraphics.lineStyle(2, 0xff00ff);
+        placeholderGraphics.drawRect(10, 10, app.renderer.width - 20, app.renderer.height - 20);
+        app.stage.addChild(placeholderGraphics);
+        
         return;
       }
       
       console.log('Rendering track with', trackPoints.length, 'points, state:', mapBuildingState);
       
-      // Get the actual dimensions of the canvas
-      const width = app.renderer.width;
-      const height = app.renderer.height;
-      const padding = 10;
-      
-      // Use a copy of trackPoints to avoid any mutation issues
-      const points = [...trackPoints];
-      const xVals = points.map(p => p.x);
-      const yVals = points.map(p => p.y);
-      
-      // Check for valid coordinates
-      if (xVals.some(isNaN) || yVals.some(isNaN)) {
-        console.warn('Track contains invalid coordinates');
-        return;
-      }
-      
-      const minX = Math.min(...xVals);
-      const maxX = Math.max(...xVals);
-      const minY = Math.min(...yVals);
-      const maxY = Math.max(...yVals);
-      const xRange = maxX - minX || 1;
-      const yRange = maxY - minY || 1;
-      
-      // Ensure we have a valid range
-      const maxRange = Math.max(xRange, yRange);
-      
-      // Calculate domain with padding
-      const xDomainMin = minX - 0.05 * maxRange;
-      const xDomainMax = maxX + 0.05 * maxRange;
-      const yDomainMin = minY - 0.05 * maxRange;
-      const yDomainMax = maxY + 0.05 * maxRange;
-      
-      // Maintain aspect ratio by adjusting the scale
-      const xScale = (x: number) => padding + ((x - xDomainMin) * (width - 2 * padding)) / (xDomainMax - xDomainMin);
-      const yScale = (y: number) => height - padding - ((y - yDomainMin) * (height - 2 * padding)) / (yDomainMax - yDomainMin);
-      
-      const hexToNumber = (hex: string) => parseInt(hex.replace("#", ""), 16);
-      const getLineColor = (p: TrackPoint) => {
-        let color = "#ffffff";
-        if (colorMode === 'curvature' && p.curvature !== undefined) {
-          color = p.curvature < 0 ? "#3b82f6" : (p.curvature > 0 ? "#ef4444" : "#ffffff");
-        } else if (colorMode === 'acceleration' && p.longitudinalAccel !== undefined) {
-          const acc = p.longitudinalAccel;
-          if (acc <= -3) color = "#ef4444";
-          else if (acc < 0) color = "#fb923c";
-          else if (acc === 0) color = "#ffffff";
-          else if (acc <= 3) color = "#4ade80";
-          else color = "#22c55e";
-        }
-        return hexToNumber(color);
-      };
-      
-      // Create and add graphics object
-      const graphics = new PIXI.Graphics();
-      
-      // Draw track lines - using simpler approach for PIXI v8
-      for (let i = 1; i < points.length; i++) {
-        const p1 = points[i - 1];
-        const p2 = points[i];
+      try {
+        // Get the actual dimensions of the canvas
+        const width = app.renderer.width;
+        const height = app.renderer.height;
+        const padding = 10;
         
-        graphics.lineStyle(2.5, getLineColor(p2));
-        graphics.moveTo(xScale(p1.x), yScale(p1.y));
-        graphics.lineTo(xScale(p2.x), yScale(p2.y));
-      }
-      
-      // Draw start/finish line
-      if (points.length > 5) {
-        let startFinishIndex = -1;
+        // Use a copy of trackPoints to avoid any mutation issues
+        const points = [...trackPoints].filter(p => 
+          p && typeof p.x === 'number' && !isNaN(p.x) && 
+          typeof p.y === 'number' && !isNaN(p.y)
+        );
+        
+        if (points.length < 2) {
+          console.warn('Not enough valid points after filtering');
+          return;
+        }
+        
+        const xVals = points.map(p => p.x);
+        const yVals = points.map(p => p.y);
+        
+        const minX = Math.min(...xVals);
+        const maxX = Math.max(...xVals);
+        const minY = Math.min(...yVals);
+        const maxY = Math.max(...yVals);
+        const xRange = maxX - minX || 1;
+        const yRange = maxY - minY || 1;
+        
+        // Ensure we have a valid range
+        const maxRange = Math.max(xRange, yRange);
+        
+        // Calculate domain with padding
+        const xDomainMin = minX - 0.05 * maxRange;
+        const xDomainMax = maxX + 0.05 * maxRange;
+        const yDomainMin = minY - 0.05 * maxRange;
+        const yDomainMax = maxY + 0.05 * maxRange;
+        
+        // Maintain aspect ratio by adjusting the scale
+        const xScale = (x: number) => padding + ((x - xDomainMin) * (width - 2 * padding)) / (xDomainMax - xDomainMin);
+        const yScale = (y: number) => height - padding - ((y - yDomainMin) * (height - 2 * padding)) / (yDomainMax - yDomainMin);
+        
+        const hexToNumber = (hex: string) => parseInt(hex.replace("#", ""), 16);
+        const getLineColor = (p: TrackPoint) => {
+          let color = "#ffffff";
+          if (colorMode === 'curvature' && p.curvature !== undefined) {
+            color = p.curvature < 0 ? "#3b82f6" : (p.curvature > 0 ? "#ef4444" : "#ffffff");
+          } else if (colorMode === 'acceleration' && p.longitudinalAccel !== undefined) {
+            const acc = p.longitudinalAccel;
+            if (acc <= -3) color = "#ef4444";
+            else if (acc < 0) color = "#fb923c";
+            else if (acc === 0) color = "#ffffff";
+            else if (acc <= 3) color = "#4ade80";
+            else color = "#22c55e";
+          }
+          return hexToNumber(color);
+        };
+        
+        // Create and add graphics object
+        const graphics = new PIXI.Graphics();
+        
+        // Draw track lines
         for (let i = 1; i < points.length; i++) {
           const p1 = points[i - 1];
           const p2 = points[i];
-          if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
-              (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
-            startFinishIndex = i;
-            break;
-          }
-        }
-        
-        if (startFinishIndex !== -1) {
-          const p1 = points[startFinishIndex - 1];
-          const p2 = points[startFinishIndex];
+          
           const x1 = xScale(p1.x);
           const y1 = yScale(p1.y);
           const x2 = xScale(p2.x);
           const y2 = yScale(p2.y);
-          const mx = (x1 + x2) / 2;
-          const my = (y1 + y2) / 2;
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const len = Math.sqrt(dx * dx + dy * dy) || 1;
-          const perpX = -dy / len;
-          const perpY = dx / len;
-          const lineLength = 15;
           
-          // Draw start/finish line
-          graphics.lineStyle(3, hexToNumber("#ffff00"));
-          graphics.moveTo(mx - perpX * lineLength, my - perpY * lineLength);
-          graphics.lineTo(mx + perpX * lineLength, my + perpY * lineLength);
+          // Skip any invalid coordinates
+          if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) {
+            continue;
+          }
           
-          // Create S/F text - PIXI v8 compatible
-          const textStyle = new PIXI.TextStyle({
-            fontSize: 10,
-            fill: 0xffff00
-          });
-          
-          const sfText = new PIXI.Text({
-            text: "S/F",
-            style: textStyle
-          });
-          
-          sfText.anchor.set(0.5);
-          sfText.position.set(mx, my - 10);
-          app.stage.addChild(sfText);
+          graphics.lineStyle(2.5, getLineColor(p2));
+          graphics.moveTo(x1, y1);
+          graphics.lineTo(x2, y2);
         }
-      }
-      
-      // Draw car position
-      let carPos: TrackPoint | null = null;
-      if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
-        carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
-      } else if (currentPositionIndex >= 0 && points[currentPositionIndex]) {
-        carPos = points[currentPositionIndex];
-      }
-      
-      if (carPos) {
-        // Draw car position circle
-        graphics.beginFill(hexToNumber("#fbbf24"));
-        graphics.drawCircle(xScale(carPos.x), yScale(carPos.y), 5);
-        graphics.endFill();
         
-        // Draw heading line if available
-        if (carPos.heading !== undefined) {
-          const headingLength = 8;
-          const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
-          const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
-          
-          graphics.lineStyle(2, hexToNumber("#fbbf24"));
-          graphics.moveTo(xScale(carPos.x), yScale(carPos.y));
-          graphics.lineTo(headingX, headingY);
-        }
+        app.stage.addChild(graphics);
+        console.log('Track render completed successfully');
+      } catch (error) {
+        console.error('Error during track rendering:', error);
       }
-      
-      // Draw recording indicator
-      if (mapBuildingState === 'recording') {
-        graphics.beginFill(hexToNumber("#ef4444"), 0.8);
-        graphics.drawCircle(width - 15, height - 15, 6);
-        graphics.endFill();
-      }
-      
-      // Add the graphics to the stage
-      app.stage.addChild(graphics);
-      
-      console.log('Track map rendered successfully');
     } catch (error) {
       console.error('Error rendering track map:', error);
     }
-  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData?.lap_dist_pct, findPositionAtLapDistance]);
+  }, [trackPoints, colorMode, mapBuildingState, currentPositionIndex, telemetryData?.lap_dist_pct, findPositionAtLapDistance]);
 
   // Debounce PIXI re-rendering similar to previous implementation
   const debouncedRenderPixiMap = useCallback(() => {
@@ -793,9 +859,49 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     };
   }, []);
 
+  // Add button to trigger basic render for debugging
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl+Shift+D to force basic render
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        console.log('Debug key combination pressed - forcing basic render');
+        forceBasicRender();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [forceBasicRender]);
+  
+  // If we have track points but no rendering happens, try the basic render
+  useEffect(() => {
+    if (mapBuildingState === 'complete' && trackPoints.length >= 10 && pixiInitializedRef.current) {
+      // Add a delay to let the normal rendering process try first
+      const timeoutId = setTimeout(() => {
+        console.log('Attempting fallback basic render after delay');
+        forceBasicRender();
+      }, 1000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [mapBuildingState, trackPoints, forceBasicRender]);
+  
+  // Add this to the component return to show a basic debug button
+  const debugButton = (
+    <button 
+      onClick={forceBasicRender}
+      className="absolute bottom-2 right-2 bg-blue-700 text-white text-xs px-2 py-1 rounded opacity-50 hover:opacity-100"
+    >
+      Debug Render
+    </button>
+  );
+
   return (
     <Widget id={id} title="Track Map" className="w-auto max-w-[600px]" onClose={onClose}>
-      <div className="w-full max-w-[550px] h-[300px]">
+      <div className="w-full max-w-[550px] h-[300px] relative">
         {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             {lapInvalidated ? (
@@ -833,6 +939,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         ) : (
           <div ref={pixiContainerRef} className="w-full h-full rounded overflow-hidden" />
         )}
+        {debugButton}
       </div>
     </Widget>
   );
