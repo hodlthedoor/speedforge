@@ -405,6 +405,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Add dark background
+    ctx.fillStyle = '#1f2937';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Calculate bounds to determine scale
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -443,11 +446,21 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       ctx.lineTo(point.x, point.y);
     }
     
-    // Connect back to the start
-    ctx.lineTo(firstPoint.x, firstPoint.y);
+    // Only connect back to the start when we're nearly complete (in 'complete' state)
+    // or when the first and last points are very close to each other
+    const lastPoint = transformPoint(points[points.length - 1]);
+    const isNearlyComplete = mapBuildingState === 'complete' || 
+      (Math.sqrt(
+        Math.pow(firstPoint.x - lastPoint.x, 2) + 
+        Math.pow(firstPoint.y - lastPoint.y, 2)
+      ) < 20); // 20px threshold for "nearly complete"
     
-    // Draw the track path
-    ctx.strokeStyle = colorMode === 'dark' ? '#FFFFFF' : '#333333';
+    if (isNearlyComplete) {
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+    }
+    
+    // Draw the track path - always white for better visibility
+    ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.stroke();
     
@@ -592,10 +605,10 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         return 'On Track';
       case TrackSurface.OffTrack:
         return 'Off Track';
-      case TrackSurface.ArtificialGrass:
-        return 'Artificial Grass';
-      case TrackSurface.Gravel:
-        return 'Gravel';
+      case TrackSurface.PitLane:
+        return 'Pit Lane';
+      case TrackSurface.PitStall:
+        return 'Pit Stall';
       default:
         return 'Unknown';
     }
