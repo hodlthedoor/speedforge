@@ -51,6 +51,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   const lastTimeRef = useRef<number | null>(null);
   const offTrackCountRef = useRef<number>(0);
   const invalidationTimerRef = useRef<number | null>(null);
+  const pixiInitializedRef = useRef<boolean>(false);
 
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
@@ -86,61 +87,82 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         
         // Configure the renderer
         app.renderer.background.color = 0x1f2937;
-        app.renderer.resize(
-          pixiContainerRef.current.clientWidth || 400,
-          pixiContainerRef.current.clientHeight || 300
-        );
         
-        // Configure the canvas element
-        app.canvas.style.width = '100%';
-        app.canvas.style.height = '100%';
-        app.canvas.style.display = 'block';
-        
-        // Clear container and append the canvas
-        while (pixiContainerRef.current.firstChild) {
-          pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
-        }
-        
-        pixiContainerRef.current.appendChild(app.canvas);
-        pixiAppRef.current = app;
-        
-        console.log('PIXI application initialized successfully');
-        
-        // Add a simple debug graphics test to verify rendering works
-        const testGraphics = new PIXI.Graphics();
-        
-        // Draw a simple cross pattern to verify rendering
-        testGraphics.lineStyle(4, 0xff0000);
-        testGraphics.moveTo(20, 20);
-        testGraphics.lineTo(app.renderer.width - 20, app.renderer.height - 20);
-        
-        testGraphics.lineStyle(4, 0x00ff00);
-        testGraphics.moveTo(app.renderer.width - 20, 20);
-        testGraphics.lineTo(20, app.renderer.height - 20);
-        
-        app.stage.addChild(testGraphics);
-        
-        // Add resize observer
-        const resizeObserver = new ResizeObserver(() => {
-          if (pixiContainerRef.current && pixiAppRef.current) {
-            pixiAppRef.current.renderer.resize(
-              pixiContainerRef.current.clientWidth || 400,
-              pixiContainerRef.current.clientHeight || 300
-            );
+        // Wait for next tick to ensure container is properly sized
+        setTimeout(() => {
+          if (!pixiContainerRef.current) return;
+          
+          const width = pixiContainerRef.current.clientWidth || 400;
+          const height = pixiContainerRef.current.clientHeight || 300;
+          
+          console.log('Container size:', width, height);
+          app.renderer.resize(width, height);
+          
+          // Configure the canvas element
+          app.canvas.style.width = '100%';
+          app.canvas.style.height = '100%';
+          app.canvas.style.display = 'block';
+          
+          // Clear container and append the canvas
+          while (pixiContainerRef.current.firstChild) {
+            pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
+          }
+          
+          pixiContainerRef.current.appendChild(app.canvas);
+          pixiAppRef.current = app;
+          
+          // Add a simple debug graphics test to verify rendering works
+          const testGraphics = new PIXI.Graphics();
+          
+          // Draw a simple cross pattern to verify rendering
+          testGraphics.lineStyle(4, 0xff0000);
+          testGraphics.moveTo(20, 20);
+          testGraphics.lineTo(width - 20, height - 20);
+          
+          testGraphics.lineStyle(4, 0x00ff00);
+          testGraphics.moveTo(width - 20, 20);
+          testGraphics.lineTo(20, height - 20);
+          
+          app.stage.addChild(testGraphics);
+          
+          console.log('PIXI application initialized successfully');
+          pixiInitializedRef.current = true;
+          
+          // Add resize observer
+          const resizeObserver = new ResizeObserver(() => {
+            if (pixiContainerRef.current && pixiAppRef.current) {
+              const newWidth = pixiContainerRef.current.clientWidth || 400;
+              const newHeight = pixiContainerRef.current.clientHeight || 300;
+              
+              pixiAppRef.current.renderer.resize(newWidth, newHeight);
+              console.log('Resized to:', newWidth, newHeight);
+              
+              // Only trigger render if we have track points
+              if (trackPoints.length >= 2) {
+                debouncedRenderPixiMap();
+              }
+            }
+          });
+          
+          resizeObserver.observe(pixiContainerRef.current);
+          
+          // If we already have track points, render them
+          if (trackPoints.length >= 2) {
             debouncedRenderPixiMap();
           }
-        });
-        
-        resizeObserver.observe(pixiContainerRef.current);
+        }, 100); // Small delay to ensure DOM is ready
         
         return () => {
           console.log('Cleaning up PIXI application');
-          resizeObserver.disconnect();
-          app.destroy(true);
-          pixiAppRef.current = null;
+          if (pixiAppRef.current) {
+            pixiAppRef.current.destroy(true);
+            pixiAppRef.current = null;
+          }
+          pixiInitializedRef.current = false;
         };
       } catch (error) {
         console.error('Error initializing PIXI:', error);
+        pixiInitializedRef.current = false;
       }
     }
     return () => {
@@ -148,8 +170,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         pixiAppRef.current.destroy(true);
         pixiAppRef.current = null;
       }
+      pixiInitializedRef.current = false;
     };
-  }, []);
+  }, [trackPoints]);
 
   useEffect(() => {
     return () => {
@@ -170,6 +193,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, [telemetryData, mapBuildingState]);
 
   const startRecording = useCallback(() => {
+    console.log('Starting recording');
     trackPointsRef.current = [];
     setTrackPoints([]);
     lastPositionRef.current = null;
@@ -181,16 +205,27 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, [telemetryData]);
 
   const stopRecording = useCallback(() => {
+    console.log('Stopping recording, points:', trackPointsRef.current.length);
     setMapBuildingState('complete');
     mapCompleteRef.current = true;
     if (trackPointsRef.current.length > 10) {
       const sortedPoints = [...trackPointsRef.current].sort((a, b) => a.lapDistPct - b.lapDistPct);
       const normalizedTrack = normalizeTrack(sortedPoints);
+      console.log('Normalized track points:', normalizedTrack.length);
       setTrackPoints(normalizedTrack);
+      
+      // Force a re-render after setting track points
+      setTimeout(() => {
+        if (pixiInitializedRef.current && pixiAppRef.current) {
+          console.log('Forcing re-render after recording complete');
+          debouncedRenderPixiMap();
+        }
+      }, 100);
     }
   }, []);
 
   const cancelRecording = useCallback(() => {
+    console.log('Cancelling recording');
     trackPointsRef.current = [];
     setTrackPoints([]);
     lastPositionRef.current = null;
@@ -447,7 +482,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         return;
       }
       
-      console.log('Rendering track with', trackPoints.length, 'points');
+      console.log('Rendering track with', trackPoints.length, 'points, state:', mapBuildingState);
       
       // Get the actual dimensions of the canvas
       const width = app.renderer.width;
@@ -609,11 +644,16 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   // Debounce PIXI re-rendering similar to previous implementation
   const debouncedRenderPixiMap = useCallback(() => {
-    console.log('Attempting to render map, track points:', trackPoints.length);
+    console.log('Attempting to render map, track points:', trackPoints.length, 'initialized:', pixiInitializedRef.current);
     
     // Check if we have a valid app and track points before rendering
     if (!pixiAppRef.current) {
       console.warn('No PIXI app available for rendering');
+      return;
+    }
+    
+    if (!pixiInitializedRef.current) {
+      console.warn('PIXI not fully initialized yet');
       return;
     }
     
@@ -640,14 +680,18 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   // Add effect that triggers render when track points or map state changes
   useEffect(() => {
-    debouncedRenderPixiMap();
+    if (mapBuildingState === 'complete' && trackPoints.length >= 2 && pixiInitializedRef.current) {
+      console.log('Map is complete with valid track, triggering render');
+      debouncedRenderPixiMap();
+    }
+    
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
         animationFrameId.current = null;
       }
     };
-  }, [debouncedRenderPixiMap, trackPoints, colorMode, mapBuildingState, currentPositionIndex, telemetryData]);
+  }, [debouncedRenderPixiMap, trackPoints, mapBuildingState, animationFrameId]);
 
   useEffect(() => {
     if (trackPoints.length === 0 || currentPosition.lapDistPct === undefined || mapBuildingState !== 'recording') {
