@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
+// Import the unsafe-eval module to enable support for environments that don't allow unsafe-eval
+import '@pixi/unsafe-eval';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
 import { useTrackMapControls } from '../widgets/TrackMapControls';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
+
+// Import specific renderer based on the need - we'll import WebGL
+import { autoDetectRenderer } from 'pixi.js';
 
 interface TrackMapWidgetProps {
   id: string;
@@ -164,7 +169,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
   }, [trackPoints]);
 
-  // Create PIXI app on mount - split the initialization from the rendering logic
+  // Create PIXI app on mount
   useEffect(() => {
     if (pixiContainerRef.current && !pixiAppRef.current) {
       try {
@@ -173,41 +178,47 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         // Initialize with proper options for PIXI v8
         const initializePixi = async () => {
           try {
-            // Create the application first
+            // Create a new application
             const app = new PIXI.Application();
             
-            // Use the new async init pattern required in v8
+            // Calculate the initial size
+            const width = pixiContainerRef.current?.clientWidth || 400;
+            const height = pixiContainerRef.current?.clientHeight || 300;
+            
+            console.log('Container size:', width, height);
+            
+            // Initialize the application with the correct parameters
             await app.init({
-              backgroundColor: 0x1f2937,
+              background: '#1f2937',
               antialias: true,
-              width: pixiContainerRef.current?.clientWidth || 400,
-              height: pixiContainerRef.current?.clientHeight || 300,
+              width,
+              height,
+              resolution: window.devicePixelRatio || 1,
             });
             
             console.log('PIXI init completed');
             
+            // Check if container is still available
             if (!pixiContainerRef.current) {
               console.warn('Container ref lost during async initialization');
               return;
             }
-            
-            const width = pixiContainerRef.current.clientWidth || 400;
-            const height = pixiContainerRef.current.clientHeight || 300;
-            
-            console.log('Container size:', width, height);
-            
-            // Configure the canvas element
-            app.canvas.style.width = '100%';
-            app.canvas.style.height = '100%';
-            app.canvas.style.display = 'block';
             
             // Clear container and append the canvas
             while (pixiContainerRef.current.firstChild) {
               pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
             }
             
+            // Set canvas style
+            app.canvas.style.width = '100%';
+            app.canvas.style.height = '100%';
+            app.canvas.style.display = 'block';
+            
+            // Append the application canvas to the container
             pixiContainerRef.current.appendChild(app.canvas);
             pixiAppRef.current = app;
+            
+            console.log('PIXI canvas appended to container');
             
             // Add a simple debug graphics test to verify rendering works
             const testGraphics = new PIXI.Graphics();
@@ -223,10 +234,11 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
             
             app.stage.addChild(testGraphics);
             
-            console.log('PIXI application initialized successfully');
+            console.log('PIXI test graphics added');
+            
             pixiInitializedRef.current = true;
             
-            // Add resize observer
+            // Add resize observer to handle container size changes
             const resizeObserver = new ResizeObserver(() => {
               if (pixiContainerRef.current && pixiAppRef.current) {
                 const newWidth = pixiContainerRef.current.clientWidth || 400;
@@ -235,23 +247,18 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
                 pixiAppRef.current.renderer.resize(newWidth, newHeight);
                 console.log('Resized to:', newWidth, newHeight);
                 
-                // We'll use a local reference to the current trackPoints to avoid circular deps
+                // Trigger a re-render by setting a flag in state
                 if (trackPoints.length >= 2) {
-                  // Create a simple manually triggered render for resize events
-                  const render = () => {
-                    if (pixiAppRef.current && trackPoints.length >= 2) {
-                      forceBasicRender(); // Use our basic renderer as it's more reliable
-                    }
-                  };
-                  
-                  // Trigger rendering on next frame
-                  requestAnimationFrame(render);
+                  // This will trigger the useEffect that watches trackPoints
+                  // which will cause a re-render
+                  setCurrentPosition({ ...currentPosition });
                 }
               }
             });
             
             resizeObserver.observe(pixiContainerRef.current);
             
+            // Return cleanup function
             return () => {
               console.log('Cleaning up PIXI application');
               resizeObserver.disconnect();
@@ -269,7 +276,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         
         // Start the async initialization
         initializePixi();
-        
       } catch (error) {
         console.error('Error initializing PIXI:', error);
         pixiInitializedRef.current = false;
@@ -283,22 +289,31 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
       pixiInitializedRef.current = false;
     };
-  // Removed trackPoints dependency to prevent unnecessary re-initialization
-  }, [forceBasicRender]);
+  }, []);
 
-  // Trigger a render whenever track points change and PIXI is ready
+  // Trigger rendering when track points change and PIXI is initialized
   useEffect(() => {
     if (pixiInitializedRef.current && trackPoints.length >= 2) {
-      console.log('Track points changed, triggering render');
+      console.log('Track points or state changed, rendering map');
       
-      // Use a short timeout to ensure the state has settled
-      const timer = setTimeout(() => {
-        forceBasicRender();
-      }, 100);
+      // Debounce to avoid excessive rendering
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
       
-      return () => clearTimeout(timer);
+      animationFrameId.current = requestAnimationFrame(() => {
+        renderPixiMap();
+        animationFrameId.current = null;
+      });
     }
-  }, [trackPoints, forceBasicRender]);
+    
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+    };
+  }, [trackPoints, colorMode, mapBuildingState, currentPosition]);
 
   useEffect(() => {
     return () => {
@@ -591,7 +606,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     };
   }, [trackPoints]);
 
-  // PIXI rendering using Graphics (replacing d3)
+  // PIXI rendering using Graphics
   const renderPixiMap = useCallback(() => {
     try {
       const app = pixiAppRef.current;
@@ -675,7 +690,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
           return hexToNumber(color);
         };
         
-        // Create and add graphics object
+        // Create graphics object
         const graphics = new PIXI.Graphics();
         
         // Draw track lines
@@ -698,10 +713,109 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
           graphics.lineTo(x2, y2);
         }
         
+        // Draw start/finish line
+        if (points.length > 5) {
+          let startFinishIndex = -1;
+          for (let i = 1; i < points.length; i++) {
+            const p1 = points[i - 1];
+            const p2 = points[i];
+            if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
+                (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
+              startFinishIndex = i;
+              break;
+            }
+          }
+          
+          if (startFinishIndex !== -1) {
+            const p1 = points[startFinishIndex - 1];
+            const p2 = points[startFinishIndex];
+            const x1 = xScale(p1.x);
+            const y1 = yScale(p1.y);
+            const x2 = xScale(p2.x);
+            const y2 = yScale(p2.y);
+            const mx = (x1 + x2) / 2;
+            const my = (y1 + y2) / 2;
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const lineLength = 15;
+            
+            // Draw start/finish line
+            graphics.lineStyle(3, hexToNumber("#ffff00"));
+            graphics.moveTo(mx - perpX * lineLength, my - perpY * lineLength);
+            graphics.lineTo(mx + perpX * lineLength, my + perpY * lineLength);
+            
+            // Create S/F text
+            const textStyle = new PIXI.TextStyle({
+              fontSize: 10,
+              fill: 0xffff00
+            });
+            
+            const sfText = new PIXI.Text({
+              text: "S/F",
+              style: textStyle
+            });
+            
+            sfText.anchor.set(0.5);
+            sfText.position.set(mx, my - 10);
+            app.stage.addChild(sfText);
+          }
+        }
+        
+        // Draw car position
+        let carPos: TrackPoint | null = null;
+        if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
+          carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
+        } else if (currentPositionIndex >= 0 && points[currentPositionIndex]) {
+          carPos = points[currentPositionIndex];
+        }
+        
+        if (carPos) {
+          const carX = xScale(carPos.x);
+          const carY = yScale(carPos.y);
+          
+          // Skip if invalid coordinates
+          if (!isNaN(carX) && !isNaN(carY)) {
+            // Draw car position circle
+            graphics.beginFill(hexToNumber("#fbbf24"));
+            graphics.drawCircle(carX, carY, 5);
+            graphics.endFill();
+            
+            // Draw heading line if available
+            if (carPos.heading !== undefined) {
+              const headingLength = 8;
+              const headingX = carX + Math.cos(carPos.heading) * headingLength;
+              const headingY = carY + Math.sin(carPos.heading) * headingLength;
+              
+              graphics.lineStyle(2, hexToNumber("#fbbf24"));
+              graphics.moveTo(carX, carY);
+              graphics.lineTo(headingX, headingY);
+            }
+          }
+        }
+        
+        // Draw recording indicator
+        if (mapBuildingState === 'recording') {
+          graphics.beginFill(hexToNumber("#ef4444"), 0.8);
+          graphics.drawCircle(width - 15, height - 15, 6);
+          graphics.endFill();
+        }
+        
+        // Add the graphics to the stage
         app.stage.addChild(graphics);
+        
         console.log('Track render completed successfully');
       } catch (error) {
         console.error('Error during track rendering:', error);
+        
+        // Add a simple error indicator
+        const errorGraphics = new PIXI.Graphics();
+        errorGraphics.beginFill(0xff0000, 0.5);
+        errorGraphics.drawRect(0, 0, app.renderer.width, app.renderer.height);
+        errorGraphics.endFill();
+        app.stage.addChild(errorGraphics);
       }
     } catch (error) {
       console.error('Error rendering track map:', error);
@@ -864,8 +978,11 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ctrl+Shift+D to force basic render
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        console.log('Debug key combination pressed - forcing basic render');
-        forceBasicRender();
+        console.log('Debug key combination pressed');
+        if (pixiInitializedRef.current) {
+          console.log('Forcing PIXI render');
+          renderPixiMap();
+        }
       }
     };
     
@@ -874,25 +991,17 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [forceBasicRender]);
+  }, []);
   
-  // If we have track points but no rendering happens, try the basic render
-  useEffect(() => {
-    if (mapBuildingState === 'complete' && trackPoints.length >= 10 && pixiInitializedRef.current) {
-      // Add a delay to let the normal rendering process try first
-      const timeoutId = setTimeout(() => {
-        console.log('Attempting fallback basic render after delay');
-        forceBasicRender();
-      }, 1000);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [mapBuildingState, trackPoints, forceBasicRender]);
-  
-  // Add this to the component return to show a basic debug button
+  // Create a debug button
   const debugButton = (
     <button 
-      onClick={forceBasicRender}
+      onClick={() => {
+        if (pixiInitializedRef.current) {
+          console.log('Debug button clicked, forcing render');
+          renderPixiMap();
+        }
+      }}
       className="absolute bottom-2 right-2 bg-blue-700 text-white text-xs px-2 py-1 rounded opacity-50 hover:opacity-100"
     >
       Debug Render
