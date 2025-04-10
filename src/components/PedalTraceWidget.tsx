@@ -48,6 +48,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       }
     }
     
+    // Clean up function
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
@@ -108,9 +109,23 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       .attr('d', brakeLine);
   }, [data]);
 
+  // Apply D3 visualization when data changes
   useEffect(() => {
     updateChart();
   }, [updateChart]);
+
+  // Clean up everything when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up all D3 related resources
+      if (svgRef.current) {
+        d3.select(svgRef.current).selectAll('*').remove();
+      }
+      
+      // Ensure dataRef is cleared to help garbage collection
+      dataRef.current = [];
+    };
+  }, []);
 
   return (
     <Widget id={id} title="Pedal Trace" onClose={onClose}>

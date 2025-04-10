@@ -5,7 +5,6 @@ import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
 import { useTrackMapControls } from '../widgets/TrackMapControls';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
-import { useWidgetControls } from '../widgets/BaseWidget';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 
 interface TrackMapWidgetProps {
@@ -50,6 +49,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   const startLapDistPctRef = useRef<number>(-1);
   const lastTimeRef = useRef<number | null>(null);
   const offTrackCountRef = useRef<number>(0);
+  const invalidationTimerRef = useRef<number | null>(null);
 
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [mapBuildingState, setMapBuildingState] = useState<MapBuildingState>('idle');
@@ -127,9 +127,15 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     // Set lap invalidated flag to show message
     setLapInvalidated(true);
     
+    // Clear any previous timer
+    if (invalidationTimerRef.current) {
+      window.clearTimeout(invalidationTimerRef.current);
+    }
+    
     // Clear the invalidated message after 5 seconds
-    setTimeout(() => {
+    invalidationTimerRef.current = window.setTimeout(() => {
       setLapInvalidated(false);
+      invalidationTimerRef.current = null;
     }, 5000);
   }, []);
 
@@ -178,117 +184,148 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, []);
 
   useEffect(() => {
+    // Skip processing if not recording or no telemetry data
     if (!telemetryData || mapBuildingState !== 'recording') return;
-    const now = performance.now();
-    const lapDistPct = telemetryData.lap_dist_pct || 0;
-    const velocity = telemetryData.velocity_ms || 0;
-    const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
-    const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
-    const velForward = telemetryData.VelocityX || 0;
-    const velSide = telemetryData.VelocityY || 0;
-    const trackSurface = telemetryData.PlayerTrackSurface as number;
     
-    // Check if the car is on track
-    if (trackSurface !== TrackSurface.OnTrack) {
-      offTrackCountRef.current += 1;
+    // Avoid processing too often by checking if we already have a pending animation frame
+    if (animationFrameId.current) return;
+    
+    // Process telemetry data with requestAnimationFrame to limit how often we update
+    animationFrameId.current = requestAnimationFrame(() => {
+      const now = performance.now();
+      const lapDistPct = telemetryData.lap_dist_pct || 0;
+      const velocity = telemetryData.velocity_ms || 0;
+      const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
+      const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
+      const velForward = telemetryData.VelocityX || 0;
+      const velSide = telemetryData.VelocityY || 0;
+      const trackSurface = telemetryData.PlayerTrackSurface as number;
       
-      // If we have 4 consecutive off-track datapoints, cancel the recording
-      if (offTrackCountRef.current >= 4) {
-        cancelRecording();
+      // Check if the car is on track
+      if (trackSurface !== TrackSurface.OnTrack) {
+        offTrackCountRef.current += 1;
+        
+        // If we have 4 consecutive off-track datapoints, cancel the recording
+        if (offTrackCountRef.current >= 4) {
+          cancelRecording();
+          animationFrameId.current = null;
+          return;
+        }
+      } else {
+        // Reset off-track counter when back on track
+        offTrackCountRef.current = 0;
+      }
+      
+      // Only record when on track and moving
+      if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) {
+        animationFrameId.current = null;
         return;
       }
-    } else {
-      // Reset off-track counter when back on track
-      offTrackCountRef.current = 0;
-    }
-    
-    // Only record when on track and moving
-    if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) return;
-    
-    let timeDelta = 0.05;
-    if (lastTimeRef.current !== null) {
-      timeDelta = (now - lastTimeRef.current) / 1000;
-      if (timeDelta > 0.2) timeDelta = 0.05;
-    }
-    lastTimeRef.current = now;
-    let curvature = 0;
-    if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
-    let newX = 0, newY = 0, currentHeading = 0;
-    if (trackPointsRef.current.length === 0) {
-      newX = 0; newY = 0; currentHeading = 0;
-    } else if (lastPositionRef.current) {
-      const lastX = lastPositionRef.current.x;
-      const lastY = lastPositionRef.current.y;
-      const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
-      const yawRateRadSec = (yawRateDegSec * Math.PI) / 180;
-      currentHeading = lastPositionRef.current.heading || 0;
-      currentHeading += yawRateRadSec * timeDelta;
-      const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
-      const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
-      newX = lastX + worldDx;
-      newY = lastY + worldDy;
-      if (trackPointsRef.current.length > 20) {
-        const distFromStart = Math.min(
-          Math.abs(lapDistPct - startLapDistPctRef.current),
-          Math.abs(lapDistPct - startLapDistPctRef.current + 1),
-          Math.abs(lapDistPct - startLapDistPctRef.current - 1)
-        );
-        if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
-          const firstPoint = trackPointsRef.current[0];
-          const distX = newX - firstPoint.x;
-          const distY = newY - firstPoint.y;
-          const dist = Math.sqrt(distX * distX + distY * distY);
-          if (dist < 50) {
-            const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
-            newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
-            newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
-            
-            // We're very close to the start point, close the loop and stop recording
-            if (dist < 20 && trackPointsRef.current.length > 50) {
-              stopRecording();
-              return;
+      
+      let timeDelta = 0.05;
+      if (lastTimeRef.current !== null) {
+        timeDelta = (now - lastTimeRef.current) / 1000;
+        if (timeDelta > 0.2) timeDelta = 0.05;
+      }
+      lastTimeRef.current = now;
+      let curvature = 0;
+      if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
+      
+      // Calculate position
+      let newX = 0, newY = 0, currentHeading = 0;
+      if (trackPointsRef.current.length === 0) {
+        newX = 0; newY = 0; currentHeading = 0;
+      } else if (lastPositionRef.current) {
+        const lastX = lastPositionRef.current.x;
+        const lastY = lastPositionRef.current.y;
+        const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
+        const yawRateRadSec = (yawRateDegSec * Math.PI) / 180;
+        currentHeading = lastPositionRef.current.heading || 0;
+        currentHeading += yawRateRadSec * timeDelta;
+        const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
+        const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
+        newX = lastX + worldDx;
+        newY = lastY + worldDy;
+        
+        // Adjust points near the start to create a closed loop
+        if (trackPointsRef.current.length > 20) {
+          const distFromStart = Math.min(
+            Math.abs(lapDistPct - startLapDistPctRef.current),
+            Math.abs(lapDistPct - startLapDistPctRef.current + 1),
+            Math.abs(lapDistPct - startLapDistPctRef.current - 1)
+          );
+          if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
+            const firstPoint = trackPointsRef.current[0];
+            const distX = newX - firstPoint.x;
+            const distY = newY - firstPoint.y;
+            const dist = Math.sqrt(distX * distX + distY * distY);
+            if (dist < 50) {
+              const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
+              newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
+              newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+              
+              // We're very close to the start point, close the loop and stop recording
+              if (dist < 20 && trackPointsRef.current.length > 50) {
+                stopRecording();
+                animationFrameId.current = null;
+                return;
+              }
             }
           }
         }
       }
-    }
-    const newPoint: TrackPoint = {
-      x: newX,
-      y: newY,
-      lapDistPct,
-      curvature,
-      longitudinalAccel,
-      heading: currentHeading
-    };
-    trackPointsRef.current = [...trackPointsRef.current, newPoint];
-    lastPositionRef.current = newPoint;
-    if (trackPointsRef.current.length > 20) {
-      const lapStart = startLapDistPctRef.current;
-      let completedLap = false;
       
-      // Simplified lap completion detection - focus on crossing start/finish line
-      if (lastPositionRef.current) {
-        const lastLapPct = lastPositionRef.current.lapDistPct;
+      // Create the new track point
+      const newPoint: TrackPoint = {
+        x: newX,
+        y: newY,
+        lapDistPct,
+        curvature,
+        longitudinalAccel,
+        heading: currentHeading
+      };
+      
+      // Update track points
+      trackPointsRef.current = [...trackPointsRef.current, newPoint];
+      lastPositionRef.current = newPoint;
+      
+      // Check for lap completion
+      if (trackPointsRef.current.length > 20) {
+        const lapStart = startLapDistPctRef.current;
+        let completedLap = false;
         
-        // Check if we've crossed the start/finish line
-        if ((lastLapPct > 0.9 && lapDistPct < 0.1) || 
-            (lastLapPct < 0.1 && lapDistPct > 0.9)) {
-          completedLap = true;
+        // Simplified lap completion detection - focus on crossing start/finish line
+        if (lastPositionRef.current) {
+          const lastLapPct = lastPositionRef.current.lapDistPct;
+          
+          // Check if we've crossed the start/finish line
+          if ((lastLapPct > 0.9 && lapDistPct < 0.1) || 
+              (lastLapPct < 0.1 && lapDistPct > 0.9)) {
+            completedLap = true;
+          }
+        }
+        
+        if (completedLap) {
+          stopRecording();
+          animationFrameId.current = null;
+          return;
         }
       }
       
-      if (completedLap) {
-        stopRecording();
-        return;
-      }
-    }
-    if (!animationFrameId.current) {
-      animationFrameId.current = requestAnimationFrame(() => {
-        setTrackPoints([...trackPointsRef.current]);
+      // Update visual state - do this less frequently
+      setTrackPoints(trackPointsRef.current.slice());
+      setCurrentPosition({ lapDistPct });
+      
+      // Clear the animation frame ID so we can process the next update
+      animationFrameId.current = null;
+    });
+    
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
         animationFrameId.current = null;
-      });
-    }
-    setCurrentPosition({ lapDistPct });
+      }
+    };
   }, [telemetryData, mapBuildingState, stopRecording, cancelRecording]);
 
   useEffect(() => {
@@ -532,43 +569,59 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         .attr("r", 6)
         .attr("fill", "#ef4444") // Red color
         .attr("opacity", 0.8)
-        .attr("class", "recording-indicator")
-        .style("animation", "pulse 2s infinite");
-      
-      // Add a pulse animation for the recording indicator
-      const style = document.createElement('style');
-      style.textContent = `
-        @keyframes pulse {
-          0% { opacity: 0.8; }
-          50% { opacity: 0.4; }
-          100% { opacity: 0.8; }
-        }
-      `;
-      document.head.appendChild(style);
+        .attr("class", "recording-indicator");
     }
   }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
-  useEffect(() => {
-    renderTrackMap();
+  // Optimize the track map rendering to avoid unnecessary re-renders
+  const debouncedRenderTrackMap = useCallback(() => {
+    if (!svgRef.current) return;
+    
+    // Only re-render if we don't have a pending animation frame
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        renderTrackMap();
+        animationFrameId.current = null;
+      });
+    }
   }, [renderTrackMap]);
 
   useEffect(() => {
-    if (trackPoints.length > 0 && currentPosition.lapDistPct !== undefined && mapBuildingState === 'recording') {
-      let closestIndex = 0;
-      let minDistance = Number.MAX_VALUE;
-      for (let i = 0; i < trackPoints.length; i++) {
-        const distDirect = Math.abs(trackPoints[i].lapDistPct - currentPosition.lapDistPct);
-        const distWrapLow = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct + 1));
-        const distWrapHigh = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct - 1));
-        const dist = Math.min(distDirect, distWrapLow, distWrapHigh);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestIndex = i;
-        }
+    debouncedRenderTrackMap();
+    
+    // Clean up any animation frame on unmount
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
       }
-      setCurrentPositionIndex(closestIndex);
-    } else {
+    };
+  }, [debouncedRenderTrackMap]);
+
+  useEffect(() => {
+    if (trackPoints.length === 0 || currentPosition.lapDistPct === undefined || mapBuildingState !== 'recording') {
       setCurrentPositionIndex(-1);
+      return;
+    }
+    
+    // Use requestAnimationFrame to limit how often this calculation runs
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        let closestIndex = 0;
+        let minDistance = Number.MAX_VALUE;
+        for (let i = 0; i < trackPoints.length; i++) {
+          const distDirect = Math.abs(trackPoints[i].lapDistPct - currentPosition.lapDistPct);
+          const distWrapLow = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct + 1));
+          const distWrapHigh = Math.abs(trackPoints[i].lapDistPct - (currentPosition.lapDistPct - 1));
+          const dist = Math.min(distDirect, distWrapLow, distWrapHigh);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestIndex = i;
+          }
+        }
+        setCurrentPositionIndex(closestIndex);
+        animationFrameId.current = null;
+      });
     }
   }, [currentPosition.lapDistPct, trackPoints, mapBuildingState]);
 
@@ -598,6 +651,69 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       default: return `Unknown (${surface})`;
     }
   };
+
+  // Add a separate useEffect for the pulse animation to avoid creating new style elements on every render
+  useEffect(() => {
+    // Create the pulse animation style only once
+    const styleId = 'track-map-pulse-animation';
+    if (!document.getElementById(styleId) && mapBuildingState === 'recording') {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        @keyframes pulse {
+          0% { opacity: 0.8; }
+          50% { opacity: 0.4; }
+          100% { opacity: 0.8; }
+        }
+        .recording-indicator {
+          animation: pulse 2s infinite;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    return () => {
+      // Clean up style element when component unmounts
+      if (document.getElementById(styleId) && mapBuildingState !== 'recording') {
+        const styleElement = document.getElementById(styleId);
+        if (styleElement) {
+          document.head.removeChild(styleElement);
+        }
+      }
+    };
+  }, [mapBuildingState]);
+
+  // Improved cleanup function
+  useEffect(() => {
+    return () => {
+      // Clean up any animation frames when component unmounts
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+      
+      // Clear the invalidation timer
+      if (invalidationTimerRef.current) {
+        clearTimeout(invalidationTimerRef.current);
+        invalidationTimerRef.current = null;
+      }
+      
+      // Reset any other state that might cause memory leaks
+      trackPointsRef.current = [];
+      lastPositionRef.current = null;
+      
+      // Make sure we clean up any DOM elements that might have been created
+      const styleElement = document.getElementById('track-map-pulse-animation');
+      if (styleElement) {
+        document.head.removeChild(styleElement);
+      }
+      
+      // Clean up D3 selections to avoid memory leaks
+      if (svgRef.current) {
+        d3.select(svgRef.current).selectAll('*').remove();
+      }
+    };
+  }, []);
 
   return (
     <Widget id={id} title="Track Map" className="w-auto max-w-[600px]" onClose={onClose}>
