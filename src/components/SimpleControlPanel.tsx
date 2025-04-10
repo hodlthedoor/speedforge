@@ -44,6 +44,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [trackMapWidgetStates, setTrackMapWidgetStates] = useState<Record<string, TrackMapWidgetState>>({});
   const [wsConnected, setWsConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [autoNewWindowsForDisplays, setAutoNewWindowsForDisplays] = useState(true);
   
   // Function to close a widget - defined early to avoid reference errors
   const closeWidget = useCallback((id: string) => {
@@ -298,6 +299,25 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   };
 
+  const toggleAutoNewWindows = () => {
+    const newState = !autoNewWindowsForDisplays;
+    console.log(`Toggling automatic new windows for displays: ${newState}`);
+    setAutoNewWindowsForDisplays(newState);
+    
+    // If running in Electron, also toggle via the API - use type assertion for TypeScript
+    if (window.electronAPI) {
+      // Call the API if it exists, using type assertion to avoid TypeScript errors
+      try {
+        const api = window.electronAPI.app as any;
+        if (typeof api.toggleAutoNewWindows === 'function') {
+          api.toggleAutoNewWindows(newState);
+        }
+      } catch (error) {
+        console.error('Error toggling auto new windows:', error);
+      }
+    }
+  };
+
   // Determine what widgets are active
   const enabledWidgets = Array.isArray(activeWidgets) 
     ? activeWidgets.filter(w => w && w.enabled !== false)
@@ -422,12 +442,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
           </button>
           
           {window.electronAPI && (
-            <button 
-              className="btn btn-error"
-              onClick={quitApplication}
-            >
-              Quit Application
-            </button>
+            <>
+              <button 
+                className={`btn ${autoNewWindowsForDisplays ? 'btn-success' : 'btn-secondary'}`}
+                onClick={toggleAutoNewWindows}
+              >
+                {autoNewWindowsForDisplays 
+                  ? 'Auto-Create Windows for New Displays: ON' 
+                  : 'Auto-Create Windows for New Displays: OFF'}
+              </button>
+              
+              <button 
+                className="btn btn-error"
+                onClick={quitApplication}
+              >
+                Quit Application
+              </button>
+            </>
           )}
         </div>
         
@@ -544,4 +575,4 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   );
 };
 
-export default SimpleControlPanel; 
+export default SimpleControlPanel;

@@ -17,6 +17,9 @@ const windows: BrowserWindow[] = [];
 // Create a variable to hold the interval ID
 let stayOnTopInterval: NodeJS.Timeout | null = null;
 
+// Add display-related events to handle monitors being added/removed
+let autoCreateWindowsForNewDisplays = true;
+
 // Create a window for each display
 function createWindows() {
   // Get all displays
@@ -158,6 +161,13 @@ function setupIpcListeners() {
     }
   });
   
+  // Toggle auto-create windows for new displays
+  ipcMain.handle('app:toggleAutoNewWindows', (event, state) => {
+    console.log(`Toggling auto-create new windows for displays from main process to: ${state}`);
+    autoCreateWindowsForNewDisplays = state;
+    return { success: true, state };
+  });
+  
   // Toggle click-through mode
   ipcMain.handle('app:toggleClickThrough', (event, state) => {
     console.log(`Toggling click-through from main process to: ${state}`);
@@ -288,6 +298,75 @@ app.on('activate', () => {
   if (windows.length === 0) createWindows();
 });
 
+// Add display-related events to handle monitors being added/removed
+screen.on('display-added', (event, display) => {
+  console.log('New display detected:', display);
+  
+  // Only create window if auto-create is enabled
+  if (!autoCreateWindowsForNewDisplays) {
+    console.log('Auto-create new windows is disabled, skipping window creation for new display');
+    return;
+  }
+  
+  // Create a window for the newly added display
+  const win = new BrowserWindow({
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: false,
+    fullscreen: false,
+    type: 'panel',
+    vibrancy: null as any,
+    visualEffectState: null as any,
+    focusable: true,
+    alwaysOnTop: true
+  });
+
+  // Set platform-specific settings
+  if (process.platform === 'darwin') {
+    win.setWindowButtonVisibility(false);
+    win.setAlwaysOnTop(true, 'screen-saver', 1);
+    win.setBackgroundColor('#00000000');
+    win.setOpacity(1.0);
+  } else if (process.platform === 'win32') {
+    win.setAlwaysOnTop(true, 'screen-saver');
+  } else {
+    win.setAlwaysOnTop(true);
+  }
+
+  // Start with click-through enabled
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.setTitle('Speedforge (click-through:true)');
+  
+  // Load the app
+  const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
+  win.loadURL(mainUrl);
+  
+  // Store the window reference
+  windows.push(win);
+  
+  console.log(`Created new window for display ${display.id}`);
+});
+
+screen.on('display-removed', (event, display) => {
+  console.log('Display removed:', display);
+  // Optional: You could close windows associated with this display
+  // For now, we'll leave them open as the user might want to reposition widgets
+});
+
 // Clean up before quitting
 app.on('before-quit', () => {
   console.log('Performing cleanup before quit');
@@ -303,6 +382,7 @@ app.on('before-quit', () => {
   
   // Remove all IPC handlers
   ipcMain.removeHandler('app:quit');
+  ipcMain.removeHandler('app:toggleAutoNewWindows');
   ipcMain.removeHandler('app:toggleClickThrough');
   
   // Close windows gracefully

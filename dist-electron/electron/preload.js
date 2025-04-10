@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     app: {
         quit: () => {
             return ipcRenderer.invoke('app:quit');
+        },
+        toggleClickThrough: (state) => {
+            return ipcRenderer.invoke('app:toggleClickThrough', state);
+        },
+        toggleAutoNewWindows: (state) => {
+            return ipcRenderer.invoke('app:toggleAutoNewWindows', state);
         }
     }
 });
