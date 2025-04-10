@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import * as PIXI from 'pixi.js';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
@@ -23,9 +22,9 @@ interface TrackPoint {
   x: number;
   y: number;
   lapDistPct: number;
+  heading?: number;
   curvature?: number;
   longitudinalAccel?: number;
-  heading?: number;
 }
 
 interface TrackPosition {
@@ -40,9 +39,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   onStateChange,
   externalControls 
 }) => {
-  // Use a div ref for PIXI container
-  const pixiContainerRef = useRef<HTMLDivElement | null>(null);
-  const pixiAppRef = useRef<PIXI.Application | null>(null);
+  // Replace PIXI container with Canvas
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const lastPositionRef = useRef<TrackPoint | null>(null);
   const trackPointsRef = useRef<TrackPoint[]>([]);
@@ -76,21 +74,26 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     updateInterval: 50
   });
 
-  // Create PIXI app on mount using v8's resizeTo option.
+  // Remove PIXI initialization and use Canvas instead
   useEffect(() => {
-    if (pixiContainerRef.current && !pixiAppRef.current) {
-      // Using the container as the resize target ensures the app dimensions match the container.
-      const app = new PIXI.Application({
-        resizeTo: pixiContainerRef.current,
-        backgroundColor: 0x1f2937, // similar to bg-gray-800/80
-        antialias: true,
-      });
-      pixiContainerRef.current.appendChild(app.view);
-      pixiAppRef.current = app;
-    }
+    const resizeCanvas = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const container = canvas.parentElement;
+      if (!container) return;
+      
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      
+      renderCanvas();
+    };
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
     return () => {
-      pixiAppRef.current?.destroy(true, { children: true });
-      pixiAppRef.current = null;
+      window.removeEventListener('resize', resizeCanvas);
     };
   }, []);
 
@@ -320,200 +323,227 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     setCurrentPosition({ lapDistPct });
   }, [telemetryData, mapBuildingState]);
 
-  const findPositionAtLapDistance = useCallback((lapDistPct: number): TrackPoint | null => {
-    if (trackPoints.length === 0) return null;
+  const findPositionAtLapDistance = (lapDistPct: number): TrackPoint | null => {
+    const points = trackPointsRef.current;
+    if (points.length === 0) return null;
     
-    let targetDist = lapDistPct;
-    if (targetDist > 1) targetDist -= 1;
-    if (targetDist < 0) targetDist += 1;
+    // Make sure the lap distance is between 0 and 1
+    const normalizedLapDist = lapDistPct % 1;
+    const positiveLapDist = normalizedLapDist < 0 ? normalizedLapDist + 1 : normalizedLapDist;
     
-    const exactMatch = trackPoints.find(p => Math.abs(p.lapDistPct - targetDist) < 0.001);
-    if (exactMatch) return exactMatch;
+    // Find the closest points before and after the given lap distance
+    let beforeIndex = -1;
+    let afterIndex = -1;
     
-    let prevPoint = trackPoints[0];
-    let nextPoint = trackPoints[0];
-    
-    for (let i = 0; i < trackPoints.length; i++) {
-      if (trackPoints[i].lapDistPct <= targetDist && 
-          (i === trackPoints.length - 1 || trackPoints[i + 1].lapDistPct > targetDist)) {
-        prevPoint = trackPoints[i];
-        nextPoint = i < trackPoints.length - 1 ? trackPoints[i + 1] : trackPoints[0];
-        break;
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].lapDistPct <= positiveLapDist && 
+          (beforeIndex === -1 || points[i].lapDistPct > points[beforeIndex].lapDistPct)) {
+        beforeIndex = i;
+      }
+      
+      if (points[i].lapDistPct >= positiveLapDist && 
+          (afterIndex === -1 || points[i].lapDistPct < points[afterIndex].lapDistPct)) {
+        afterIndex = i;
       }
     }
     
-    if (targetDist < trackPoints[0].lapDistPct) {
-      prevPoint = trackPoints[trackPoints.length - 1];
-      nextPoint = trackPoints[0];
+    // Handle the case when we cross the start/finish line
+    if (beforeIndex === -1) {
+      beforeIndex = points.findIndex(p => p.lapDistPct === Math.max(...points.map(p => p.lapDistPct)));
     }
     
-    let t = 0;
-    const prevDist = prevPoint.lapDistPct;
-    const nextDist = nextPoint.lapDistPct;
+    if (afterIndex === -1) {
+      afterIndex = points.findIndex(p => p.lapDistPct === Math.min(...points.map(p => p.lapDistPct)));
+    }
     
-    if (nextDist < prevDist) {
-      if (targetDist >= prevDist) {
-        t = (targetDist - prevDist) / ((1 - prevDist) + nextDist);
-      } else {
-        t = ((1 - prevDist) + targetDist) / ((1 - prevDist) + nextDist);
-      }
+    if (beforeIndex === -1 || afterIndex === -1) return null;
+    
+    const before = points[beforeIndex];
+    const after = points[afterIndex];
+    
+    // Calculate the interpolation factor
+    let t;
+    if (after.lapDistPct < before.lapDistPct) {
+      // We're crossing the start/finish line
+      const afterPct = after.lapDistPct + 1;
+      t = (positiveLapDist < after.lapDistPct 
+           ? positiveLapDist + 1 
+           : positiveLapDist) - before.lapDistPct;
+      t /= afterPct - before.lapDistPct;
     } else {
-      t = (targetDist - prevDist) / (nextDist - prevDist);
+      t = (positiveLapDist - before.lapDistPct) / (after.lapDistPct - before.lapDistPct);
     }
     
-    t = Math.max(0, Math.min(1, t));
+    // Interpolate the position
+    const interpolatedPoint: TrackPoint = {
+      x: before.x + t * (after.x - before.x),
+      y: before.y + t * (after.y - before.y),
+      lapDistPct: positiveLapDist
+    };
     
-    return {
-      x: prevPoint.x * (1 - t) + nextPoint.x * t,
-      y: prevPoint.y * (1 - t) + nextPoint.y * t,
-      lapDistPct: targetDist,
-      heading: prevPoint.heading,
-      curvature: prevPoint.curvature,
-      longitudinalAccel: prevPoint.longitudinalAccel
-    };
-  }, [trackPoints]);
-
-  // Updated PIXI rendering for v8.
-  const renderPixiMap = useCallback(() => {
-    const app = pixiAppRef.current;
-    if (!app) return;
-    // Clear stage and remove previous children.
-    app.stage.removeChildren();
-    if (trackPoints.length < 2) return;
-    const width = app.screen.width;
-    const height = app.screen.height;
-    const padding = 10;
-    const xVals = trackPoints.map(p => p.x);
-    const yVals = trackPoints.map(p => p.y);
-    const minX = Math.min(...xVals);
-    const maxX = Math.max(...xVals);
-    const minY = Math.min(...yVals);
-    const maxY = Math.max(...yVals);
-    const xRange = maxX - minX;
-    const yRange = maxY - minY;
-    const maxRange = Math.max(xRange, yRange) || 1;
-    const xDomainMin = minX - 0.05 * maxRange;
-    const xDomainMax = minX + maxRange * 1.05;
-    const yDomainMin = minY - 0.05 * maxRange;
-    const yDomainMax = minY + maxRange * 1.05;
-    const xScale = (x: number) =>
-      padding + ((x - xDomainMin) * (width - 2 * padding)) / (xDomainMax - xDomainMin);
-    const yScale = (y: number) =>
-      height - padding - ((y - yDomainMin) * (height - 2 * padding)) / (yDomainMax - yDomainMin);
-
-    const hexToNumber = (hex: string) => parseInt(hex.replace("#", ""), 16);
-    const getLineColor = (p: TrackPoint) => {
-      let color = "#ffffff";
-      if (colorMode === 'curvature' && p.curvature !== undefined) {
-        color = p.curvature < 0 ? "#3b82f6" : (p.curvature > 0 ? "#ef4444" : "#ffffff");
-      } else if (colorMode === 'acceleration' && p.longitudinalAccel !== undefined) {
-        const acc = p.longitudinalAccel;
-        if (acc <= -3) color = "#ef4444";
-        else if (acc < 0) color = "#fb923c";
-        else if (acc === 0) color = "#ffffff";
-        else if (acc <= 3) color = "#4ade80";
-        else color = "#22c55e";
-      }
-      return hexToNumber(color);
-    };
-
-    const graphics = new PIXI.Graphics();
-    // Draw track lines.
-    for (let i = 1; i < trackPoints.length; i++) {
-      const p1 = trackPoints[i - 1];
-      const p2 = trackPoints[i];
-      graphics.lineStyle(2.5, getLineColor(p2));
-      graphics.moveTo(xScale(p1.x), yScale(p1.y));
-      graphics.lineTo(xScale(p2.x), yScale(p2.y));
+    // If both points have heading, interpolate that too
+    if (before.heading !== undefined && after.heading !== undefined) {
+      // Ensure we interpolate along the shortest arc
+      let headingDiff = after.heading - before.heading;
+      if (headingDiff > Math.PI) headingDiff -= 2 * Math.PI;
+      if (headingDiff < -Math.PI) headingDiff += 2 * Math.PI;
+      
+      interpolatedPoint.heading = before.heading + t * headingDiff;
     }
     
-    // Draw start/finish line.
-    if (trackPoints.length > 5) {
-      let startFinishIndex = -1;
-      for (let i = 1; i < trackPoints.length; i++) {
-        const p1 = trackPoints[i - 1];
-        const p2 = trackPoints[i];
-        if ((p1.lapDistPct > 0.9 && p2.lapDistPct < 0.1) || 
-            (p1.lapDistPct < 0.1 && p2.lapDistPct > 0.9)) {
-          startFinishIndex = i;
-          break;
+    return interpolatedPoint;
+  };
+
+  // Replace PIXI rendering with Canvas rendering
+  const renderCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    
+    const points = trackPointsRef.current;
+    if (points.length < 2) return;
+    
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Calculate bounds to determine scale
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    points.forEach(point => {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    });
+    
+    const padding = 20; // Padding around the track
+    const width = canvas.width - padding * 2;
+    const height = canvas.height - padding * 2;
+    
+    // Calculate the scale to fit the track in the canvas
+    const xScale = width / (maxX - minX);
+    const yScale = height / (maxY - minY);
+    const scale = Math.min(xScale, yScale);
+    
+    // Function to transform track coordinates to canvas coordinates
+    const transformPoint = (point: { x: number, y: number }) => {
+      return {
+        x: padding + (point.x - minX) * scale,
+        y: padding + (point.y - minY) * scale
+      };
+    };
+    
+    // Draw the track outline
+    ctx.beginPath();
+    
+    const firstPoint = transformPoint(points[0]);
+    ctx.moveTo(firstPoint.x, firstPoint.y);
+    
+    for (let i = 1; i < points.length; i++) {
+      const point = transformPoint(points[i]);
+      ctx.lineTo(point.x, point.y);
+    }
+    
+    // Connect back to the start
+    ctx.lineTo(firstPoint.x, firstPoint.y);
+    
+    // Draw the track path
+    ctx.strokeStyle = colorMode === 'dark' ? '#FFFFFF' : '#333333';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Draw the start/finish line
+    if (points.length > 0) {
+      // Find the point with lap distance closest to 0
+      let startPoint = points[0];
+      let nextPoint = points[1];
+      
+      for (let i = 1; i < points.length; i++) {
+        if (points[i].lapDistPct < startPoint.lapDistPct) {
+          startPoint = points[i];
+          nextPoint = points[(i + 1) % points.length];
         }
       }
-      if (startFinishIndex !== -1) {
-        const p1 = trackPoints[startFinishIndex - 1];
-        const p2 = trackPoints[startFinishIndex];
-        const x1 = xScale(p1.x);
-        const y1 = yScale(p1.y);
-        const x2 = xScale(p2.x);
-        const y2 = yScale(p2.y);
-        const mx = (x1 + x2) / 2;
-        const my = (y1 + y2) / 2;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const len = Math.sqrt(dx * dx + dy * dy) || 1;
-        const perpX = -dy / len;
-        const perpY = dx / len;
-        const lineLength = 15;
-        graphics.lineStyle(3, hexToNumber("#ffff00"));
-        graphics.moveTo(mx - perpX * lineLength, my - perpY * lineLength);
-        graphics.lineTo(mx + perpX * lineLength, my + perpY * lineLength);
-        const sfText = new PIXI.Text("S/F", { fontSize: 10, fill: "#ffff00" });
-        sfText.anchor.set(0.5);
-        sfText.x = mx;
-        sfText.y = my - 10;
-        app.stage.addChild(sfText);
+      
+      const start = transformPoint(startPoint);
+      const next = transformPoint(nextPoint);
+      
+      // Calculate perpendicular vector for the start/finish line
+      const dx = next.x - start.x;
+      const dy = next.y - start.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length > 0) {
+        const perpX = -dy / length * 10; // 10px length for start/finish line
+        const perpY = dx / length * 10;
+        
+        // Draw the start/finish line
+        ctx.beginPath();
+        ctx.moveTo(start.x - perpX, start.y - perpY);
+        ctx.lineTo(start.x + perpX, start.y + perpY);
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
       }
     }
     
-    // Draw car.
+    // Draw the current car position if available
     let carPos: TrackPoint | null = null;
     if (mapBuildingState === 'complete' && telemetryData?.lap_dist_pct !== undefined) {
       carPos = findPositionAtLapDistance(telemetryData.lap_dist_pct);
     } else if (currentPositionIndex >= 0 && trackPoints[currentPositionIndex]) {
       carPos = trackPoints[currentPositionIndex];
     }
+    
     if (carPos) {
-      graphics.beginFill(hexToNumber("#fbbf24"));
-      graphics.drawCircle(xScale(carPos.x), yScale(carPos.y), 5);
-      graphics.endFill();
+      const carPosTransformed = transformPoint(carPos);
+      
+      // Draw the car as a circle with a direction indicator
+      ctx.beginPath();
+      ctx.arc(carPosTransformed.x, carPosTransformed.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#00FF00';
+      ctx.fill();
+      
+      // Draw direction indicator if heading is available
       if (carPos.heading !== undefined) {
-        const headingLength = 8;
-        const headingX = xScale(carPos.x) + Math.cos(carPos.heading) * headingLength;
-        const headingY = yScale(carPos.y) + Math.sin(carPos.heading) * headingLength;
-        graphics.lineStyle(2, hexToNumber("#fbbf24"));
-        graphics.moveTo(xScale(carPos.x), yScale(carPos.y));
-        graphics.lineTo(headingX, headingY);
+        const headingX = carPosTransformed.x + Math.cos(carPos.heading) * 10;
+        const headingY = carPosTransformed.y + Math.sin(carPos.heading) * 10;
+        
+        ctx.beginPath();
+        ctx.moveTo(carPosTransformed.x, carPosTransformed.y);
+        ctx.lineTo(headingX, headingY);
+        ctx.strokeStyle = '#00FF00';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
     }
     
-    // Recording indicator.
+    // Draw recording indicator if currently recording
     if (mapBuildingState === 'recording') {
-      graphics.beginFill(hexToNumber("#ef4444"), 0.8);
-      graphics.drawCircle(width - 15, height - 15, 6);
-      graphics.endFill();
+      ctx.beginPath();
+      ctx.arc(canvas.width - 20, 20, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#FF0000';
+      ctx.fill();
     }
-    
-    app.stage.addChild(graphics);
   }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
-  const debouncedRenderPixiMap = useCallback(() => {
+  const debouncedRenderCanvas = useCallback(() => {
     if (!animationFrameId.current) {
       animationFrameId.current = requestAnimationFrame(() => {
-        renderPixiMap();
+        renderCanvas();
         animationFrameId.current = null;
       });
     }
-  }, [renderPixiMap]);
+  }, [renderCanvas]);
 
   useEffect(() => {
-    debouncedRenderPixiMap();
+    debouncedRenderCanvas();
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
         animationFrameId.current = null;
       }
     };
-  }, [debouncedRenderPixiMap]);
+  }, [debouncedRenderCanvas]);
 
   useEffect(() => {
     if (trackPoints.length === 0 || currentPosition.lapDistPct === undefined || mapBuildingState !== 'recording') {
@@ -558,12 +588,16 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   const getTrackSurfaceName = (surface: number): string => {
     switch (surface) {
-      case TrackSurface.OnTrack: return "On Track";
-      case TrackSurface.OffTrack: return "Off Track";
-      case TrackSurface.PitLane: return "Pit Lane";
-      case TrackSurface.PitStall: return "Pit Stall";
-      case TrackSurface.NotInWorld: return "Not In World";
-      default: return `Unknown (${surface})`;
+      case TrackSurface.OnTrack:
+        return 'On Track';
+      case TrackSurface.OffTrack:
+        return 'Off Track';
+      case TrackSurface.ArtificialGrass:
+        return 'Artificial Grass';
+      case TrackSurface.Gravel:
+        return 'Gravel';
+      default:
+        return 'Unknown';
     }
   };
 
@@ -604,8 +638,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
       trackPointsRef.current = [];
       lastPositionRef.current = null;
-      if (pixiContainerRef.current && pixiAppRef.current) {
-        pixiAppRef.current.stage.removeChildren();
+      if (canvasRef.current) {
+        canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
       const styleElement = document.getElementById('track-map-pulse-animation');
       if (styleElement) {
@@ -652,7 +686,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
             </div>
           </div>
         ) : (
-          <div ref={pixiContainerRef} className="w-full h-full rounded" />
+          <div className="w-full h-full rounded">
+            <canvas ref={canvasRef} className="w-full h-full rounded" />
+          </div>
         )}
       </div>
     </Widget>
@@ -704,3 +740,4 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
 const TrackMapWidget = withControls(TrackMapWidgetComponent, getTrackMapControls);
 
 export default TrackMapWidget;
+
