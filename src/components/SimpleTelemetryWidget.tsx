@@ -60,7 +60,7 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   const renderContent = () => {
     if (!data) {
       return (
-        <div className="telemetry-content">
+        <div className="flex flex-col items-center justify-center h-full w-full p-4">
           <div className="text-sm font-medium mb-1">{getMetricName(metric)}</div>
           <div className="text-sm text-gray-400">Waiting for data...</div>
         </div>
@@ -68,11 +68,11 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
     }
     
     return (
-      <div className="telemetry-content">
-        <div className="telemetry-label">
+      <div className="flex flex-col items-center justify-center h-full w-full p-4">
+        <div className="text-sm font-medium text-slate-300 mb-2">
           {getMetricName(metric)}
         </div>
-        <div className="telemetry-value">
+        <div className="text-2xl font-bold">
           {formatTelemetryValue(metric, data[metric])}
         </div>
       </div>
@@ -85,9 +85,9 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       title={name}
       initialPosition={initialPosition}
       onClose={() => handleClose()}
-      className="telemetry-widget-wrapper"
+      className="w-full h-full"
     >
-      <div className="telemetry-widget">
+      <div className="w-full h-full min-h-[100px] min-w-[120px] flex items-center justify-center">
         {renderContent()}
       </div>
     </Widget>
