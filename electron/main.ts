@@ -14,6 +14,9 @@ process.env.VITE_PUBLIC = app.isPackaged
 // Store references to all windows
 const windows: BrowserWindow[] = [];
 
+// Map to track which window belongs to which display
+const displayWindowMap = new Map<number, BrowserWindow>();
+
 // Create a variable to hold the interval ID
 let stayOnTopInterval: NodeJS.Timeout | null = null;
 
@@ -99,9 +102,18 @@ function createWindows() {
     // Store the window reference
     windows.push(win);
     
+    // Map this window to its display ID
+    displayWindowMap.set(display.id, win);
+    
+    // Store the display ID in the window's metadata for reference
+    (win as any).displayId = display.id;
+    
     // Log when window is ready
     win.webContents.on('did-finish-load', () => {
       console.log(`Window for display ${display.id} is ready`);
+      
+      // Send display ID to the renderer process
+      win.webContents.send('display:id', display.id);
       
       // For macOS, make sure we're the right size after loading
       if (process.platform === 'darwin') {
@@ -123,6 +135,41 @@ function createWindows() {
       win.webContents.openDevTools({ mode: 'detach' });
     }
   }
+}
+
+// Function to close a specific window by display ID
+function closeWindowForDisplay(displayId: number): boolean {
+  console.log(`Attempting to close window for display ID: ${displayId}`);
+  
+  // Get the window for this display
+  const win = displayWindowMap.get(displayId);
+  
+  if (!win) {
+    console.log(`No window found for display ID: ${displayId}`);
+    return false;
+  }
+  
+  try {
+    if (!win.isDestroyed()) {
+      console.log(`Closing window for display ID: ${displayId}`);
+      win.removeAllListeners();
+      win.setClosable(true);
+      win.close();
+      
+      // Remove from our tracking maps
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      
+      return true;
+    }
+  } catch (error) {
+    console.error(`Error closing window for display ID: ${displayId}`, error);
+  }
+  
+  return false;
 }
 
 // Setup basic IPC listeners
@@ -233,6 +280,66 @@ function setupIpcListeners() {
       return errorResponse;
     }
   });
+  
+  // New handler to close a specific window by display ID
+  ipcMain.handle('app:closeWindowForDisplay', (event, displayId) => {
+    console.log(`Received request to close window for display ID: ${displayId}`);
+    
+    // Get the display ID of the window making the request if no ID was provided
+    if (displayId === undefined) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        displayId = (win as any).displayId;
+      }
+    }
+    
+    if (displayId === undefined) {
+      return { success: false, error: 'No display ID provided or found' };
+    }
+    
+    const success = closeWindowForDisplay(displayId);
+    return { success };
+  });
+  
+  // New handler to get all displays
+  ipcMain.handle('app:getDisplays', () => {
+    try {
+      const displays = screen.getAllDisplays();
+      const primaryDisplay = screen.getPrimaryDisplay();
+      
+      // Create a simplified display info object
+      const displayInfo = displays.map(display => ({
+        id: display.id,
+        bounds: display.bounds,
+        workArea: display.workArea,
+        isPrimary: display.id === primaryDisplay.id,
+        scaleFactor: display.scaleFactor,
+        rotation: display.rotation,
+        size: display.size,
+        label: display.label || `Display ${display.id}`
+      }));
+      
+      return { success: true, displays: displayInfo };
+    } catch (error) {
+      console.error('Error getting displays:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+  
+  // New handler to get current window's display ID
+  ipcMain.handle('app:getCurrentDisplayId', (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        const displayId = (win as any).displayId;
+        return { success: true, displayId };
+      }
+      return { success: false, error: 'No window found for web contents' };
+    } catch (error) {
+      console.error('Error getting current display ID:', error);
+      return { success: false, error: String(error) };
+    }
+  });
 }
 
 // Clean up when all windows are closed
@@ -265,6 +372,9 @@ app.on('before-quit', () => {
   ipcMain.removeHandler('app:quit');
   ipcMain.removeHandler('app:toggleAutoNewWindows');
   ipcMain.removeHandler('app:toggleClickThrough');
+  ipcMain.removeHandler('app:closeWindowForDisplay');
+  ipcMain.removeHandler('app:getDisplays');
+  ipcMain.removeHandler('app:getCurrentDisplayId');
   
   // Close windows gracefully
   for (const win of windows) {
@@ -386,13 +496,21 @@ app.whenReady().then(() => {
     // Store the window reference
     windows.push(win);
     
+    // Map this window to its display ID
+    displayWindowMap.set(display.id, win);
+    
+    // Store the display ID in the window's metadata for reference
+    (win as any).displayId = display.id;
+    
     console.log(`Created new window for display ${display.id}`);
   });
 
   screen.on('display-removed', (event, display) => {
     console.log('Display removed:', display);
-    // Optional: You could close windows associated with this display
-    // For now, we'll leave them open as the user might want to reposition widgets
+    
+    // Close the window associated with this display
+    const result = closeWindowForDisplay(display.id);
+    console.log(`Window for removed display ${display.id} was ${result ? 'closed' : 'not found or could not be closed'}`);
   });
   
   // Log display information for debugging

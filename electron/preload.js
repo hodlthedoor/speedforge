@@ -16,9 +16,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Allowed channels that can be invoked from renderer to main process
     const validInvokeChannels = [
       'app:quit',
+      'app:toggleClickThrough',
+      'app:toggleAutoNewWindows',
+      'app:closeWindowForDisplay',
+      'app:getDisplays',
+      'app:getCurrentDisplayId',
       'telemetry:getData',
       'telemetry:getConnectionStatus',
       'widget:registerForUpdates',
+      'widget:create',
+      'widget:close',
+      'widget:getAll',
+      'widget:setPosition',
+      'widget:setSize',
+      'widget:setAlwaysOnTop',
+      'widget:setOpacity',
+      'widget:setVisible',
+      'widget:updateParams',
     ];
     if (validInvokeChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
@@ -29,6 +43,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Allowed channels that can be received from main process to renderer
     const validReceiveChannels = [
       'main-process-message',
+      'app:toggle-click-through',
+      'display:id',
       'telemetry:update',
       'telemetry:connectionChange',
       'telemetry:connectionStatus',
@@ -61,6 +77,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (validClearChannels.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }
+  },
+  // Application control API
+  app: {
+    quit: () => ipcRenderer.invoke('app:quit'),
+    toggleClickThrough: (state) => ipcRenderer.invoke('app:toggleClickThrough', state),
+    toggleAutoNewWindows: (state) => ipcRenderer.invoke('app:toggleAutoNewWindows', state),
+    closeWindowForDisplay: (displayId) => ipcRenderer.invoke('app:closeWindowForDisplay', displayId),
+    getDisplays: () => ipcRenderer.invoke('app:getDisplays'),
+    getCurrentDisplayId: () => ipcRenderer.invoke('app:getCurrentDisplayId'),
   },
   // Widget management API
   widgets: {

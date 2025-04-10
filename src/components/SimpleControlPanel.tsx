@@ -45,6 +45,8 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [wsConnected, setWsConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [autoNewWindowsForDisplays, setAutoNewWindowsForDisplays] = useState(true);
+  const [displays, setDisplays] = useState<any[]>([]);
+  const [currentDisplayId, setCurrentDisplayId] = useState<number | null>(null);
   
   // Function to close a widget - defined early to avoid reference errors
   const closeWidget = useCallback((id: string) => {
@@ -420,6 +422,142 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   };
 
+  // Fetch displays information
+  const fetchDisplays = useCallback(() => {
+    if (window.electronAPI) {
+      const api = window.electronAPI.app as any;
+      if (api && typeof api.getDisplays === 'function') {
+        api.getDisplays()
+          .then((response: any) => {
+            if (response.success && response.displays) {
+              setDisplays(response.displays);
+            }
+          })
+          .catch((error: any) => {
+            console.error('Error getting displays:', error);
+          });
+      }
+    }
+  }, []);
+  
+  // Get display information when component mounts
+  useEffect(() => {
+    fetchDisplays();
+  }, [fetchDisplays]);
+  
+  // Listen for display ID from main process
+  useEffect(() => {
+    // Check if we already have a stored display ID
+    if ((window as any).electronDisplayId) {
+      setCurrentDisplayId((window as any).electronDisplayId);
+      return;
+    }
+    
+    if (window.electronAPI) {
+      // Get current display ID
+      const api = window.electronAPI.app as any;
+      if (api && typeof api.getCurrentDisplayId === 'function') {
+        api.getCurrentDisplayId()
+          .then((response: any) => {
+            if (response.success && response.displayId) {
+              console.log(`Current display ID: ${response.displayId}`);
+              setCurrentDisplayId(response.displayId);
+              (window as any).electronDisplayId = response.displayId;
+            }
+          })
+          .catch((error: any) => {
+            console.error('Error getting current display ID:', error);
+          });
+      }
+      
+      // Listen for display ID messages
+      if (window.electronAPI.on) {
+        const removeListener = window.electronAPI.on('display:id', (displayId: number) => {
+          console.log(`Received display ID from main process: ${displayId}`);
+          setCurrentDisplayId(displayId);
+          (window as any).electronDisplayId = displayId;
+        });
+        
+        return () => {
+          if (removeListener) removeListener();
+        };
+      }
+    }
+  }, []);
+  
+  // Function to close a specific display window
+  const closeDisplayWindow = (displayId: number) => {
+    if (window.electronAPI) {
+      const api = window.electronAPI.app as any;
+      if (api && typeof api.closeWindowForDisplay === 'function') {
+        console.log(`Closing window for display ID: ${displayId}`);
+        
+        // If this is our own display, close widgets first
+        if (currentDisplayId === displayId) {
+          console.log('Closing our own window - cleaning up widgets first');
+          // Close all active widgets first
+          if (Array.isArray(activeWidgets)) {
+            activeWidgets.forEach(widget => {
+              if (widget.enabled) {
+                console.log(`Closing widget ${widget.id}`);
+                closeWidget(widget.id);
+              }
+            });
+          }
+        }
+        
+        // Close the window
+        api.closeWindowForDisplay(displayId)
+          .then((response: any) => {
+            console.log('Close window response:', response);
+            // Update displays list after closing
+            if (api.getDisplays) {
+              api.getDisplays().then((res: any) => {
+                if (res.success && res.displays) {
+                  setDisplays(res.displays);
+                }
+              });
+            }
+          })
+          .catch((error: any) => {
+            console.error('Error closing window:', error);
+          });
+      }
+    }
+  };
+
+  // Function to close all widgets and then close the window
+  const closeWindowAndWidgets = () => {
+    console.log('Closing all widgets and current window');
+    
+    // Close all active widgets first
+    if (Array.isArray(activeWidgets)) {
+      activeWidgets.forEach(widget => {
+        if (widget.enabled) {
+          console.log(`Closing widget ${widget.id}`);
+          closeWidget(widget.id);
+        }
+      });
+    }
+    
+    // Then close the window using Electron API
+    if (window.electronAPI) {
+      const api = window.electronAPI.app as any;
+      if (api && typeof api.closeWindowForDisplay === 'function') {
+        console.log('Closing current window');
+        api.closeWindowForDisplay()
+          .then((response: any) => {
+            console.log('Close window response:', response);
+          })
+          .catch((error: any) => {
+            console.error('Error closing window:', error);
+          });
+      } else {
+        console.error('closeWindowForDisplay function not available');
+      }
+    }
+  };
+
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
@@ -478,7 +616,37 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               </button>
               
               <button 
-                className="btn btn-error"
+                className="btn btn-warning"
+                onClick={closeWindowAndWidgets}
+              >
+                Close This Window
+              </button>
+              
+              {/* Display management section */}
+              {displays.length > 1 && (
+                <div className="mt-2 border-t border-gray-700 pt-2">
+                  <h3 className="text-sm font-semibold mb-2">Display Management</h3>
+                  <div className="flex flex-col gap-1">
+                    {displays.map(display => (
+                      <div key={display.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                        <span className="text-sm">
+                          {display.isPrimary ? '🖥️ Primary: ' : '🖥️ '} 
+                          {display.label || `Display ${display.id}`}
+                        </span>
+                        <button 
+                          className="btn btn-xs btn-error"
+                          onClick={() => closeDisplayWindow(display.id)}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <button 
+                className="btn btn-error mt-2"
                 onClick={quitApplication}
               >
                 Quit Application
