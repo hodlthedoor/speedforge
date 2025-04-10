@@ -105,6 +105,39 @@ export class WebSocketService {
   }
 
   /**
+   * Force a reconnection to the WebSocket server
+   * Can be called manually to reconnect after an error
+   */
+  public reconnect(): void {
+    console.log('WebSocketService: Manual reconnection requested');
+    
+    // Skip if in widget window mode
+    if (this.isWidgetWindow) {
+      console.log('WebSocketService: Not reconnecting in widget window mode');
+      return;
+    }
+    
+    // Close existing connection if any
+    if (this.ws) {
+      console.log('WebSocketService: Closing existing connection');
+      this.ws.close();
+      this.ws = null;
+    }
+    
+    // Clear any pending reconnect timer
+    if (this.reconnectTimer) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    // Connect immediately
+    console.log('WebSocketService: Starting new connection');
+    this.connect();
+    
+    return;
+  }
+
+  /**
    * Register a listener for data updates
    * @param id Unique ID for the listener (typically widget ID)
    * @param callback Function to call when data is received

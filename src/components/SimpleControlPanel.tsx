@@ -7,6 +7,7 @@ import PedalTraceWidget from './PedalTraceWidget';
 import ShiftIndicatorWidget from './ShiftIndicatorWidget';
 import TrackMapWidget from './TrackMapWidget';
 import WidgetRegistry from '../widgets/WidgetRegistry';
+import { WebSocketService } from '../services/WebSocketService';
 
 interface WidgetData {
   id: string;
@@ -41,6 +42,8 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
   const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
   const [trackMapWidgetStates, setTrackMapWidgetStates] = useState<Record<string, TrackMapWidgetState>>({});
+  const [wsConnected, setWsConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   
   // Function to close a widget - defined early to avoid reference errors
   const closeWidget = useCallback((id: string) => {
@@ -70,6 +73,45 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       setSelectedWidget(null);
     }
   }, [onAddWidget, selectedWidget, activeWidgets]);
+
+  // WebSocket connection status and reconnect functionality
+  useEffect(() => {
+    const webSocketService = WebSocketService.getInstance();
+    const controlPanelId = 'control-panel-' + Math.random().toString(36).substring(2, 10);
+    
+    webSocketService.addConnectionListener(controlPanelId, (connected) => {
+      console.log(`Control panel received connection status: ${connected}`);
+      setWsConnected(connected);
+      if (connected) {
+        setReconnecting(false);
+      }
+    });
+    
+    // Clean up when component unmounts
+    return () => {
+      webSocketService.removeListeners(controlPanelId);
+    };
+  }, []);
+  
+  // Function to manually reconnect
+  const handleReconnect = () => {
+    setReconnecting(true);
+    const webSocketService = WebSocketService.getInstance();
+    if (webSocketService.reconnect) {
+      console.log('Triggering manual WebSocket reconnect');
+      webSocketService.reconnect();
+      
+      // Reset reconnecting state after a timeout if still not connected
+      setTimeout(() => {
+        if (!wsConnected) {
+          setReconnecting(false);
+        }
+      }, 5000);
+    } else {
+      console.warn('WebSocketService.reconnect() method not found');
+      setReconnecting(false);
+    }
+  };
   
   // Handle track map widget state changes - defined early
   const handleTrackMapStateChange = useCallback((widgetId: string, state: TrackMapWidgetState) => {
@@ -342,6 +384,23 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         <h2>Control Panel</h2>
       </div>
       <div className="panel-content w-full px-4 py-3">
+        {/* WebSocket Status and Reconnect Button */}
+        <div className="flex items-center mb-3 p-2 border border-gray-700 rounded bg-gray-900/50">
+          <div className="flex items-center mr-2">
+            <div className={`w-3 h-3 rounded-full mr-2 ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className="text-sm font-medium">
+              {wsConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          <button 
+            className={`btn btn-sm ml-auto ${reconnecting ? 'btn-disabled' : wsConnected ? 'btn-success' : 'btn-warning'}`}
+            onClick={handleReconnect}
+            disabled={reconnecting}
+          >
+            {reconnecting ? 'Reconnecting...' : 'Reconnect'}
+          </button>
+        </div>
+        
         <div className="control-buttons flex flex-col gap-2 w-full">
           <button 
             className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
