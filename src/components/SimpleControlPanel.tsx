@@ -8,6 +8,7 @@ import ShiftIndicatorWidget from './ShiftIndicatorWidget';
 import TrackMapWidget from './TrackMapWidget';
 import WidgetRegistry from '../widgets/WidgetRegistry';
 import { WebSocketService } from '../services/WebSocketService';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface WidgetData {
   id: string;
@@ -42,12 +43,18 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
   const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
   const [trackMapWidgetStates, setTrackMapWidgetStates] = useState<Record<string, TrackMapWidgetState>>({});
-  const [wsConnected, setWsConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [autoNewWindowsForDisplays, setAutoNewWindowsForDisplays] = useState(true);
   const [displays, setDisplays] = useState<any[]>([]);
   const [currentDisplayId, setCurrentDisplayId] = useState<number | null>(null);
   
+  // Use telemetry hook to get connection status
+  const { data, isConnected } = useTelemetryData('control-panel', {
+    metrics: ['PlayerTrackSurface'],
+    throttleUpdates: true,
+    updateInterval: 1000
+  });
+
   // Function to close a widget - defined early to avoid reference errors
   const closeWidget = useCallback((id: string) => {
     console.log(`Closing widget ${id}`);
@@ -77,49 +84,21 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   }, [onAddWidget, selectedWidget, activeWidgets]);
 
-  // WebSocket connection status and reconnect functionality
+  // Close widgets when connection is lost
   useEffect(() => {
-    const webSocketService = WebSocketService.getInstance();
-    const controlPanelId = 'control-panel-' + Math.random().toString(36).substring(2, 10);
-    let firstConnection = true;
-    let wasConnected = false;
-    
-    webSocketService.addConnectionListener(controlPanelId, (connected) => {
-      console.log(`Control panel received connection status: ${connected}`);
-      
-      // Skip the first disconnected event that happens before first connection
-      if (!connected && firstConnection) {
-        firstConnection = false;
-        return;
+    // Only close widgets if we were previously connected and now disconnected
+    if (!isConnected) {
+      // Close all active widgets
+      if (Array.isArray(activeWidgets)) {
+        activeWidgets.forEach(widget => {
+          if (widget.enabled) {
+            console.log(`Monitor disconnected, removing widget ${widget.id}`);
+            closeWidget(widget.id);
+          }
+        });
       }
-      
-      setWsConnected(connected);
-      
-      if (connected) {
-        wasConnected = true;
-        setReconnecting(false);
-      } else if (wasConnected) {
-        // Only close widgets if we were previously connected
-        // This means the monitor has actually closed, not just that we couldn't connect initially
-        console.log('Monitor disconnected - closing all widgets');
-        
-        // Close all active widgets
-        if (Array.isArray(activeWidgets)) {
-          activeWidgets.forEach(widget => {
-            if (widget.enabled) {
-              console.log(`Monitor disconnected, removing widget ${widget.id}`);
-              closeWidget(widget.id);
-            }
-          });
-        }
-      }
-    });
-    
-    // Clean up when component unmounts
-    return () => {
-      webSocketService.removeListeners(controlPanelId);
-    };
-  }, [activeWidgets, closeWidget]);
+    }
+  }, [isConnected, activeWidgets, closeWidget]);
   
   // Function to manually reconnect
   const handleReconnect = () => {
@@ -131,7 +110,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       
       // Reset reconnecting state after a timeout if still not connected
       setTimeout(() => {
-        if (!wsConnected) {
+        if (!isConnected) {
           setReconnecting(false);
         }
       }, 5000);
@@ -569,8 +548,8 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         
         <div className="flex items-center gap-2">
           <div 
-            className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}
-            title={`WebSocket ${wsConnected ? 'Connected' : 'Disconnected'}`}
+            className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+            title={`Game ${isConnected ? 'Connected' : 'Disconnected'}`}
           ></div>
           
           <button 

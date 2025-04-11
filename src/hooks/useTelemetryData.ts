@@ -91,7 +91,7 @@ interface UseTelemetryDataOptions {
 export function useTelemetryData(
   id: string,
   options: UseTelemetryDataOptions = {}
-): { data: TelemetryData | null; connected: boolean } {
+): { data: TelemetryData | null; isConnected: boolean } {
   const [data, setData] = useState<TelemetryData | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
   const { metrics, throttleUpdates = false, updateInterval = 100 } = options;
@@ -130,6 +130,11 @@ export function useTelemetryData(
       if (!throttleUpdates) {
         setData(newData);
       }
+    }
+    
+    // Update connected status based on PlayerTrackSurface
+    if (isMountedRef.current && newData.PlayerTrackSurface !== undefined) {
+      setConnected(true);
     }
   }, [throttleUpdates]);
 
@@ -195,7 +200,10 @@ export function useTelemetryData(
     };
   }, [throttleUpdates, updateInterval, setupThrottledUpdates]);
 
-  return { data, connected };
+  // Calculate connection status based on PlayerTrackSurface
+  const isConnected = data !== null && data.PlayerTrackSurface !== undefined;
+
+  return { data, isConnected };
 }
 
 /**
