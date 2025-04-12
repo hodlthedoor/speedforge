@@ -152,11 +152,38 @@ function closeWindowForDisplay(displayId: number): boolean {
   try {
     if (!win.isDestroyed()) {
       console.log(`Closing window for display ID: ${displayId}`);
+      
+      // Remove all listeners to prevent memory leaks
       win.removeAllListeners();
+      
+      // Ensure the window can be closed
       win.setClosable(true);
+      
+      // Hide the window immediately
+      win.hide();
+      
+      // Set to null to help garbage collection
+      win.webContents.setDevToolsWebContents(null);
+      
+      // Force close the window
       win.close();
       
+      // Explicitly destroy the window
+      win.destroy();
+      
       // Remove from our tracking maps
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      
+      console.log(`Successfully closed and destroyed window for display ID: ${displayId}`);
+      return true;
+    } else {
+      console.log(`Window for display ID: ${displayId} was already destroyed`);
+      
+      // Clean up tracking even if window was already destroyed
       displayWindowMap.delete(displayId);
       const windowIndex = windows.indexOf(win);
       if (windowIndex >= 0) {
@@ -167,6 +194,13 @@ function closeWindowForDisplay(displayId: number): boolean {
     }
   } catch (error) {
     console.error(`Error closing window for display ID: ${displayId}`, error);
+    
+    // Try to clean up tracking even if there was an error
+    displayWindowMap.delete(displayId);
+    const windowIndex = windows.indexOf(win);
+    if (windowIndex >= 0) {
+      windows.splice(windowIndex, 1);
+    }
   }
   
   return false;
@@ -508,9 +542,37 @@ app.whenReady().then(() => {
   screen.on('display-removed', (event, display) => {
     console.log('Display removed:', display);
     
+    // Get window before attempting to close it
+    const win = displayWindowMap.get(display.id);
+    
     // Close the window associated with this display
     const result = closeWindowForDisplay(display.id);
     console.log(`Window for removed display ${display.id} was ${result ? 'closed' : 'not found or could not be closed'}`);
+    
+    // Force additional cleanup if the window was found but not properly closed
+    if (!result && win && !win.isDestroyed()) {
+      console.log(`Forcing additional cleanup for display ${display.id}`);
+      try {
+        win.removeAllListeners();
+        win.hide();
+        win.destroy();
+        
+        // Clean up tracking maps
+        displayWindowMap.delete(display.id);
+        const windowIndex = windows.indexOf(win);
+        if (windowIndex >= 0) {
+          windows.splice(windowIndex, 1);
+        }
+      } catch (cleanupError) {
+        console.error(`Error during forced cleanup for display ${display.id}:`, cleanupError);
+      }
+    }
+    
+    // Verify cleanup was successful
+    if (displayWindowMap.has(display.id)) {
+      console.warn(`Window for display ${display.id} is still in displayWindowMap after cleanup attempt`);
+      displayWindowMap.delete(display.id);
+    }
   });
   
   // Log display information for debugging

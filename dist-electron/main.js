@@ -99,7 +99,19 @@ function closeWindowForDisplay(displayId) {
       console.log(`Closing window for display ID: ${displayId}`);
       win.removeAllListeners();
       win.setClosable(true);
+      win.hide();
+      win.webContents.setDevToolsWebContents(null);
       win.close();
+      win.destroy();
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      console.log(`Successfully closed and destroyed window for display ID: ${displayId}`);
+      return true;
+    } else {
+      console.log(`Window for display ID: ${displayId} was already destroyed`);
       displayWindowMap.delete(displayId);
       const windowIndex = windows.indexOf(win);
       if (windowIndex >= 0) {
@@ -109,6 +121,11 @@ function closeWindowForDisplay(displayId) {
     }
   } catch (error) {
     console.error(`Error closing window for display ID: ${displayId}`, error);
+    displayWindowMap.delete(displayId);
+    const windowIndex = windows.indexOf(win);
+    if (windowIndex >= 0) {
+      windows.splice(windowIndex, 1);
+    }
   }
   return false;
 }
@@ -344,8 +361,28 @@ app.whenReady().then(() => {
   });
   screen.on("display-removed", (event, display) => {
     console.log("Display removed:", display);
+    const win = displayWindowMap.get(display.id);
     const result = closeWindowForDisplay(display.id);
     console.log(`Window for removed display ${display.id} was ${result ? "closed" : "not found or could not be closed"}`);
+    if (!result && win && !win.isDestroyed()) {
+      console.log(`Forcing additional cleanup for display ${display.id}`);
+      try {
+        win.removeAllListeners();
+        win.hide();
+        win.destroy();
+        displayWindowMap.delete(display.id);
+        const windowIndex = windows.indexOf(win);
+        if (windowIndex >= 0) {
+          windows.splice(windowIndex, 1);
+        }
+      } catch (cleanupError) {
+        console.error(`Error during forced cleanup for display ${display.id}:`, cleanupError);
+      }
+    }
+    if (displayWindowMap.has(display.id)) {
+      console.warn(`Window for display ${display.id} is still in displayWindowMap after cleanup attempt`);
+      displayWindowMap.delete(display.id);
+    }
   });
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();

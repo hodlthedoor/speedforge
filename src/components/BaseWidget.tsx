@@ -19,6 +19,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentOpacity, setCurrentOpacity] = useState(1);
+  const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -34,11 +35,35 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
       }
     };
 
+    const handleBackgroundTransparency = (e: CustomEvent) => {
+      if (e.detail.widgetId === id) {
+        setIsBackgroundTransparent(e.detail.transparent);
+      }
+    };
+
+    // Check URL parameters on load
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const widgetId = urlParams.get('widgetId');
+      
+      // If this component's ID matches the URL widgetId, check for transparency parameter
+      if (widgetId === id) {
+        const backgroundTransparent = urlParams.get('backgroundTransparent');
+        if (backgroundTransparent === 'true') {
+          setIsBackgroundTransparent(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing URL parameters:', error);
+    }
+
     window.addEventListener('widget:opacity', handleOpacityChange as EventListener);
+    window.addEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
 
     return () => {
       webSocketService.removeListeners(id);
       window.removeEventListener('widget:opacity', handleOpacityChange as EventListener);
+      window.removeEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
     };
   }, [id]);
 
@@ -50,7 +75,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
 
   return (
     <div 
-      className={`drag-handle w-auto max-w-[500px] bg-slate-800/80 rounded-lg shadow-lg backdrop-blur-md overflow-hidden m-0 border border-slate-600/30 ${className}`}
+      className={`drag-handle w-auto max-w-[500px] ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} rounded-lg shadow-lg ${isBackgroundTransparent ? '' : 'backdrop-blur-md'} overflow-hidden m-0 border border-slate-600/30 ${className}`}
       style={{ opacity: currentOpacity }}
       onClick={handleWidgetClick}
     >

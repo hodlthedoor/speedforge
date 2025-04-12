@@ -42,6 +42,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const [showTelemetryOptions, setShowTelemetryOptions] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
   const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
+  const [widgetBackgroundTransparent, setWidgetBackgroundTransparent] = useState<Record<string, boolean>>({});
   const [trackMapWidgetStates, setTrackMapWidgetStates] = useState<Record<string, TrackMapWidgetState>>({});
   const [reconnecting, setReconnecting] = useState(false);
   const [autoNewWindowsForDisplays, setAutoNewWindowsForDisplays] = useState(true);
@@ -326,6 +327,38 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     window.dispatchEvent(event);
   };
 
+  const handleBackgroundTransparencyToggle = (widgetId: string) => {
+    const newValue = !(widgetBackgroundTransparent[widgetId] || false);
+    
+    setWidgetBackgroundTransparent(prev => ({
+      ...prev,
+      [widgetId]: newValue
+    }));
+    
+    // Dispatch event to update widget background transparency
+    const event = new CustomEvent('widget:background-transparent', { 
+      detail: { widgetId, transparent: newValue }
+    });
+    window.dispatchEvent(event);
+    
+    // If running in Electron, set the widget background transparency via API
+    if (window.electronAPI) {
+      try {
+        console.log(`Requesting Electron to set background transparency for widget ${widgetId} to ${newValue}`);
+        // Use type assertion to access the widgets API
+        const widgetsAPI = window.electronAPI as unknown as { widgets: { updateParams: (id: string, params: any) => Promise<any> } };
+        if (widgetsAPI.widgets && widgetsAPI.widgets.updateParams) {
+          widgetsAPI.widgets.updateParams(widgetId, { backgroundTransparent: newValue })
+            .catch((error: any) => {
+              console.error('Error setting widget background transparency:', error);
+            });
+        }
+      } catch (error) {
+        console.error('Error accessing widget API:', error);
+      }
+    }
+  };
+
   // Get controls for selected widget
   const getWidgetControls = useCallback((widget: any) => {
     if (!widget || !widget.type) return [];
@@ -355,7 +388,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         return (
           <button 
             key={control.id}
-            className="btn btn-sm btn-primary"
+            className="btn btn-sm btn-primary transition-all hover:shadow-sm"
             onClick={() => control.onChange(control.value)}
           >
             {control.label}
@@ -370,7 +403,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               {control.options.map((option: any) => (
                 <button 
                   key={option.value}
-                  className={`btn btn-xs ${control.value === option.value ? 'btn-info' : 'btn-outline'}`}
+                  className={`btn btn-xs ${control.value === option.value ? 'btn-info hover:bg-blue-600' : 'btn-outline hover:bg-gray-700'} transition-all`}
                   onClick={() => control.onChange(option.value)}
                 >
                   {option.label}
@@ -554,14 +587,14 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       <div className="panel-content w-full px-4 py-3">
         <div className="control-buttons flex flex-col gap-2 w-full">
           <button 
-            className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'}`}
+            className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
             onClick={toggleClickThrough}
           >
             {clickThrough ? 'Show Panel' : 'Hide Panel'}
           </button>
           
           <button 
-            className="btn btn-primary"
+            className="btn btn-primary transition-all hover:shadow-md"
             onClick={toggleTelemetryOptions}
           >
             {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
@@ -570,18 +603,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
           {window.electronAPI && (
             <>
               <button 
-                className={`btn ${autoNewWindowsForDisplays ? 'btn-success' : 'btn-secondary'}`}
-                onClick={toggleAutoNewWindows}
-              >
-                {autoNewWindowsForDisplays 
-                  ? 'Auto-Create Windows for New Displays: ON' 
-                  : 'Auto-Create Windows for New Displays: OFF'}
-              </button>
-              
-              <button 
-                className="btn btn-error mt-2"
+                className="btn btn-error mt-4 flex items-center justify-center gap-2 transition-all hover:shadow-md hover:bg-red-700"
                 onClick={quitApplication}
               >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
                 Quit Application
               </button>
               
@@ -597,7 +624,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                           {display.label || `Display ${display.id}`}
                         </span>
                         <button 
-                          className="btn btn-xs btn-error"
+                          className="btn btn-xs btn-error transition-all hover:bg-red-700"
                           onClick={() => closeDisplayWindow(display.id)}
                         >
                           Close
@@ -667,7 +694,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               <div className="widget-details-header">
                 <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
                 <button 
-                  className="widget-close-btn" 
+                  className="widget-close-btn hover:text-red-400 transition-colors" 
                   onClick={() => closeWidget(selectedWidget.id)}
                   title="Close Widget"
                 >
@@ -714,6 +741,24 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
                     className="w-full"
                   />
+                </div>
+              </div>
+              
+              <div className="widget-detail">
+                <span className="detail-label">Background:</span>
+                <div className="pl-2">
+                  <button
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                      widgetBackgroundTransparent[selectedWidget.id] 
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600'
+                    }`}
+                    onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                  >
+                    {widgetBackgroundTransparent[selectedWidget.id] 
+                      ? '✓ Transparent' 
+                      : 'Make Transparent'}
+                  </button>
                 </div>
               </div>
             </div>
