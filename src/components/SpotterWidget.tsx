@@ -63,9 +63,11 @@ import WidgetManager from '../services/WidgetManager';
 declare global {
   interface Window {
     electronSpeech?: {
-      speak: (text: string, voice: string, rate: number, volume: number) => Promise<any>;
+      speak: (text: string, voice: string, rate: number, volume: number) => Promise<{id: number, success: boolean, error?: string}>;
       stop: () => Promise<any>;
       getVoices: () => Promise<string[]>;
+      onSpeechComplete: (callback: (data: {id: number}) => void) => () => void;
+      onSpeechError: (callback: (data: {id: number, error: string}) => void) => () => void;
     };
     electronAPI?: {
       app: {
@@ -198,14 +200,74 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
     // Initial voice loading
     loadVoices();
     
+    // Setup speech event listeners
+    let speechCompleteUnsubscribe: (() => void) | null = null;
+    let speechErrorUnsubscribe: (() => void) | null = null;
+    
+    if (window.electronSpeech) {
+      // Listen for speech completion events
+      speechCompleteUnsubscribe = window.electronSpeech.onSpeechComplete((data) => {
+        console.log(`Speech complete event received for id: ${data.id}`);
+        
+        // Clear any timeout for this speech ID
+        if ((window as any).__speakingTimeouts && (window as any).__speakingTimeouts[data.id]) {
+          clearTimeout((window as any).__speakingTimeouts[data.id]);
+          delete (window as any).__speakingTimeouts[data.id];
+        }
+        
+        // Set speaking state to false if we're still mounted
+        if (isMounted.current) {
+          setState(prev => ({ ...prev, speaking: false }));
+        }
+      });
+      
+      // Listen for speech error events
+      speechErrorUnsubscribe = window.electronSpeech.onSpeechError((data) => {
+        console.error(`Speech error event received for id: ${data.id}:`, data.error);
+        
+        // Clear any timeout for this speech ID
+        if ((window as any).__speakingTimeouts && (window as any).__speakingTimeouts[data.id]) {
+          clearTimeout((window as any).__speakingTimeouts[data.id]);
+          delete (window as any).__speakingTimeouts[data.id];
+        }
+        
+        // Set speaking state to false if we're still mounted
+        if (isMounted.current) {
+          setState(prev => ({ ...prev, speaking: false }));
+        }
+      });
+    }
+    
     // Return cleanup function
     return () => {
       isMounted.current = false;
+      
+      // Remove event listeners
+      if (speechCompleteUnsubscribe) speechCompleteUnsubscribe();
+      if (speechErrorUnsubscribe) speechErrorUnsubscribe();
+      
+      // Cancel any ongoing speech
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
       }
+      
+      // Stop any native speech
+      if (window.electronSpeech) {
+        window.electronSpeech.stop().catch(e => console.error("Error stopping speech during cleanup", e));
+      }
+      
+      // Clear any active timers
       if (timerId.current) {
         window.clearInterval(timerId.current);
+        timerId.current = null;
+      }
+      
+      // Clear any speaking timeouts
+      if ((window as any).__speakingTimeouts) {
+        Object.values((window as any).__speakingTimeouts).forEach((timeout: any) => {
+          clearTimeout(timeout);
+        });
+        (window as any).__speakingTimeouts = {};
       }
     };
   }, []);
@@ -580,29 +642,41 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
       ).then(response => {
         console.log('Native speech started:', response);
         
-        // Speech has started successfully, but we'll mark it as completed 
-        // once the promise in the response resolves
-        if (response && response.promise) {
-          response.promise
-            .then(() => {
-              console.log('Native speech completed');
-              if (isMounted.current) {
-                setState(prev => ({ ...prev, speaking: false }));
-              }
-            })
-            .catch((error) => {
-              console.error('Error during native speech:', error);
-              if (isMounted.current) {
-                setState(prev => ({ ...prev, speaking: false }));
-              }
-            });
+        if (response.success) {
+          // Speech has started successfully
+          // No need to wait for speech completion - the speech module will handle it
+          // The widget will show as speaking until we manually stop it or it finishes
+          
+          // Set a timeout to check the speaking state after a reasonable time
+          // This is a fallback in case we don't receive the "completed" event
+          const speakingTimeout = setTimeout(() => {
+            if (isMounted.current) {
+              setState(prev => ({ ...prev, speaking: false }));
+            }
+          }, 30000); // 30 seconds max for most utterances
+          
+          // Store the timeout so we can clear it if component unmounts
+          (window as any).__speakingTimeouts = (window as any).__speakingTimeouts || {};
+          (window as any).__speakingTimeouts[response.id] = speakingTimeout;
+        } else {
+          // Speech failed to start
+          console.error('Failed to start native speech:', response.error);
+          if (isMounted.current) {
+            setState(prev => ({ ...prev, speaking: false }));
+          }
+          
+          // Fall back to Web Speech API if native speech fails
+          if (window.speechSynthesis && isMounted.current) {
+            console.log('Falling back to Web Speech API');
+            useWebSpeechAPI(processedText, styleRateModifier, stylePitchModifier);
+          }
         }
       }).catch(error => {
-        console.error('Failed to start native speech:', error);
+        console.error('Error in native speech API call:', error);
         
         // Fall back to Web Speech API if native speech fails
         if (window.speechSynthesis && isMounted.current) {
-          console.log('Falling back to Web Speech API');
+          console.log('Falling back to Web Speech API due to error');
           useWebSpeechAPI(processedText, styleRateModifier, stylePitchModifier);
         } else {
           if (isMounted.current) {
@@ -682,7 +756,18 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
 
   // Replace the existing stop function with this updated version
   const stop = () => {
+    // Stop speech using the appropriate method
     stopSpeech();
+    
+    // Clear any speaking timeouts
+    if ((window as any).__speakingTimeouts) {
+      Object.values((window as any).__speakingTimeouts).forEach((timeout: any) => {
+        clearTimeout(timeout);
+      });
+      (window as any).__speakingTimeouts = {};
+    }
+    
+    // Reset speaking state
     setState(prev => ({ ...prev, speaking: false }));
   };
 

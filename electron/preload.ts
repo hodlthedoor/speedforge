@@ -109,6 +109,24 @@ contextBridge.exposeInMainWorld('electronSpeech', {
       console.error('Error stopping speech:', error);
       throw error;
     }
+  },
+  
+  // Add listener for speech completion
+  onSpeechComplete: (callback: (data: {id: number}) => void) => {
+    const wrappedCallback = (_event: any, data: {id: number}) => callback(data);
+    ipcRenderer.on('speech:complete', wrappedCallback);
+    return () => {
+      ipcRenderer.removeListener('speech:complete', wrappedCallback);
+    };
+  },
+  
+  // Add listener for speech errors
+  onSpeechError: (callback: (data: {id: number, error: string}) => void) => {
+    const wrappedCallback = (_event: any, data: {id: number, error: string}) => callback(data);
+    ipcRenderer.on('speech:error', wrappedCallback);
+    return () => {
+      ipcRenderer.removeListener('speech:error', wrappedCallback);
+    };
   }
 });
 

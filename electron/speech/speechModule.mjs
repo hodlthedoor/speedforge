@@ -10,6 +10,7 @@ import { ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { BrowserWindow } from 'electron';
 
 // Map to store voice information and settings
 let voiceCache = [];
@@ -139,9 +140,24 @@ async function speak(text, voice, rate = 1.0, volume = 1.0) {
         say.speak(processedText, voice, speed, (err) => {
           if (err) {
             console.error(`Error speaking (id: ${speakId}):`, err);
+            
+            // Send error event to renderer
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed()) {
+                window.webContents.send('speech:error', { id: speakId, error: err.toString() });
+              }
+            }
+            
             reject(err);
           } else {
             console.log(`Speech completed (id: ${speakId})`);
+            
+            // Send completion event to renderer
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed()) {
+                window.webContents.send('speech:complete', { id: speakId });
+              }
+            }
             
             // Remove from active instances
             if (speakingInstances.has(speakId)) {
@@ -160,12 +176,17 @@ async function speak(text, voice, rate = 1.0, volume = 1.0) {
       }
     });
     
-    // Return the speak ID so the client can stop it if needed
-    return { id: speakId, promise: speechPromise };
+    // Handle the promise internally instead of returning it
+    speechPromise.catch(error => {
+      console.error(`Speech promise rejected (id: ${speakId}):`, error);
+    });
+    
+    // Return just the speak ID so the client can stop it if needed
+    return { id: speakId, success: true };
     
   } catch (error) {
     console.error('Error in speak function:', error);
-    return { id: -1, error: error.message };
+    return { id: -1, success: false, error: error.message };
   }
 }
 
