@@ -455,7 +455,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         <div className="mb-4">
           <label className="block text-sm mb-1">Custom text:</label>
           <textarea 
-            className="w-full bg-gray-800 text-white border border-gray-700 rounded p-2" 
+            className="w-full bg-gray-800 text-white border border-gray-700 rounded p-2 non-draggable interactive" 
             rows={2}
             value={state.text}
             onChange={handleTextChange}
@@ -465,14 +465,14 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
             <button 
               onClick={speak}
               disabled={state.speaking}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded disabled:opacity-50 text-sm"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded disabled:opacity-50 text-sm non-draggable interactive"
             >
               Speak Now
             </button>
             <button 
               onClick={stop}
               disabled={!state.speaking}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded disabled:opacity-50 text-sm"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded disabled:opacity-50 text-sm non-draggable interactive"
             >
               Stop
             </button>
@@ -480,18 +480,18 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         </div>
         
         {/* Voice settings collapsible section */}
-        <details className="mb-4 bg-gray-800 rounded p-2">
-          <summary className="font-medium cursor-pointer">Voice Settings</summary>
+        <details className="mb-4 bg-gray-800 rounded p-2 non-draggable interactive">
+          <summary className="font-medium cursor-pointer non-draggable interactive">Voice Settings</summary>
           <div className="mt-2 space-y-3">
             <div>
               <label className="block text-sm mb-1">Voice:</label>
               <select 
-                className="w-full bg-gray-700 text-white border border-gray-600 rounded p-1 text-sm"
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded p-1 text-sm non-draggable interactive"
                 value={state.selectedVoice}
                 onChange={handleVoiceChange}
               >
                 {state.availableVoices.map(voice => (
-                  <option key={voice.name} value={voice.name}>
+                  <option key={voice.name} value={voice.name} className="non-draggable interactive">
                     {voice.name} ({voice.lang})
                   </option>
                 ))}
@@ -507,7 +507,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 step="0.1" 
                 value={state.rate}
                 onChange={handleRateChange}
-                className="w-full"
+                className="w-full non-draggable interactive"
               />
             </div>
             
@@ -520,7 +520,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 step="0.1" 
                 value={state.pitch}
                 onChange={handlePitchChange}
-                className="w-full"
+                className="w-full non-draggable interactive"
               />
             </div>
             
@@ -533,7 +533,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 step="0.1" 
                 value={state.volume}
                 onChange={handleVolumeChange}
-                className="w-full"
+                className="w-full non-draggable interactive"
               />
             </div>
           </div>
@@ -544,7 +544,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
           <span className="text-sm font-medium">Auto Announcements</span>
           <button
             onClick={toggleAutoMode}
-            className={`px-3 py-1 rounded text-white text-sm ${
+            className={`px-3 py-1 rounded text-white text-sm non-draggable interactive ${
               state.autoMode ? 'bg-green-600' : 'bg-gray-600'
             }`}
           >
@@ -557,7 +557,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
           <h3 className="text-sm font-medium">Automatic Phrases</h3>
           <button 
             onClick={addPhrase}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded non-draggable interactive"
           >
             + Add
           </button>
@@ -569,7 +569,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
               <div className="flex justify-between mb-1">
                 <button
                   onClick={() => togglePhraseEnabled(phrase.id)}
-                  className={`px-2 py-0.5 rounded text-xs ${
+                  className={`px-2 py-0.5 rounded text-xs non-draggable interactive ${
                     phrase.enabled ? 'bg-green-600' : 'bg-gray-600'
                   }`}
                 >
@@ -578,13 +578,13 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 <div className="space-x-1">
                   <button
                     onClick={() => testPhrase(phrase.id)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-0.5 rounded"
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-0.5 rounded non-draggable interactive"
                   >
                     Test
                   </button>
                   <button
                     onClick={() => deletePhrase(phrase.id)}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-0.5 rounded"
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-0.5 rounded non-draggable interactive"
                   >
                     Delete
                   </button>
@@ -594,7 +594,7 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 type="text"
                 value={phrase.text}
                 onChange={(e) => updatePhraseText(phrase.id, e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs mt-1"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs mt-1 non-draggable interactive"
               />
               <div className="text-xs text-gray-400 mt-1">
                 Trigger: {phrase.trigger.condition}
@@ -611,8 +611,8 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         </div>
         
         {/* Telemetry data preview */}
-        <details className="mt-3 bg-gray-800 rounded p-2">
-          <summary className="font-medium cursor-pointer text-sm">Telemetry Values</summary>
+        <details className="mt-3 bg-gray-800 rounded p-2 non-draggable interactive">
+          <summary className="font-medium cursor-pointer text-sm non-draggable interactive">Telemetry Values</summary>
           <div className="mt-2 text-xs grid grid-cols-2 gap-2">
             {Object.entries(state.telemetryData).map(([key, value]) => (
               <div key={key} className="flex justify-between">
