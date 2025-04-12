@@ -10,6 +10,7 @@ export interface TriggerConfig {
   lastValue?: any; // to track changes
   lastTriggered?: number; // timestamp of last trigger
   cooldown?: number; // minimum time between triggers in ms
+  value?: number; // value for comparison
 }
 
 // Interface for trigger events
@@ -28,33 +29,43 @@ export const defaultTriggers: TriggerEvent[] = [
     id: '1',
     name: 'Speed Announcement',
     enabled: true,
-    trigger: { 
-      condition: 'interval',
-      interval: 30000, // Every 30 seconds
-      lastTriggered: 0,
-      cooldown: 20000 // At least 20 seconds between announcements
+    trigger: {
+      condition: 'telemetry',
+      telemetryKey: 'speed',
+      comparison: 'change',
+      interval: 50,
+      cooldown: 10000
     },
     phrases: [
-      'Current speed: {speed} kilometers per hour',
-      'You are going {speed} kilometers per hour',
-      'Speed is now {speed}',
+      "You're doing {{speed}} now",
+      "Speed is {{speed}}",
+      "{{speed}} on the dial",
+      "Moving at {{speed}} now",
+      "We're at {{speed}}",
+      "{{speed}} keep it steady",
+      "Running {{speed}} now"
     ]
   },
-  { 
+  {
     id: '2',
     name: 'Low Fuel Warning',
     enabled: true,
-    trigger: { 
-      condition: 'threshold',
-      telemetryKey: 'fuel',
-      threshold: 10,
+    trigger: {
+      condition: 'telemetry',
+      telemetryKey: 'fuelPercent',
       comparison: 'lt',
-      cooldown: 30000 // Only announce every 30 seconds
+      value: 15,
+      cooldown: 30000
     },
     phrases: [
-      'Warning: low fuel',
-      'Fuel level critical',
-      'Running out of fuel, box this lap',
+      "Fuel's getting low you've got {{fuelLaps}} laps left",
+      "Fuel warning {{fuelPercent}} percent remaining about {{fuelLaps}} laps left",
+      "You're running on fumes {{fuelPercent}} percent left",
+      "Fuel critical {{fuelLaps}} laps of fuel remaining",
+      "Running low {{fuelPercent}} percent fuel left",
+      "Watch your fuel {{fuelLaps}} laps remaining",
+      "Fuel alert {{fuelPercent}} percent left in the tank",
+      "Fuel situation critical {{fuelLaps}} laps left"
     ]
   },
   { 
@@ -69,36 +80,31 @@ export const defaultTriggers: TriggerEvent[] = [
       cooldown: 3000
     },
     phrases: [
-      "Car on your left, you blind fuck—move or get your ass kissed!",
-      "Left side's got a bastard sneaking—don't let him tickle your nuts!",
-      "Watch your left, dipshit—some prick's trying to steal your lunch!",
-      "Left's got a greasy fucker—block him or I'll slap you myself!",
-      "Car left, you twat—wake up before he shoves it up your tailpipe!",
-      "Left flank's got a cockroach—squash that son of a bitch!",
-      "Some asshole's on your left—don't let him hump your bumper!",
-      "Left's got a shit-stain closing in—hold the line, you animal!",
-      "Car on your left, genius—quit jerking off and defend!",
-      "Left's got a weasel sniffing your tires—kick his nuts back!",
-      "Watch left, you muppet—trouble's got a hard-on for you!",
-      "Left side's got a turd—don't let him wipe you out!",
-      "Car left, you numb-nuts—he's itching to fuck your race!",
-      "Left's got a sleazy prick—keep him in the dirt, mate!",
-      "Some jackass is left—slam the door or you're his bitch!",
-      "Left's got a vulture circling—don't let him pick your bones!",
-      "Car on your left, you wanker—he's closer than your ex's lawyer!",
-      "Left side's got a leech—shake that fucker off now!",
-      "Watch your left, asshole—someone's trying to ruin your day!",
-      "Left's got a shit-kicker—don't let him dance on your grave!",
-      "Car left, you slowpoke—he's practically in your goddamn lap!",
-      "Left's got a buzzard—swat him before he shits on you!",
-      "Some dickhead's on your left—keep him back or I'll puke!",
-      "Left side's got a snake—don't let him slither past, you nobber!",
-      "Car on your left, mate—he's hungrier than a whore at closing!",
-      "Left's got a tool—block that bastard or you're toast!",
-      "Watch left, you prick—some chump's trying to screw you!",
-      "Left's got a greasy turd—don't let him smear your race!",
-      "Car left, you nutcase—he's closer than your bad decisions!",
-      "Left side's got a fuckwit—hold tight or kiss your ass goodbye!"
+      "Car on your left you blind fuck move or get your ass kissed!",
+      "Left side's got a bastard sneaking don't let him tickle your nuts!",
+      "Watch your left dipshit some prick's trying to steal your lunch!",
+      "Left's got a greasy fucker block him or I'll slap you myself!",
+      "Car left you twat wake up before he shoves it up your tailpipe!",
+      "Left flank's got a cockroach squash that son of a bitch!",
+      "Some asshole's on your left don't let him hump your bumper!",
+      "Left's got a shit-stain closing in hold the line you animal!",
+      "Car on your left genius quit jerking off and defend!",
+      "Left's got a weasel sniffing your tires kick his nuts back!",
+      "Watch left you muppet trouble's got a hard-on for you!",
+      "Left side's got a turd don't let him wipe you out!",
+      "Car left you numb-nuts he's itching to fuck your race!",
+      "Left's got a sleazy prick keep him in the dirt mate!",
+      "Some jackass is left slam the door or you're his bitch!",
+      "Left's got a vulture circling don't let him pick your bones!",
+      "Car on your left you wanker he's closer than your ex's lawyer!",
+      "Left side's got a leech shake that fucker off now!",
+      "Watch your left asshole someone's trying to ruin your day!",
+      "Left's got a shit-kicker don't let him dance on your grave!",
+      "Car left you slowpoke he's practically in your goddamn lap!",
+      "Left's got a buzzard swat him before he shits on you!",
+      "Some dickhead's on your left keep him back or I'll puke!",
+      "Left side's got a snake don't let him slither past you nobber!",
+      "Car on your left mate he's hungrier than a whore at closing!"
     ]
   },
   { 
@@ -113,36 +119,31 @@ export const defaultTriggers: TriggerEvent[] = [
       cooldown: 3000
     },
     phrases: [
-      "Car on your right, you blind fuck—move or get your ass kicked!",
-      "Right side's got a bastard creeping—don't let him tickle your nuts!",
-      "Watch your right, dipshit—some prick's trying to steal your position!",
-      "Right's got a greasy fucker—block him or I'll slap you myself!",
-      "Car right, you twat—wake up before he shoves it up your tailpipe!",
-      "Right flank's got a cockroach—squash that son of a bitch!",
-      "Some asshole's on your right—don't let him hump your bumper!",
-      "Right's got a shit-stain closing in—hold the line, you animal!",
-      "Car on your right, genius—quit jerking off and defend!",
-      "Right's got a weasel sniffing your tires—kick his nuts back!",
-      "Watch right, you muppet—trouble's got a hard-on for you!",
-      "Right side's got a turd—don't let him wipe you out!",
-      "Car right, you numb-nuts—he's itching to fuck your race!",
-      "Right's got a sleazy prick—keep him in the dirt, mate!",
-      "Some jackass is right—slam the door or you're his bitch!",
-      "Right's got a vulture circling—don't let him pick your bones!",
-      "Car on your right, you wanker—he's closer than your ex's lawyer!",
-      "Right side's got a leech—shake that fucker off now!",
-      "Watch your right, asshole—someone's trying to ruin your day!",
-      "Right's got a shit-kicker—don't let him dance on your grave!",
-      "Car right, you slowpoke—he's practically in your goddamn lap!",
-      "Right's got a buzzard—swat him before he shits on you!",
-      "Some dickhead's on your right—keep him back or I'll puke!",
-      "Right side's got a snake—don't let him slither past, you nobber!",
-      "Car on your right, mate—he's hungrier than a whore at closing!",
-      "Right's got a tool—block that bastard or you're toast!",
-      "Watch right, you prick—some chump's trying to screw you!",
-      "Right's got a greasy turd—don't let him smear your race!",
-      "Car right, you nutcase—he's closer than your bad decisions!",
-      "Right side's got a fuckwit—hold tight or kiss your ass goodbye!"
+      "Car on your right you blind fuck move or get your ass kicked!",
+      "Right side's got a bastard creeping don't let him tickle your nuts!",
+      "Watch your right dipshit some prick's trying to steal your position!",
+      "Right's got a greasy fucker block him or I'll slap you myself!",
+      "Car right you twat wake up before he shoves it up your tailpipe!",
+      "Right flank's got a cockroach squash that son of a bitch!",
+      "Some asshole's on your right don't let him hump your bumper!",
+      "Right's got a shit-stain closing in hold the line you animal!",
+      "Car on your right genius quit jerking off and defend!",
+      "Right's got a weasel sniffing your tires kick his nuts back!",
+      "Watch right you muppet trouble's got a hard-on for you!",
+      "Right side's got a turd don't let him wipe you out!",
+      "Car right you numb-nuts he's itching to fuck your race!",
+      "Right's got a sleazy prick keep him in the dirt mate!",
+      "Some jackass is right slam the door or you're his bitch!",
+      "Right's got a vulture circling don't let him pick your bones!",
+      "Car on your right you wanker he's closer than your ex's lawyer!",
+      "Right side's got a leech shake that fucker off now!",
+      "Watch your right asshole someone's trying to ruin your day!",
+      "Right's got a shit-kicker don't let him dance on your grave!",
+      "Car right you slowpoke he's practically in your goddamn lap!",
+      "Right's got a buzzard swat him before he shits on you!",
+      "Some dickhead's on your right keep him back or I'll puke!",
+      "Right side's got a snake don't let him slither past you nobber!",
+      "Car on your right mate he's hungrier than a whore at closing!"
     ]
   },
   { 
@@ -245,36 +246,16 @@ export const defaultTriggers: TriggerEvent[] = [
       cooldown: 3000
     },
     phrases: [
-      "Cars on both sides, you fucked fuck—they're squeezing your nuts tight!",
-      "Left and right, asshole—two pricks want to spit-roast your sorry ass!",
-      "You're pinned, dipshit—cars each side are humping your goddamn doors!",
-      "Both sides got bastards, you twat—thread the needle or eat shit!",
-      "Cars left and right, genius—your ass is in a greasy fucking vice!",
-      "You're boxed in, you blind nobber—two fuckers are sniffing your exhaust!",
-      "Left's a dick, right's a turd—good luck not screwing this, mate!",
-      "Cars on each side, you wanker—they're closer than your ex's revenge!",
-      "Both flanks got shitheads—don't let 'em double-fuck your race!",
-      "Left and right, you muppet—two vultures are ready to rip you apart!",
-      "Cars either side, prick—you're in a shit-sandwich, so drive!",
-      "Both sides got weasels—wiggle out or they'll hump your tires!",
-      "You're trapped, you dumb bastard—cars each side want your blood!",
-      "Left's a tool, right's a tosser—don't let 'em gangbang your bumper!",
-      "Cars on both sides, you slowpoke—they're drooling to ruin your day!",
-      "Boxed in, you greasy fuck—left and right are fucking your vibe!",
-      "Both sides got cockroaches—squash 'em or you're roadkill, nobber!",
-      "Cars left and right, nutcase—they're tighter than a nun's knickers!",
-      "You're screwed both ways, mate—two shit-stains want your spot!",
-      "Left and right got pricks—drive like your balls are on fire!",
-      "Cars each side, you tosser—they're hungrier than whores at closing!",
-      "Both flanks got snakes—don't let 'em coil around your sorry ass!",
-      "You're in a pinch, you filthy prick—cars either side want to fuck you!",
-      "Left's a leech, right's a buzzard—break free or kiss your race goodbye!",
-      "Cars on both sides, you dick—your ass is grass if you don't move!",
-      "Boxed like a bitch, mate—left and right are shitting on your dreams!",
-      "Both sides got fuckwits—punch through or you're their lunch!",
-      "Cars left and right, you nobber—they're closer than a drunk's bad breath!",
-      "You're caged, you greasy shit—two tools are gagging for your spot!",
-      "Both sides got jackasses—drive or they'll shove it up your tailpipe!"
+      "CARS ON BOTH SIDES! You're sandwiched tight!",
+      "BOTH SIDES! You're in the fucking middle!",
+      "LEFT AND RIGHT! Squeeze yourself skinny!",
+      "BOTH SIDES BOTH SIDES! You're getting double teamed!",
+      "PINNED BETWEEN TWO CARS! Drive like a virgin!",
+      "CARS EVERYWHERE! Don't even breathe!",
+      "PINCHED LEFT AND RIGHT! They want your spot!",
+      "DANGER BOTH SIDES! Thread the fucking needle!",
+      "CARS LEFT AND RIGHT! Make yourself thin!",
+      "SANDWICHED! Don't move an inch!"
     ]
   }
 ];

@@ -69,6 +69,39 @@ function bypassProfanityFilters(text) {
   return modifiedText;
 }
 
+// Process text for more natural speech
+function processTextForNaturalSpeech(text) {
+  let processedText = text;
+  
+  // Clean up and normalize whitespace
+  processedText = processedText.replace(/\s+/g, ' ').trim();
+  
+  if (process.platform === 'darwin') {
+    // On macOS, we can use special markers that the 'say' command understands
+    // See: https://ss64.com/osx/say.html
+    
+    // Handle all-caps words by adding emphasis
+    processedText = processedText.replace(/\b([A-Z]{2,})\b/g, '[[emph +]]$1[[emph -]]');
+    
+    // Handle exclamation points by slightly raising pitch
+    processedText = processedText.replace(/([^!]+)(!+)/g, '$1[[rate +0.1]]$2[[rate -0.1]]');
+    
+    // Add slight emphasis to questions
+    processedText = processedText.replace(/([^?]+)(\?+)/g, '$1[[inpt EMPH]]$2');
+    
+    // Process SSML-like markers that we allow in input:
+    // 1. [[emph +]] and [[emph -]] - already handled natively
+    // 2. [[rate +0.15]] and [[rate -0.15]] - already handled natively
+    
+    // For Windows or Linux, strip any SSML-like markers since they won't work there
+    if (process.platform !== 'darwin') {
+      processedText = processedText.replace(/\[\[.*?\]\]/g, '');
+    }
+  }
+  
+  return processedText;
+}
+
 // Initialize speech module
 function initSpeechModule() {
   console.log('Initializing native speech module...');
@@ -126,13 +159,19 @@ async function speak(text, voice, rate = 1.0, volume = 1.0) {
   
   try {
     // Handle profanity to bypass filters - especially important on macOS
-    const processedText = bypassProfanityFilters(text);
+    let processedText = bypassProfanityFilters(text);
+    
+    // Process text for natural-sounding speech with appropriate prosody
+    processedText = processTextForNaturalSpeech(processedText);
     
     // Create a promise to handle the speech completion
     const speechPromise = new Promise((resolve, reject) => {
       try {
-        // Default speed is 1.0 in say.js
-        const speed = rate;
+        // Calculate effective speed based on platform
+        // macOS 'say' command works better with values closer to 1.0
+        const speed = process.platform === 'darwin' 
+          ? Math.min(Math.max(rate, 0.5), 2.0)        // Clamp between 0.5 and 2.0
+          : rate;
         
         // Start speaking
         console.log(`Speaking with voice: ${voice}, rate: ${rate}, id: ${speakId}`);

@@ -586,42 +586,51 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
         break;
     }
     
-    // Preprocess text to add more realistic speech patterns
+    // Preprocess text to add more natural speech patterns
     let processedText = text
-      // Add pauses after punctuation
+      // Clean up any excessive spaces
+      .replace(/\s+/g, ' ')
+      .trim()
+      
+      // Handle punctuation more naturally
       .replace(/—/g, ', ') // Replace em dashes with commas and space
-      .replace(/!/g, '! ') // Add space after exclamation points
-      .replace(/,/g, ', ') // Ensure space after commas for natural pauses
+      .replace(/\.\.\./g, '... ') // Add space after ellipsis
       
-      // Break up longer sentences with subtle pauses
-      .replace(/(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)/g, '$1$2$3$4$5$6$7$8$9, $11')
+      // Remove the pattern that introduces random pauses in longer sentences
+      // This was causing unnatural speech patterns
       
-      // Add natural pause patterns for warnings
-      .replace(/(watch|check|caution|careful|look|attention)/gi, '$1, ')
-      
-      // Handle profanity - add emphasis or slight pauses
+      // Handle profanity - add emphasis for appropriate styles
       .replace(/(fuck|shit|ass|cunt|bitch|bastard|dick|prick|twat|nuts|goddamn)/gi, (match) => {
-        // In real speech, profanity is often emphasized
+        // In real speech, profanity is often emphasized but without artificial pauses
         return state.voiceStyle === 'aggressive' ? 
-          ` ${match.toUpperCase()} ` : // Aggressive style emphasizes profanity more
-          ` ${match} `;                // Normal emphasis for other styles
+          `${match.toUpperCase()}` : // Aggressive style emphasizes profanity more
+          match;                    // Normal emphasis for other styles
       })
       
-      // Add emphasis to directional warnings based on style
+      // Add emphasis to directional warnings based on style, but without artificial pauses
       .replace(/(car|cars on both sides|two cars|left|right|both sides)/gi, (match) => {
         if (state.voiceStyle === 'panicked') {
           // Panicked style adds more emphasis to directional words
-          return ` ${match.toUpperCase()} `;
+          return `${match.toUpperCase()}`;
         } else {
           // Normal emphasis for other styles
-          return ` ${match} `;
+          return match;
         }
-      })
-      
-      // Handle terminal profanity (at the end of a sentence) for proper emphasis
-      .replace(/(fuck|shit|ass|cunt|bitch|bastard|dick|prick|twat)(!|\.|$)/gi, (match, p1, p2) => {
-        return `${p1} ${p2}`; // Add a slight pause between profanity and punctuation
       });
+    
+    // For native voices, we can also use SSML to improve speech if the system supports it
+    if (window.electronSpeech && process.platform === 'darwin') {
+      // On macOS, we can use some SSML-like formatting that the say command supports
+      if (state.voiceStyle === 'aggressive') {
+        // Add more intensity to aggressive style without artificial pauses
+        processedText = processedText.replace(/(watch out|careful|caution)/gi, '[[emph +]] $1 [[emph -]]');
+      }
+      
+      if (state.voiceStyle === 'panicked') {
+        // Add urgency to panicked style
+        processedText = processedText.replace(/(watch out|careful|caution)/gi, '[[rate +0.15]] $1 [[rate -0.15]]');
+      }
+    }
       
     // Set speaking state
     setState(prev => ({ ...prev, speaking: true }));

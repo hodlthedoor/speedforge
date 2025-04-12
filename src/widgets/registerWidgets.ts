@@ -6,6 +6,7 @@ import ShiftIndicatorWidget from '../components/ShiftIndicatorWidget';
 import CarLeftIndicatorWidget from '../components/CarLeftIndicatorWidget';
 import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
 import SpotterWidget from '../components/SpotterWidget';
+import WeekendInfoWidget from '../components/WeekendInfoWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -70,6 +71,15 @@ WidgetRegistry.register('spotter', {
   defaultOptions: {},
   description: 'Race spotter with customizable voice announcements',
   category: 'Audio'
+});
+
+// Register Weekend Info Widget
+WidgetRegistry.register('weekend-info', {
+  component: WeekendInfoWidget,
+  defaultTitle: 'Track Info',
+  defaultOptions: {},
+  description: 'Display track and session information',
+  category: 'Data'
 });
 
 export default WidgetRegistry; 
