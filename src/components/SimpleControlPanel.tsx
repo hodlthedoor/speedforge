@@ -119,6 +119,10 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     const widget = activeWidgets.find(w => w.id === widgetId);
     if (!widget) return;
     
+    // Update widget state in the widget object itself
+    if (!widget.state) widget.state = {};
+    widget.state = { ...widget.state, ...updates };
+    
     // Handle track map widgets specifically
     if (widget.type === 'track-map') {
       const event = new CustomEvent('track-map:control', { 
@@ -158,7 +162,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         console.error('Error accessing widget API:', error);
       }
     }
-  }, [activeWidgets]);
+    
+    // Force a re-render of controls by updating the selected widget
+    if (selectedWidget && selectedWidget.id === widgetId) {
+      setSelectedWidget({ ...widget });
+    }
+  }, [activeWidgets, selectedWidget]);
   
   // Start new track recording
   const handleStartRecording = useCallback((widgetId: string) => {
@@ -397,10 +406,27 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const getWidgetControls = useCallback((widget: any) => {
     if (!widget || !widget.type) return [];
     
-    // Get widget state (if available)
-    const widgetState = widget.type === 'track-map' 
-      ? trackMapWidgetStates[widget.id] || {}
-      : {};
+    // Get widget state based on widget type
+    let widgetState: Record<string, any> = {};
+    
+    // Special handling for track-map widgets
+    if (widget.type === 'track-map') {
+      widgetState = trackMapWidgetStates[widget.id] || {};
+    } 
+    // For all widgets, include any state stored in the widget object
+    if (widget.state) {
+      widgetState = { ...widgetState, ...widget.state };
+    }
+    
+    // For pedal-trace widgets, ensure historyLength is included if not already present
+    if (widget.type === 'pedal-trace') {
+      widgetState = { 
+        ...widgetState,
+        historyLength: widgetState.historyLength || 100 // Default to 100 if not set
+      };
+    }
+    
+    console.log(`Getting controls for widget ${widget.id} (${widget.type}) with state:`, widgetState);
       
     // Get controls from registry
     return WidgetRegistry.getWidgetControls(
@@ -457,10 +483,21 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
                 max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
                 step={1}
-                value={control.value}
-                onChange={(e) => control.onChange(Number(e.target.value))}
+                value={control.value || 100}
+                onChange={(e) => {
+                  const numericValue = Number(e.target.value);
+                  console.log(`Slider value changed to: ${numericValue}`);
+                  control.onChange(numericValue);
+                }}
                 className="w-full"
               />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                {control.options && control.options.map((option: any) => (
+                  <span key={option.value} className="cursor-pointer" onClick={() => control.onChange(Number(option.value))}>
+                    {option.label}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         );
