@@ -10,6 +10,9 @@ import {
   createNewTrigger
 } from './spotterData';
 import { useTelemetryData } from '../hooks/useTelemetryData';
+import { withControls } from '../widgets/WidgetRegistryAdapter';
+import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
+import WidgetManager from '../services/WidgetManager';
 
 /*
  * Speech Synthesis Options in Electron:
@@ -98,7 +101,7 @@ interface SpotterWidgetState {
   voiceStyle: 'normal' | 'aggressive' | 'panicked'; // Voice style setting
 }
 
-const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
+const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
   // Use the telemetry data hook to get real-time updates
   const { data: telemetryData, isConnected } = useTelemetryData(id);
   
@@ -116,6 +119,22 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     editingTriggerId: null,
     voiceStyle: 'aggressive' // Default to aggressive for our colorful phrases
   });
+  
+  // This function handles state updates from the control panel
+  useEffect(() => {
+    // Make the component handle state updates from the widget system
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        // Merge the incoming updates with current state
+        setState(prev => ({
+          ...prev,
+          ...event.state
+        }));
+      }
+    });
+    
+    return unsubscribe;
+  }, [id]);
   
   // Reference to track if component is mounted
   const isMounted = useRef(true);
@@ -1206,5 +1225,94 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     </Widget>
   );
 };
+
+// Define the controls that will appear in the control panel
+const getSpotterControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
+  const voiceStyle = widgetState.voiceStyle || 'aggressive';
+  const rate = widgetState.rate || 1;
+  const pitch = widgetState.pitch || 1;
+  const volume = widgetState.volume || 1;
+  const autoMode = widgetState.autoMode || false;
+  const availableVoices = widgetState.availableVoices || [];
+  const selectedVoice = widgetState.selectedVoice || '';
+  
+  const controls: WidgetControlDefinition[] = [
+    {
+      id: 'voiceStyle',
+      type: 'select' as WidgetControlType,
+      label: 'Voice Style',
+      value: voiceStyle,
+      options: [
+        { value: 'normal', label: 'Normal' },
+        { value: 'aggressive', label: 'Aggressive' },
+        { value: 'panicked', label: 'Panicked' }
+      ],
+      onChange: (value) => updateWidget({ voiceStyle: value })
+    },
+    {
+      id: 'rate',
+      type: 'slider' as WidgetControlType,
+      label: `Speech Rate: ${rate.toFixed(1)}`,
+      value: rate,
+      options: [
+        { value: '0.5', label: 'Slow' },
+        { value: '1', label: 'Normal' },
+        { value: '2', label: 'Fast' }
+      ],
+      onChange: (value) => updateWidget({ rate: value })
+    },
+    {
+      id: 'pitch',
+      type: 'slider' as WidgetControlType,
+      label: `Pitch: ${pitch.toFixed(1)}`,
+      value: pitch,
+      options: [
+        { value: '0.5', label: 'Low' },
+        { value: '1', label: 'Normal' },
+        { value: '2', label: 'High' }
+      ],
+      onChange: (value) => updateWidget({ pitch: value })
+    },
+    {
+      id: 'volume',
+      type: 'slider' as WidgetControlType,
+      label: `Volume: ${volume.toFixed(1)}`,
+      value: volume,
+      options: [
+        { value: '0', label: 'Mute' },
+        { value: '0.5', label: 'Half' },
+        { value: '1', label: 'Max' }
+      ],
+      onChange: (value) => updateWidget({ volume: value })
+    },
+    {
+      id: 'autoMode',
+      type: 'toggle' as WidgetControlType,
+      label: 'Auto Announcements',
+      value: autoMode,
+      onChange: (value) => updateWidget({ autoMode: value })
+    }
+  ];
+  
+  // Only add voice selection if there are voices available
+  if (availableVoices && availableVoices.length > 0) {
+    controls.push({
+      id: 'selectedVoice',
+      type: 'select' as WidgetControlType,
+      label: 'Voice',
+      value: selectedVoice,
+      options: availableVoices.map((voice: SpeechSynthesisVoice) => ({
+        value: voice.name,
+        label: `${voice.name} (${voice.lang})`
+      })),
+      onChange: (value) => updateWidget({ selectedVoice: value })
+    });
+  }
+  
+  return controls;
+};
+
+// Wrap the component with the controls
+const SpotterWidget = withControls(SpotterWidgetComponent, getSpotterControls);
 
 export default SpotterWidget; 
