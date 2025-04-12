@@ -5,6 +5,7 @@ import PedalTraceWidget from '../components/PedalTraceWidget';
 import ShiftIndicatorWidget from '../components/ShiftIndicatorWidget';
 import CarLeftIndicatorWidget from '../components/CarLeftIndicatorWidget';
 import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
+import SpotterWidget from '../components/SpotterWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -60,6 +61,15 @@ WidgetRegistry.register('car-right-indicator', {
   defaultOptions: {},
   description: 'Display indicator when cars are to your right',
   category: 'Spotter Aids'
+});
+
+// Register Spotter Widget
+WidgetRegistry.register('spotter', {
+  component: SpotterWidget,
+  defaultTitle: 'Spotter',
+  defaultOptions: {},
+  description: 'Race spotter with customizable voice announcements',
+  category: 'Audio'
 });
 
 export default WidgetRegistry; 
