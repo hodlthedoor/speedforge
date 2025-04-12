@@ -4,6 +4,24 @@ use iracing::telemetry::Value;
 use std::convert::TryInto;
 use std::f32::consts::PI;
 
+/// Represents car left/right indicators from iRacing SDK
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum CarLeftRight {
+    Off,
+    Clear,       // no cars around us
+    CarLeft,     // there is a car to our left
+    CarRight,    // there is a car to our right
+    CarLeftRight, // there are cars on each side
+    TwoCarsLeft, // there are two cars to our left
+    TwoCarsRight // there are two cars to our right
+}
+
+impl Default for CarLeftRight {
+    fn default() -> Self {
+        Self::Off
+    }
+}
+
 /// Represents all telemetry data organized into logical sections
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct TelemetryData {
@@ -18,6 +36,7 @@ pub struct TelemetryData {
     pub on_pit_road: bool,
     pub track_surface: String,
     pub PlayerTrackSurface: i32,  // Raw numeric value
+    pub car_left_right: CarLeftRight, // Cars to left/right indicator
     
     // Velocity Vectors (Car Local Coordinates)
     pub VelocityX: f32,     // Forward/backward velocity (car's local X axis)
@@ -133,6 +152,26 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
             raw_values.insert("Speed".to_string(), serde_json::json!(speed_f32));
             data.speed_kph = speed_f32 * 3.6; // Convert to km/h
             data.speed_mph = speed_f32 * 2.23694; // Convert to mph
+        }
+    }
+    
+    // Extract CarLeftRight status
+    if let Ok(car_left_right) = telem.get("CarLeftRight") {
+        if let Ok(car_lr_val) = TryInto::<i32>::try_into(car_left_right) {
+            // Store raw value
+            raw_values.insert("CarLeftRight".to_string(), serde_json::json!(car_lr_val));
+            
+            // Convert to our enum representation
+            data.car_left_right = match car_lr_val {
+                0 => CarLeftRight::Off,
+                1 => CarLeftRight::Clear,      // no cars around us
+                2 => CarLeftRight::CarLeft,    // there is a car to our left
+                3 => CarLeftRight::CarRight,   // there is a car to our right
+                4 => CarLeftRight::CarLeftRight, // there are cars on each side
+                5 => CarLeftRight::TwoCarsLeft, // there are two cars to our left
+                6 => CarLeftRight::TwoCarsRight, // there are two cars to our right
+                _ => CarLeftRight::Off,        // default for unknown values
+            };
         }
     }
     
@@ -399,6 +438,18 @@ pub fn format_telemetry_display(data: &TelemetryData) -> String {
     display.push_str(&format!("RPM: {:.0}\n", data.rpm));
     display.push_str(&format!("Gear: {}\n", data.gear));
     display.push_str(&format!("Surface: {}\n", data.track_surface));
+    
+    // Display car left/right status
+    let car_status = match data.car_left_right {
+        CarLeftRight::Off => "Off",
+        CarLeftRight::Clear => "Clear",
+        CarLeftRight::CarLeft => "Car Left",
+        CarLeftRight::CarRight => "Car Right",
+        CarLeftRight::CarLeftRight => "Cars Left & Right",
+        CarLeftRight::TwoCarsLeft => "Two Cars Left",
+        CarLeftRight::TwoCarsRight => "Two Cars Right",
+    };
+    display.push_str(&format!("Cars: {}\n", car_status));
     
     if data.shift_indicator_pct > 0.0 {
         display.push_str(&format!("Shift Indicator: {:.0}%\n", data.shift_indicator_pct));

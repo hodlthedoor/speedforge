@@ -39,27 +39,13 @@ const CarLeftIndicatorWidget: React.FC<CarLeftIndicatorWidgetProps> = ({
   const getIndicatorClasses = () => {
     switch (carStatus) {
       case CarLeftRight.CarLeft:
-        return 'bg-amber-500'; // Orange for a car on the left
+        return 'bg-amber-500'; // Yellow for a car on the left
       case CarLeftRight.TwoCarsLeft:
         return 'bg-red-600'; // Red for two cars on the left
       case CarLeftRight.CarLeftRight:
-        return 'bg-amber-500'; // Orange for cars on both sides
+        return 'bg-amber-500'; // Yellow for cars on both sides
       default:
         return 'bg-slate-800'; // Dark gray when inactive
-    }
-  };
-
-  // Determine text to display
-  const getIndicatorText = () => {
-    switch (carStatus) {
-      case CarLeftRight.CarLeft:
-        return '◀ CAR';
-      case CarLeftRight.TwoCarsLeft:
-        return '◀◀ CARS';
-      case CarLeftRight.CarLeftRight:
-        return '◀ CAR';
-      default:
-        return '';
     }
   };
 
@@ -69,15 +55,13 @@ const CarLeftIndicatorWidget: React.FC<CarLeftIndicatorWidgetProps> = ({
       title={title}
       initialPosition={initialPosition}
       onClose={onClose}
-      className="w-40 h-40"
+      className="w-20 h-20"
     >
-      <div className="flex flex-col justify-center items-center h-full w-full">
+      <div className="flex flex-col justify-center items-center h-full w-full p-2">
         <div 
-          className={`flex justify-center items-center w-full h-full rounded text-white text-xl font-bold font-mono transition-all duration-200 ${getIndicatorClasses()}`}
+          className={`w-full h-full rounded transition-all duration-200 ${getIndicatorClasses()}`}
           data-testid="car-left-indicator"
-        >
-          {getIndicatorText()}
-        </div>
+        />
       </div>
     </Widget>
   );

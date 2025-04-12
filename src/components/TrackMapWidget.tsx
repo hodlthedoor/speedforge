@@ -265,7 +265,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
               const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
               newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
               newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
-              if (dist < 20 && trackPointsRef.current.length > 50) {
+              if (dist < 10 && trackPointsRef.current.length > 50) {
                 stopRecording();
                 animationFrameId.current = null;
                 return;

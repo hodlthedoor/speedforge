@@ -1,6 +1,7 @@
 /**
  * Utility functions for formatting telemetry data values
  */
+import { CarLeftRight } from '../types/telemetry';
 
 export function formatSpeed(value: number, unit: 'kph' | 'mph' = 'kph'): string {
   if (unit === 'kph') {
@@ -40,4 +41,28 @@ export function formatPosition(value: number): string {
 
 export function formatBatteryLevel(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+/**
+ * Format car left/right indicator status into a human-readable string
+ */
+export function formatCarLeftRight(status: CarLeftRight): string {
+  switch (status) {
+    case CarLeftRight.Off:
+      return 'Off';
+    case CarLeftRight.Clear:
+      return 'Clear';
+    case CarLeftRight.CarLeft:
+      return 'Car Left';
+    case CarLeftRight.CarRight:
+      return 'Car Right';
+    case CarLeftRight.CarLeftRight:
+      return 'Cars Left & Right';
+    case CarLeftRight.TwoCarsLeft:
+      return 'Two Cars Left';
+    case CarLeftRight.TwoCarsRight:
+      return 'Two Cars Right';
+    default:
+      return 'Unknown';
+  }
 } 

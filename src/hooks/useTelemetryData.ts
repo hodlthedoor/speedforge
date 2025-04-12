@@ -8,9 +8,10 @@ import {
   formatPosition, 
   formatSpeed, 
   formatTemperature, 
-  formatTorque
+  formatTorque,
+  formatCarLeftRight
 } from '../utils/formatters';
-import { TrackSurface } from '../types/telemetry';
+import { TrackSurface, CarLeftRight } from '../types/telemetry';
 
 // Typescript interface for telemetry data
 export interface TelemetryData {
@@ -26,6 +27,7 @@ export interface TelemetryData {
   track_surface?: string;
   PlayerTrackSurfaceStatus?: string;
   PlayerTrackSurface?: TrackSurface;
+  car_left_right?: CarLeftRight; // Cars to left/right indicator
   
   // Velocity Vectors
   VelocityX?: number;     // Forward/backward velocity (car's local X axis)
@@ -233,6 +235,8 @@ export function formatTelemetryValue(metric: string, value: any): string {
       return `${value.toFixed(1)}%`;
     case 'gear':
       return String(value);
+    case 'car_left_right':
+      return formatCarLeftRight(value);
     case 'g_force_lat':
     case 'g_force_lon':
       return `${value.toFixed(2)}G`;
@@ -268,38 +272,66 @@ export function formatTelemetryValue(metric: string, value: any): string {
 }
 
 /**
- * Get a user-friendly name for a metric
+ * Get a human-readable name for a telemetry metric
  * @param metric The metric key
  * @returns Human-readable name
  */
 export function getMetricName(metric: string): string {
   const metricNames: Record<string, string> = {
-    'speed_kph': 'Speed (KPH)',
-    'speed_mph': 'Speed (MPH)',
+    // Car State
+    'speed_kph': 'Speed (km/h)',
+    'speed_mph': 'Speed (mph)',
     'rpm': 'RPM',
     'gear': 'Gear',
+    'gear_num': 'Gear Number',
+    'velocity_ms': 'Velocity (m/s)',
+    'shift_indicator_pct': 'Shift Indicator',
+    'on_pit_road': 'On Pit Road',
+    'track_surface': 'Track Surface',
+    'car_left_right': 'Cars Nearby',
+    
+    // Velocity Vectors
+    'VelocityX': 'Forward Velocity',
+    'VelocityY': 'Lateral Velocity',
+    'VelocityZ': 'Vertical Velocity',
+    
+    // Driver Inputs
     'throttle_pct': 'Throttle',
     'brake_pct': 'Brake',
     'clutch_pct': 'Clutch',
-    'g_force_lat': 'Lateral G',
-    'g_force_lon': 'Longitudinal G',
+    'steering_angle_deg': 'Steering Angle',
+    
+    // Dynamics
     'lateral_accel_ms2': 'Lateral Acceleration',
     'longitudinal_accel_ms2': 'Longitudinal Acceleration',
-    'fuel_level': 'Fuel Level',
-    'fuel_pct': 'Fuel Percentage',
+    'vertical_accel_ms2': 'Vertical Acceleration',
+    'yaw_rate_deg_s': 'Yaw Rate',
+    'g_force_lat': 'Lateral G',
+    'g_force_lon': 'Longitudinal G',
+    'car_slip_angle_deg': 'Car Slip Angle',
+    
+    // Track Position
+    'lap_dist_pct': 'Track Position',
+    'lap_dist': 'Lap Distance',
+    
+    // Location
+    'lat': 'Latitude',
+    'lon': 'Longitude',
+    
+    // Timing
     'current_lap_time': 'Current Lap',
     'last_lap_time': 'Last Lap',
     'best_lap_time': 'Best Lap',
-    'position': 'Position',
     'lap_completed': 'Lap',
-    'shift_indicator_pct': 'Shift Indicator',
-    'lat': 'Latitude',
-    'lon': 'Longitude',
-    'lap_dist': 'Lap Distance',
-    'lap_dist_pct': 'Track Position',
-    'VelocityX': 'Forward Velocity',
-    'VelocityY': 'Side Velocity',
-    'VelocityZ': 'Vertical Velocity'
+    'delta_best': 'Delta Best',
+    'delta_session_best': 'Delta Session Best',
+    'delta_optimal': 'Delta Optimal',
+    'position': 'Position',
+    
+    // Fuel & Temps
+    'fuel_level': 'Fuel Level',
+    'fuel_pct': 'Fuel Percentage',
+    'fuel_use_per_hour': 'Fuel Use Per Hour',
   };
   
   return metricNames[metric] || metric;
