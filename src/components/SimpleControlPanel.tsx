@@ -113,17 +113,51 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }));
   }, []);
   
-  // Update track map widget controls
+  // Update widget state for any widget type
   const updateWidgetState = useCallback((widgetId: string, updates: any) => {
-    // Check if it's a track map widget and dispatch event
-    if (activeWidgets.find(w => w.id === widgetId && w.type === 'track-map')) {
+    // Get the widget
+    const widget = activeWidgets.find(w => w.id === widgetId);
+    if (!widget) return;
+    
+    // Handle track map widgets specifically
+    if (widget.type === 'track-map') {
       const event = new CustomEvent('track-map:control', { 
         detail: { widgetId, updates }
       });
       window.dispatchEvent(event);
+      
+      // Also update local track map state
+      setTrackMapWidgetStates(prev => ({
+        ...prev,
+        [widgetId]: { ...(prev[widgetId] || {}), ...updates }
+      }));
     }
     
-    // For other widget types, we can implement their update logic here
+    // For all widget types, dispatch a generic widget:state:update event
+    const updateEvent = new CustomEvent('widget:state:updated', { 
+      detail: { widgetId, state: updates }
+    });
+    window.dispatchEvent(updateEvent);
+    
+    // For Electron environments, update widget state through API
+    if (window.electronAPI) {
+      try {
+        const widgetsAPI = window.electronAPI as unknown as { 
+          widgets: { 
+            updateState: (id: string, state: any) => Promise<any>
+          } 
+        };
+        
+        if (widgetsAPI.widgets && widgetsAPI.widgets.updateState) {
+          widgetsAPI.widgets.updateState(widgetId, updates)
+            .catch((error: any) => {
+              console.error('Error updating widget state:', error);
+            });
+        }
+      } catch (error) {
+        console.error('Error accessing widget API:', error);
+      }
+    }
   }, [activeWidgets]);
   
   // Start new track recording
@@ -412,9 +446,50 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             </div>
           </div>
         );
+      
+      case 'slider':
+        return (
+          <div key={control.id} className="mt-2">
+            <label className="detail-label text-sm">{control.label}</label>
+            <div className="pl-2 mt-1">
+              <input
+                type="range"
+                min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
+                max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
+                step={1}
+                value={control.value}
+                onChange={(e) => control.onChange(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        );
+        
+      case 'toggle':
+        return (
+          <div key={control.id} className="mt-2 flex items-center justify-between">
+            <label className="detail-label text-sm">{control.label}</label>
+            <div
+              className={`w-10 h-5 rounded-full cursor-pointer ${
+                control.value ? 'bg-blue-600' : 'bg-gray-700'
+              }`}
+              onClick={() => control.onChange(!control.value)}
+            >
+              <div
+                className={`transform h-5 w-5 bg-white rounded-full transition-transform ${
+                  control.value ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </div>
+          </div>
+        );
         
       default:
-        return null;
+        return (
+          <div key={control.id} className="mt-2 text-xs text-red-400">
+            Unsupported control type: {control.type}
+          </div>
+        );
     }
   };
 

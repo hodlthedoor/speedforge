@@ -169,13 +169,13 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
       label: `History Length: ${historyLength} points`,
       value: historyLength,
       options: [
-        { value: '20', label: 'Very Short' },
-        { value: '50', label: 'Short' },
-        { value: '100', label: 'Medium' },
-        { value: '200', label: 'Long' },
-        { value: '500', label: 'Very Long' }
+        { value: 20, label: 'Very Short' },
+        { value: 50, label: 'Short' },
+        { value: 100, label: 'Medium' },
+        { value: 200, label: 'Long' },
+        { value: 500, label: 'Very Long' }
       ],
-      onChange: (value) => updateWidget({ historyLength: Number(value) })
+      onChange: (value) => updateWidget({ historyLength: value })
     }
   ];
   
