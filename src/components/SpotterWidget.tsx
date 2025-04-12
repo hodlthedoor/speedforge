@@ -9,6 +9,7 @@ import {
   processText as processTextWithData,
   createNewTrigger
 } from './spotterData';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface SpotterWidgetProps {
   id: string;
@@ -26,10 +27,14 @@ interface SpotterWidgetState {
   speaking: boolean;
   autoMode: boolean;
   telemetryData: Record<string, any>; 
-  editingTriggerId: string | null; 
+  editingTriggerId: string | null;
+  voiceStyle: 'normal' | 'aggressive' | 'panicked'; // Voice style setting
 }
 
 const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
+  // Use the telemetry data hook to get real-time updates
+  const { data: telemetryData, isConnected } = useTelemetryData(id);
+  
   const [state, setState] = useState<SpotterWidgetState>({
     text: 'Hello, this is Speedforge spotter',
     triggers: defaultTriggers,
@@ -41,12 +46,48 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     speaking: false,
     autoMode: false,
     telemetryData: defaultTelemetryData,
-    editingTriggerId: null
+    editingTriggerId: null,
+    voiceStyle: 'aggressive' // Default to aggressive for our colorful phrases
   });
   
   // Reference to track if component is mounted
   const isMounted = useRef(true);
   const timerId = useRef<number | null>(null);
+
+  // Process telemetry data whenever it changes
+  useEffect(() => {
+    if (telemetryData && isMounted.current) {
+      // Map car_left_right enum to carLeft, carRight, etc. boolean flags
+      const processedData = { 
+        ...state.telemetryData, // Preserve existing values, especially lastCarAlert
+        ...telemetryData 
+      };
+      
+      // Add carLeft and carRight based on car_left_right enum
+      if (processedData.car_left_right) {
+        // Set carLeft to true if car_left_right is CarLeft, CarLeftRight, or TwoCarsLeft
+        processedData.carLeft = processedData.car_left_right === "CarLeft" || 
+                              processedData.car_left_right === "CarLeftRight" || 
+                              processedData.car_left_right === "TwoCarsLeft";
+        
+        // Set carRight to true if car_left_right is CarRight, CarLeftRight, or TwoCarsRight
+        processedData.carRight = processedData.car_left_right === "CarRight" || 
+                               processedData.car_left_right === "CarLeftRight" || 
+                               processedData.car_left_right === "TwoCarsRight";
+                               
+        // Set twoCarsLeft to true if car_left_right is TwoCarsLeft
+        processedData.twoCarsLeft = processedData.car_left_right === "TwoCarsLeft";
+        
+        // Set twoCarsRight to true if car_left_right is TwoCarsRight
+        processedData.twoCarsRight = processedData.car_left_right === "TwoCarsRight";
+        
+        // Set carsLeftRight to true if car_left_right is CarLeftRight (cars on both sides)
+        processedData.carsLeftRight = processedData.car_left_right === "CarLeftRight";
+      }
+      
+      setState(prev => ({ ...prev, telemetryData: processedData }));
+    }
+  }, [telemetryData, state.telemetryData.lastCarAlert]);
 
   // Initialize speech synthesis
   useEffect(() => {
@@ -71,24 +112,11 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     // Initial voice loading
     loadVoices();
     
-    // Setup listener for telemetry updates if window.electronAPI exists
-    let unsubscribe: (() => void) | undefined;
-    if (window.electronAPI) {
-      unsubscribe = window.electronAPI.on('telemetry:update', (telemetryData: any) => {
-        if (isMounted.current) {
-          setState(prev => ({ ...prev, telemetryData }));
-        }
-      });
-    }
-    
     // Return cleanup function
     return () => {
       isMounted.current = false;
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
-      }
-      if (unsubscribe) {
-        unsubscribe();
       }
       if (timerId.current) {
         window.clearInterval(timerId.current);
@@ -121,16 +149,63 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
   const checkTriggers = () => {
     const now = Date.now();
     
+    // Global cooldown for car proximity alerts (twoCarsLeft, twoCarsRight, carLeft, carRight)
+    const globalCarAlertCooldown = 5000; // 5 seconds
+    const lastCarAlertKey = 'lastCarAlert';
+    const lastCarAlert = state.telemetryData[lastCarAlertKey] || 0;
+    
+    // Check if we're in global cooldown period for car alerts
+    const inGlobalCarAlertCooldown = (now - lastCarAlert) < globalCarAlertCooldown;
+    
+    // Sort triggers to check in priority order:
+    // 1. Cars on both sides alert (highest priority)
+    // 2. Two cars alerts second (high priority)
+    // 3. Single car alerts third (medium priority)
+    // 4. All other alerts unchanged (lowest priority)
+    const prioritizedTriggers = [...state.triggers].sort((a, b) => {
+      // Put cars both sides alert at the very top (highest priority)
+      const aIsCarsLeftRight = a.trigger.telemetryKey === 'carsLeftRight';
+      const bIsCarsLeftRight = b.trigger.telemetryKey === 'carsLeftRight';
+      
+      if (aIsCarsLeftRight && !bIsCarsLeftRight) return -1;
+      if (!aIsCarsLeftRight && bIsCarsLeftRight) return 1;
+      
+      // Then prioritize two cars alerts
+      const aIsTwoCars = a.trigger.telemetryKey === 'twoCarsLeft' || a.trigger.telemetryKey === 'twoCarsRight';
+      const bIsTwoCars = b.trigger.telemetryKey === 'twoCarsLeft' || b.trigger.telemetryKey === 'twoCarsRight';
+      
+      if (aIsTwoCars && !bIsTwoCars) return -1;
+      if (!aIsTwoCars && bIsTwoCars) return 1;
+      
+      // Then prioritize single car alerts
+      const aIsSingleCar = a.trigger.telemetryKey === 'carLeft' || a.trigger.telemetryKey === 'carRight';
+      const bIsSingleCar = b.trigger.telemetryKey === 'carLeft' || b.trigger.telemetryKey === 'carRight';
+      
+      if (aIsSingleCar && !bIsSingleCar) return -1;
+      if (!aIsSingleCar && bIsSingleCar) return 1;
+      
+      return 0;
+    });
+    
     // Check each trigger event
-    for (const triggerEvent of state.triggers) {
+    for (const triggerEvent of prioritizedTriggers) {
       if (!triggerEvent.enabled || triggerEvent.phrases.length === 0) continue;
       
       const trigger = triggerEvent.trigger;
       const lastTriggered = trigger.lastTriggered || 0;
       const cooldown = trigger.cooldown || 0;
       
-      // Skip if in cooldown period
+      // Skip if in cooldown period for this specific trigger
       if (now - lastTriggered < cooldown) continue;
+      
+      // For car alerts, also check the global cooldown
+      const isCarAlert = trigger.telemetryKey === 'carLeft' || 
+                        trigger.telemetryKey === 'carRight' || 
+                        trigger.telemetryKey === 'twoCarsLeft' || 
+                        trigger.telemetryKey === 'twoCarsRight' ||
+                        trigger.telemetryKey === 'carsLeftRight';
+      
+      if (isCarAlert && inGlobalCarAlertCooldown) continue;
       
       // Check trigger conditions
       let triggered = false;
@@ -163,7 +238,11 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
             
             if (currentValue !== lastValue) {
               // Special handling for car proximity alerts
-              if (trigger.telemetryKey === 'carLeft' || trigger.telemetryKey === 'carRight') {
+              if (trigger.telemetryKey === 'carLeft' || 
+                 trigger.telemetryKey === 'carRight' ||
+                 trigger.telemetryKey === 'twoCarsLeft' ||
+                 trigger.telemetryKey === 'twoCarsRight' ||
+                 trigger.telemetryKey === 'carsLeftRight') {
                 // Only trigger when changing from false to true (car appears)
                 if (currentValue === true && lastValue === false) {
                   triggered = true;
@@ -216,12 +295,25 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         // Select a random phrase from the available phrases
         let phraseIndex = Math.floor(Math.random() * triggerEvent.phrases.length);
         
-        // Avoid repeating the last phrase if possible and there are multiple phrases
+        // Try to avoid repeating the last phrase if possible and there are multiple phrases
         if (triggerEvent.lastUsedPhraseIndex !== undefined && 
-            triggerEvent.phrases.length > 1 && 
-            phraseIndex === triggerEvent.lastUsedPhraseIndex) {
-          // Choose a different phrase
-          phraseIndex = (phraseIndex + 1) % triggerEvent.phrases.length;
+            triggerEvent.phrases.length > 1) {
+            
+          // Try up to 3 times to get a different index 
+          // (this helps avoid repetition while still being random)
+          for (let i = 0; i < 3; i++) {
+            const newIndex = Math.floor(Math.random() * triggerEvent.phrases.length);
+            // If found a different index, use it
+            if (newIndex !== triggerEvent.lastUsedPhraseIndex) {
+              phraseIndex = newIndex;
+              break;
+            }
+          }
+          
+          // If we still got the same index after trying, just pick the next one
+          if (phraseIndex === triggerEvent.lastUsedPhraseIndex) {
+            phraseIndex = (phraseIndex + 1) % triggerEvent.phrases.length;
+          }
         }
         
         const selectedPhrase = triggerEvent.phrases[phraseIndex];
@@ -242,7 +334,17 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
             return t;
           });
           
-          return { ...prev, triggers: updatedTriggers };
+          // If this is a car alert, also update the global car alert timestamp
+          const updatedTelemetryData = {...prev.telemetryData};
+          if (isCarAlert) {
+            updatedTelemetryData[lastCarAlertKey] = now;
+          }
+          
+          return { 
+            ...prev, 
+            triggers: updatedTriggers,
+            telemetryData: updatedTelemetryData
+          };
         });
         
         // Process the phrase text by replacing placeholders with telemetry values
@@ -290,6 +392,14 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     setState(prev => ({ ...prev, selectedVoice: e.target.value }));
   };
 
+  // Handle voice style selection
+  const handleVoiceStyleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setState(prev => ({ 
+      ...prev, 
+      voiceStyle: e.target.value as 'normal' | 'aggressive' | 'panicked' 
+    }));
+  };
+
   // Toggle auto mode
   const toggleAutoMode = () => {
     setState(prev => ({ ...prev, autoMode: !prev.autoMode }));
@@ -309,12 +419,74 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
       window.speechSynthesis.cancel();
     }
     
-    // Create a new utterance
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Apply style-specific adjustments
+    let styleRateModifier = 1.0;
+    let stylePitchModifier = 1.0;
     
-    // Apply voice settings
-    utterance.rate = state.rate;
-    utterance.pitch = state.pitch;
+    switch (state.voiceStyle) {
+      case 'aggressive':
+        // Aggressive style: lower pitch, slightly faster rate, more emphasis
+        stylePitchModifier = 0.85;
+        styleRateModifier = 1.1;
+        break;
+      case 'panicked':
+        // Panicked style: higher pitch, much faster rate
+        stylePitchModifier = 1.15;
+        styleRateModifier = 1.25;
+        break;
+      case 'normal':
+      default:
+        // Normal style: no modifications
+        break;
+    }
+    
+    // Preprocess text to add more realistic speech patterns
+    let processedText = text
+      // Add pauses after punctuation
+      .replace(/—/g, ', ') // Replace em dashes with commas and space
+      .replace(/!/g, '! ') // Add space after exclamation points
+      .replace(/,/g, ', ') // Ensure space after commas for natural pauses
+      
+      // Break up longer sentences with subtle pauses
+      .replace(/(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)(\s+)(\w+)/g, '$1$2$3$4$5$6$7$8$9, $11')
+      
+      // Add natural pause patterns for warnings
+      .replace(/(watch|check|caution|careful|look|attention)/gi, '$1, ')
+      
+      // Handle profanity - add emphasis or slight pauses
+      .replace(/(fuck|shit|ass|cunt|bitch|bastard|dick|prick|twat|nuts|goddamn)/gi, (match) => {
+        // In real speech, profanity is often emphasized
+        return state.voiceStyle === 'aggressive' ? 
+          ` ${match.toUpperCase()} ` : // Aggressive style emphasizes profanity more
+          ` ${match} `;                // Normal emphasis for other styles
+      })
+      
+      // Add emphasis to directional warnings based on style
+      .replace(/(car|cars on both sides|two cars|left|right|both sides)/gi, (match) => {
+        if (state.voiceStyle === 'panicked') {
+          // Panicked style adds more emphasis to directional words
+          return ` ${match.toUpperCase()} `;
+        } else {
+          // Normal emphasis for other styles
+          return ` ${match} `;
+        }
+      })
+      
+      // Handle terminal profanity (at the end of a sentence) for proper emphasis
+      .replace(/(fuck|shit|ass|cunt|bitch|bastard|dick|prick|twat)(!|\.|$)/gi, (match, p1, p2) => {
+        return `${p1} ${p2}`; // Add a slight pause between profanity and punctuation
+      });
+      
+    // Create a new utterance
+    const utterance = new SpeechSynthesisUtterance(processedText);
+    
+    // Add slight randomness to speech parameters for more natural sound
+    const rateVariation = 0.05; // Small random variation in rate
+    const pitchVariation = 0.05; // Small random variation in pitch
+    
+    // Apply voice settings with style modifications and slight randomization
+    utterance.rate = state.rate * styleRateModifier * (1 + (Math.random() * 2 - 1) * rateVariation);
+    utterance.pitch = state.pitch * stylePitchModifier * (1 + (Math.random() * 2 - 1) * pitchVariation);
     utterance.volume = state.volume;
     
     // Set the selected voice
@@ -344,6 +516,29 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     // Speak
     window.speechSynthesis.speak(utterance);
   };
+
+  // Warm up the speech synthesis engine for better quality
+  const warmUpVoice = () => {
+    // Skip if already speaking
+    if (window.speechSynthesis.speaking) return;
+    
+    // Create and immediately cancel an utterance to "wake up" the speech engine
+    // This can lead to more consistent voice quality
+    const warmupUtterance = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(warmupUtterance);
+    window.speechSynthesis.cancel();
+  };
+  
+  // Add voice warmup on component initialization
+  useEffect(() => {
+    // Warm up the voice engine when the component is mounted
+    const warmupInterval = setInterval(warmUpVoice, 10000); // Every 10 seconds
+    warmUpVoice(); // Initial warmup
+    
+    return () => {
+      clearInterval(warmupInterval);
+    };
+  }, []);
 
   // Stop speaking
   const stop = () => {
@@ -493,6 +688,162 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
             >
               Stop
             </button>
+            
+            {/* Debug test button */}
+            <button 
+              onClick={() => {
+                // Simulate car on left
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "CarLeft",
+                    carLeft: true,
+                    // Reset other car flags to prevent interference
+                    carRight: false,
+                    twoCarsLeft: false,
+                    twoCarsRight: false,
+                    carsLeftRight: false
+                  }
+                }));
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Left Car
+            </button>
+            
+            {/* Debug test button for right car */}
+            <button 
+              onClick={() => {
+                // Simulate car on right
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "CarRight",
+                    carRight: true,
+                    // Reset other car flags
+                    carLeft: false,
+                    twoCarsLeft: false,
+                    twoCarsRight: false,
+                    carsLeftRight: false
+                  }
+                }));
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Right Car
+            </button>
+            
+            {/* Debug test button for two cars left */}
+            <button 
+              onClick={() => {
+                // Simulate two cars on left
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "TwoCarsLeft",
+                    carLeft: true,
+                    twoCarsLeft: true,
+                    // Reset other car flags
+                    carRight: false,
+                    twoCarsRight: false,
+                    carsLeftRight: false
+                  }
+                }));
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Two Left
+            </button>
+            
+            {/* Debug test button for two cars right */}
+            <button 
+              onClick={() => {
+                // Simulate two cars on right
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "TwoCarsRight",
+                    carRight: true,
+                    twoCarsRight: true,
+                    // Reset other car flags
+                    carLeft: false,
+                    twoCarsLeft: false,
+                    carsLeftRight: false
+                  }
+                }));
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Two Right
+            </button>
+            
+            {/* Debug test button for cars on both sides */}
+            <button 
+              onClick={() => {
+                // Simulate cars on both sides
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "CarLeftRight",
+                    carLeft: true,
+                    carRight: true,
+                    carsLeftRight: true,
+                    // Reset other car flags
+                    twoCarsLeft: false,
+                    twoCarsRight: false
+                  }
+                }));
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Both Sides
+            </button>
+            
+            {/* Demo priority test button */}
+            {/* This button demonstrates:
+                1. Highest priority for "cars on both sides" alerts
+                2. Higher priority for "two cars" alerts over single car alerts
+                3. Global cooldown - clicking multiple car alert buttons within 5 seconds
+                   will only trigger the first one due to the global cooldown */}
+            <button 
+              onClick={() => {
+                // Simulate a complex scenario with multiple alerts at once
+                // Highest priority should win (carsLeftRight)
+                setState(prev => ({
+                  ...prev,
+                  telemetryData: {
+                    ...prev.telemetryData,
+                    car_left_right: "CarLeftRight", // This should determine the state
+                    carLeft: true,                  // Lower priority
+                    carRight: true,                 // Lower priority
+                    twoCarsLeft: true,              // Medium priority
+                    twoCarsRight: false,            // Not active
+                    carsLeftRight: true             // Highest priority - this should win
+                  }
+                }));
+                
+                // Immediately check triggers
+                setTimeout(checkTriggers, 100);
+              }}
+              className="flex-1 bg-pink-600 hover:bg-pink-700 text-white font-bold py-1 px-3 rounded text-sm non-draggable interactive"
+            >
+              Test Priority
+            </button>
           </div>
         </div>
         
@@ -552,6 +903,41 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
                 onChange={handleVolumeChange}
                 className="w-full non-draggable interactive"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-1">Voice Style:</label>
+              <div className="flex space-x-2">
+                <select 
+                  className="flex-1 bg-gray-700 text-white border border-gray-600 rounded p-1 text-sm non-draggable interactive"
+                  value={state.voiceStyle}
+                  onChange={handleVoiceStyleChange}
+                >
+                  <option value="normal">Normal (Calm, measured delivery)</option>
+                  <option value="aggressive">Aggressive (Lower, intense delivery)</option>
+                  <option value="panicked">Panicked (Higher, urgent delivery)</option>
+                </select>
+                <button
+                  onClick={() => {
+                    // Test the current style with a sample phrase
+                    const samplePhrases = {
+                      normal: "Car on your left, check your mirrors",
+                      aggressive: "Car on your left, don't let that bastard through!",
+                      panicked: "Watch your left, shit—he's coming in hot!"
+                    };
+                    const phrase = samplePhrases[state.voiceStyle] || samplePhrases.normal;
+                    speakText(phrase);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded non-draggable interactive"
+                >
+                  Test
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {state.voiceStyle === 'normal' && "Professional, calm race engineer style"}
+                {state.voiceStyle === 'aggressive' && "Intense, authoritative drill sergeant style"}
+                {state.voiceStyle === 'panicked' && "Urgent, high-pressure warning style"}
+              </p>
             </div>
           </div>
         </details>
@@ -679,7 +1065,12 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         
         {/* Telemetry data preview */}
         <details className="mt-3 bg-gray-800 rounded p-2 non-draggable interactive">
-          <summary className="font-medium cursor-pointer text-sm non-draggable interactive">Telemetry Values</summary>
+          <summary className="font-medium cursor-pointer text-sm non-draggable interactive">
+            Telemetry Values {isConnected ? 
+              <span className="text-green-500">(Connected)</span> : 
+              <span className="text-red-500">(Disconnected)</span>
+            }
+          </summary>
           <div className="mt-2 text-xs grid grid-cols-2 gap-2">
             {Object.entries(state.telemetryData).map(([key, value]) => (
               <div key={key} className="flex justify-between">
