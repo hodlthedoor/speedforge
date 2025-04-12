@@ -22,6 +22,45 @@ impl Default for CarLeftRight {
     }
 }
 
+/// Engine warning flags from iRacing SDK
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EngineWarnings {
+    pub water_temp_warning: bool,
+    pub fuel_pressure_warning: bool,
+    pub oil_pressure_warning: bool,
+    pub engine_stalled: bool,
+    pub pit_speed_limiter: bool,
+    pub rev_limiter_active: bool,
+    pub oil_temp_warning: bool,
+    pub raw_value: u32,
+}
+
+impl Default for EngineWarnings {
+    fn default() -> Self {
+        Self {
+            water_temp_warning: false,
+            fuel_pressure_warning: false,
+            oil_pressure_warning: false,
+            engine_stalled: false,
+            pit_speed_limiter: false,
+            rev_limiter_active: false,
+            oil_temp_warning: false,
+            raw_value: 0,
+        }
+    }
+}
+
+/// Weekend info summary
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct WeekendInfo {
+    pub track_name: String,
+    pub track_config: String,
+    pub temperature_unit: String,
+    pub speed_unit: String,
+    pub session_type: String,
+    pub track_length_km: f32,
+}
+
 /// Represents all telemetry data organized into logical sections
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct TelemetryData {
@@ -37,6 +76,9 @@ pub struct TelemetryData {
     pub track_surface: String,
     pub PlayerTrackSurface: i32,  // Raw numeric value
     pub car_left_right: CarLeftRight, // Cars to left/right indicator
+    
+    // Engine Warnings
+    pub engine_warnings: EngineWarnings,
     
     // Velocity Vectors (Car Local Coordinates)
     pub VelocityX: f32,     // Forward/backward velocity (car's local X axis)
@@ -75,6 +117,10 @@ pub struct TelemetryData {
     pub delta_session_best: f32,
     pub delta_optimal: f32,
     pub position: i32,
+    pub incident_count: i32, // PlayerCarDriverIncidentCount
+    
+    // Weekend Info
+    pub weekend_info: WeekendInfo,
     
     // Fuel & Temps
     pub fuel_level: f32,
@@ -124,6 +170,15 @@ pub const FLAG_BLUE: u32 = 0x00000020;
 pub const FLAG_BLACK: u32 = 0x00000040;
 pub const FLAG_BLACK_WHITE: u32 = 0x00000080;
 
+/// Engine warning constants based on iRacing SDK
+pub const ENGINE_WATER_TEMP_WARNING: u32 = 0x0001;
+pub const ENGINE_FUEL_PRESSURE_WARNING: u32 = 0x0002;
+pub const ENGINE_OIL_PRESSURE_WARNING: u32 = 0x0004;
+pub const ENGINE_STALLED: u32 = 0x0008;
+pub const ENGINE_PIT_SPEED_LIMITER: u32 = 0x0010;
+pub const ENGINE_REV_LIMITER_ACTIVE: u32 = 0x0020;
+pub const ENGINE_OIL_TEMP_WARNING: u32 = 0x0040;
+
 /// Convert any telemetry value to a serde_json Value for storage
 fn telemetry_value_to_json(value: Value) -> serde_json::Value {
     match value {
@@ -172,6 +227,63 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                 6 => CarLeftRight::TwoCarsRight, // there are two cars to our right
                 _ => CarLeftRight::Off,        // default for unknown values
             };
+        }
+    }
+    
+    // Extract Engine Warnings
+    if let Ok(engine_warnings) = telem.get("EngineWarnings") {
+        if let Ok(warnings_val) = TryInto::<u32>::try_into(engine_warnings) {
+            // Store raw value
+            raw_values.insert("EngineWarnings".to_string(), serde_json::json!(warnings_val));
+            
+            // Process engine warnings
+            data.engine_warnings = EngineWarnings {
+                water_temp_warning: (warnings_val & ENGINE_WATER_TEMP_WARNING) != 0,
+                fuel_pressure_warning: (warnings_val & ENGINE_FUEL_PRESSURE_WARNING) != 0,
+                oil_pressure_warning: (warnings_val & ENGINE_OIL_PRESSURE_WARNING) != 0,
+                engine_stalled: (warnings_val & ENGINE_STALLED) != 0,
+                pit_speed_limiter: (warnings_val & ENGINE_PIT_SPEED_LIMITER) != 0,
+                rev_limiter_active: (warnings_val & ENGINE_REV_LIMITER_ACTIVE) != 0,
+                oil_temp_warning: (warnings_val & ENGINE_OIL_TEMP_WARNING) != 0,
+                raw_value: warnings_val,
+            };
+        }
+    }
+    
+    // Extract Weekend Info fields
+    if let Ok(track_name) = telem.get("WeekendInfo:TrackName") {
+        if let Ok(track_name_str) = TryInto::<String>::try_into(track_name) {
+            data.weekend_info.track_name = track_name_str;
+        }
+    }
+    
+    if let Ok(track_config) = telem.get("WeekendInfo:TrackConfigName") {
+        if let Ok(track_config_str) = TryInto::<String>::try_into(track_config) {
+            data.weekend_info.track_config = track_config_str;
+        }
+    }
+    
+    if let Ok(temp_unit) = telem.get("WeekendInfo:TempUnit") {
+        if let Ok(temp_unit_str) = TryInto::<String>::try_into(temp_unit) {
+            data.weekend_info.temperature_unit = temp_unit_str;
+        }
+    }
+    
+    if let Ok(speed_unit) = telem.get("WeekendInfo:SpeedUnit") {
+        if let Ok(speed_unit_str) = TryInto::<String>::try_into(speed_unit) {
+            data.weekend_info.speed_unit = speed_unit_str;
+        }
+    }
+    
+    if let Ok(session_type) = telem.get("WeekendInfo:SessionType") {
+        if let Ok(session_type_str) = TryInto::<String>::try_into(session_type) {
+            data.weekend_info.session_type = session_type_str;
+        }
+    }
+    
+    if let Ok(track_length) = telem.get("WeekendInfo:TrackLength") {
+        if let Ok(track_length_f32) = TryInto::<f32>::try_into(track_length) {
+            data.weekend_info.track_length_km = track_length_f32;
         }
     }
     
@@ -292,6 +404,9 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     data.delta_session_best = TryInto::<f32>::try_into(telem.get("LapDeltaToSessionBestLap").unwrap_or(Value::FLOAT(0.0))).unwrap();
     data.delta_optimal = TryInto::<f32>::try_into(telem.get("LapDeltaToOptimalLap").unwrap_or(Value::FLOAT(0.0))).unwrap();
     data.position = TryInto::<i32>::try_into(telem.get("PlayerCarPosition").unwrap_or(Value::INT(0))).unwrap();
+    
+    // Incident count
+    data.incident_count = TryInto::<i32>::try_into(telem.get("PlayerCarDriverIncidentCount").unwrap_or(Value::INT(0))).unwrap();
     
     // Fuel & Temps
     data.fuel_level = TryInto::<f32>::try_into(telem.get("FuelLevel").unwrap_or(Value::FLOAT(0.0))).unwrap();

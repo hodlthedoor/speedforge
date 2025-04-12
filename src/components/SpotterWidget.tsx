@@ -1,28 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
+import { 
+  TriggerEvent, 
+  TriggerCondition, 
+  TriggerConfig, 
+  defaultTriggers, 
+  defaultTelemetryData, 
+  processText as processTextWithData,
+  createNewTrigger
+} from './spotterData';
 
 interface SpotterWidgetProps {
   id: string;
   onClose?: () => void;
 }
 
-// Define trigger conditions for automatic TTS
-type TriggerCondition = 'manual' | 'interval' | 'telemetry' | 'threshold';
-
-interface TriggerConfig {
-  condition: TriggerCondition;
-  interval?: number; // in ms, for interval
-  telemetryKey?: string; // for telemetry-based triggers
-  threshold?: number; // for threshold-based triggers
-  comparison?: 'gt' | 'lt' | 'eq' | 'change'; // greater than, less than, equal, any change
-  lastValue?: any; // to track changes
-  lastTriggered?: number; // timestamp of last trigger
-  cooldown?: number; // minimum time between triggers in ms
-}
-
 interface SpotterWidgetState {
   text: string;
-  phrases: { id: string, text: string, enabled: boolean, trigger: TriggerConfig }[];
+  triggers: TriggerEvent[];
   rate: number;
   pitch: number;
   volume: number;
@@ -30,49 +25,14 @@ interface SpotterWidgetState {
   availableVoices: SpeechSynthesisVoice[];
   speaking: boolean;
   autoMode: boolean;
-  telemetryData: Record<string, any>; // Store latest telemetry data
+  telemetryData: Record<string, any>; 
+  editingTriggerId: string | null; 
 }
 
 const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
   const [state, setState] = useState<SpotterWidgetState>({
     text: 'Hello, this is Speedforge spotter',
-    phrases: [
-      { 
-        id: '1', 
-        text: 'Current speed: {speed} kilometers per hour', 
-        enabled: true,
-        trigger: { 
-          condition: 'interval',
-          interval: 10000, // Every 10 seconds
-          lastTriggered: 0,
-          cooldown: 5000 // At least 5 seconds between announcements
-        }
-      },
-      { 
-        id: '2', 
-        text: 'Warning: low fuel', 
-        enabled: true,
-        trigger: { 
-          condition: 'threshold',
-          telemetryKey: 'fuel',
-          threshold: 10,
-          comparison: 'lt',
-          cooldown: 30000 // Only announce every 30 seconds
-        }
-      },
-      { 
-        id: '3', 
-        text: 'Car on your left', 
-        enabled: true,
-        trigger: { 
-          condition: 'telemetry',
-          telemetryKey: 'carLeft',
-          comparison: 'change',
-          lastValue: false,
-          cooldown: 3000
-        }
-      }
-    ],
+    triggers: defaultTriggers,
     rate: 1,
     pitch: 1,
     volume: 1,
@@ -80,16 +40,8 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     availableVoices: [],
     speaking: false,
     autoMode: false,
-    telemetryData: {
-      speed: 0,
-      rpm: 0,
-      gear: 0,
-      fuel: 100,
-      lap: 1,
-      position: 1,
-      carLeft: false,
-      carRight: false
-    }
+    telemetryData: defaultTelemetryData,
+    editingTriggerId: null
   });
   
   // Reference to track if component is mounted
@@ -163,19 +115,17 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
         timerId.current = null;
       }
     };
-  }, [state.autoMode, state.phrases, state.telemetryData]);
+  }, [state.autoMode, state.triggers, state.telemetryData]);
 
-  // Check all phrases for trigger conditions
+  // Check all triggers for conditions
   const checkTriggers = () => {
     const now = Date.now();
-    let shouldSpeak = false;
-    let textToSpeak = '';
     
-    // Check each phrase
-    for (const phrase of state.phrases) {
-      if (!phrase.enabled) continue;
+    // Check each trigger event
+    for (const triggerEvent of state.triggers) {
+      if (!triggerEvent.enabled || triggerEvent.phrases.length === 0) continue;
       
-      const trigger = phrase.trigger;
+      const trigger = triggerEvent.trigger;
       const lastTriggered = trigger.lastTriggered || 0;
       const cooldown = trigger.cooldown || 0;
       
@@ -212,33 +162,47 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
             const lastValue = trigger.lastValue;
             
             if (currentValue !== lastValue) {
-              // Only trigger if the change is meaningful (e.g., false to true for boolean values)
-              if (typeof currentValue === 'boolean' && currentValue === true) {
-                triggered = true;
+              // Special handling for car proximity alerts
+              if (trigger.telemetryKey === 'carLeft' || trigger.telemetryKey === 'carRight') {
+                // Only trigger when changing from false to true (car appears)
+                if (currentValue === true && lastValue === false) {
+                  triggered = true;
+                }
+              } 
+              // Default handling for other telemetry values
+              else if (typeof currentValue === 'boolean') {
+                if (currentValue === true) {
+                  triggered = true;
+                }
               } else if (typeof currentValue === 'number' && typeof lastValue === 'number') {
                 // For numeric values, trigger if significant change
-                const percentChange = Math.abs((currentValue - lastValue) / lastValue) * 100;
-                if (percentChange > 10) { // 10% change threshold
+                if (lastValue !== 0) { // Avoid division by zero
+                  const percentChange = Math.abs((currentValue - lastValue) / lastValue) * 100;
+                  if (percentChange > 10) { // 10% change threshold
+                    triggered = true;
+                  }
+                } else if (currentValue !== 0) {
+                  // If last value was 0 and current is not, that's a significant change
                   triggered = true;
                 }
               }
               
               // Update the last value
               setState(prev => {
-                const updatedPhrases = prev.phrases.map(p => {
-                  if (p.id === phrase.id) {
+                const updatedTriggers = prev.triggers.map(t => {
+                  if (t.id === triggerEvent.id) {
                     return {
-                      ...p,
+                      ...t,
                       trigger: {
-                        ...p.trigger,
+                        ...t.trigger,
                         lastValue: currentValue
                       }
                     };
                   }
-                  return p;
+                  return t;
                 });
                 
-                return { ...prev, phrases: updatedPhrases };
+                return { ...prev, triggers: updatedTriggers };
               });
             }
           }
@@ -249,74 +213,73 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
       }
       
       if (triggered) {
-        // Update the last triggered time
+        // Select a random phrase from the available phrases
+        let phraseIndex = Math.floor(Math.random() * triggerEvent.phrases.length);
+        
+        // Avoid repeating the last phrase if possible and there are multiple phrases
+        if (triggerEvent.lastUsedPhraseIndex !== undefined && 
+            triggerEvent.phrases.length > 1 && 
+            phraseIndex === triggerEvent.lastUsedPhraseIndex) {
+          // Choose a different phrase
+          phraseIndex = (phraseIndex + 1) % triggerEvent.phrases.length;
+        }
+        
+        const selectedPhrase = triggerEvent.phrases[phraseIndex];
+        
+        // Update the last triggered time and last used phrase
         setState(prev => {
-          const updatedPhrases = prev.phrases.map(p => {
-            if (p.id === phrase.id) {
+          const updatedTriggers = prev.triggers.map(t => {
+            if (t.id === triggerEvent.id) {
               return {
-                ...p,
+                ...t,
                 trigger: {
-                  ...p.trigger,
+                  ...t.trigger,
                   lastTriggered: now
-                }
+                },
+                lastUsedPhraseIndex: phraseIndex
               };
             }
-            return p;
+            return t;
           });
           
-          return { ...prev, phrases: updatedPhrases };
+          return { ...prev, triggers: updatedTriggers };
         });
         
-        // Process the phrase text by replacing placeholders with actual telemetry values
-        const processedText = processText(phrase.text);
-        textToSpeak = processedText;
-        shouldSpeak = true;
-        break; // Only speak one phrase at a time
+        // Process the phrase text by replacing placeholders with telemetry values
+        const processedText = processText(selectedPhrase);
+        
+        // Speak the processed text
+        speakText(processedText);
+        
+        // Only handle one trigger at a time to avoid multiple phrases speaking at once
+        break;
       }
-    }
-    
-    if (shouldSpeak && textToSpeak) {
-      speakText(textToSpeak);
     }
   };
 
   // Process text to replace placeholders with telemetry data
   const processText = (text: string): string => {
-    return text.replace(/{([^}]+)}/g, (match, key) => {
-      const value = state.telemetryData[key];
-      
-      if (value === undefined) {
-        return match; // Keep original placeholder if key not found
-      }
-      
-      // Format value based on type
-      if (typeof value === 'number') {
-        // Fix: Check if it's an integer by using Number.isInteger
-        return value.toFixed(Number.isInteger(value) ? 0 : 1);
-      }
-      
-      return String(value);
-    });
+    return processTextWithData(text, state.telemetryData);
   };
 
-  // Handle text update
+  // Handle text update for manual speaking
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setState(prev => ({ ...prev, text: e.target.value }));
   };
 
-  // Handle rate change
+  // Handle rate change for voice
   const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rate = parseFloat(e.target.value);
     setState(prev => ({ ...prev, rate }));
   };
 
-  // Handle pitch change
+  // Handle pitch change for voice
   const handlePitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pitch = parseFloat(e.target.value);
     setState(prev => ({ ...prev, pitch }));
   };
 
-  // Handle volume change
+  // Handle volume change for voice
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const volume = parseFloat(e.target.value);
     setState(prev => ({ ...prev, volume }));
@@ -389,58 +352,112 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
     setState(prev => ({ ...prev, speaking: false }));
   };
 
-  // Add a new phrase
-  const addPhrase = () => {
-    const newId = Date.now().toString();
+  // Add a new trigger event
+  const addTrigger = () => {
+    const newTrigger = createNewTrigger();
     setState(prev => ({
       ...prev,
-      phrases: [
-        ...prev.phrases,
-        {
-          id: newId,
-          text: 'New phrase',
-          enabled: true,
-          trigger: {
-            condition: 'manual'
-          }
+      triggers: [...prev.triggers, newTrigger],
+      editingTriggerId: newTrigger.id // Automatically start editing the new trigger
+    }));
+  };
+
+  // Update trigger name
+  const updateTriggerName = (id: string, name: string) => {
+    setState(prev => ({
+      ...prev,
+      triggers: prev.triggers.map(trigger => 
+        trigger.id === id ? { ...trigger, name } : trigger
+      )
+    }));
+  };
+
+  // Toggle trigger enabled state
+  const toggleTriggerEnabled = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      triggers: prev.triggers.map(trigger => 
+        trigger.id === id ? { ...trigger, enabled: !trigger.enabled } : trigger
+      )
+    }));
+  };
+
+  // Delete a trigger
+  const deleteTrigger = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      triggers: prev.triggers.filter(trigger => trigger.id !== id),
+      editingTriggerId: prev.editingTriggerId === id ? null : prev.editingTriggerId
+    }));
+  };
+
+  // Set the editing trigger
+  const setEditingTrigger = (id: string | null) => {
+    setState(prev => ({
+      ...prev,
+      editingTriggerId: id
+    }));
+  };
+
+  // Add a new phrase to a trigger
+  const addPhrase = (triggerId: string) => {
+    setState(prev => ({
+      ...prev,
+      triggers: prev.triggers.map(trigger => {
+        if (trigger.id === triggerId) {
+          return {
+            ...trigger,
+            phrases: [...trigger.phrases, 'New phrase']
+          };
         }
-      ]
+        return trigger;
+      })
     }));
   };
 
-  // Update phrase text
-  const updatePhraseText = (id: string, text: string) => {
+  // Update a phrase in a trigger
+  const updatePhrase = (triggerId: string, index: number, text: string) => {
     setState(prev => ({
       ...prev,
-      phrases: prev.phrases.map(phrase => 
-        phrase.id === id ? { ...phrase, text } : phrase
-      )
+      triggers: prev.triggers.map(trigger => {
+        if (trigger.id === triggerId) {
+          const updatedPhrases = [...trigger.phrases];
+          updatedPhrases[index] = text;
+          return {
+            ...trigger,
+            phrases: updatedPhrases
+          };
+        }
+        return trigger;
+      })
     }));
   };
 
-  // Toggle phrase enabled state
-  const togglePhraseEnabled = (id: string) => {
+  // Delete a phrase from a trigger
+  const deletePhrase = (triggerId: string, index: number) => {
     setState(prev => ({
       ...prev,
-      phrases: prev.phrases.map(phrase => 
-        phrase.id === id ? { ...phrase, enabled: !phrase.enabled } : phrase
-      )
+      triggers: prev.triggers.map(trigger => {
+        if (trigger.id === triggerId) {
+          const updatedPhrases = [...trigger.phrases];
+          updatedPhrases.splice(index, 1);
+          return {
+            ...trigger,
+            phrases: updatedPhrases
+          };
+        }
+        return trigger;
+      })
     }));
   };
 
-  // Delete a phrase
-  const deletePhrase = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      phrases: prev.phrases.filter(phrase => phrase.id !== id)
-    }));
-  };
-
-  // Test a specific phrase
-  const testPhrase = (id: string) => {
-    const phrase = state.phrases.find(p => p.id === id);
-    if (phrase) {
-      const processedText = processText(phrase.text);
+  // Test a random phrase from a trigger
+  const testTrigger = (triggerId: string) => {
+    const trigger = state.triggers.find(t => t.id === triggerId);
+    if (trigger && trigger.phrases.length > 0) {
+      // Select a random phrase
+      const randomIndex = Math.floor(Math.random() * trigger.phrases.length);
+      const processedText = processText(trigger.phrases[randomIndex]);
       speakText(processedText);
     }
   };
@@ -552,60 +569,110 @@ const SpotterWidget: React.FC<SpotterWidgetProps> = ({ id, onClose }) => {
           </button>
         </div>
         
-        {/* Phrases section */}
+        {/* Trigger Events section */}
         <div className="mb-2 flex justify-between items-center">
-          <h3 className="text-sm font-medium">Automatic Phrases</h3>
+          <h3 className="text-sm font-medium">Trigger Events</h3>
           <button 
-            onClick={addPhrase}
+            onClick={addTrigger}
             className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded non-draggable interactive"
           >
-            + Add
+            + Add Trigger
           </button>
         </div>
         
         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-          {state.phrases.map(phrase => (
-            <div key={phrase.id} className="bg-gray-800 rounded p-2 text-sm">
-              <div className="flex justify-between mb-1">
-                <button
-                  onClick={() => togglePhraseEnabled(phrase.id)}
-                  className={`px-2 py-0.5 rounded text-xs non-draggable interactive ${
-                    phrase.enabled ? 'bg-green-600' : 'bg-gray-600'
-                  }`}
-                >
-                  {phrase.enabled ? 'Enabled' : 'Disabled'}
-                </button>
+          {state.triggers.map(trigger => (
+            <div key={trigger.id} className="bg-gray-800 rounded p-2 text-sm mb-3">
+              {/* Trigger header with controls */}
+              <div className="flex justify-between mb-1 items-center">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => toggleTriggerEnabled(trigger.id)}
+                    className={`px-2 py-0.5 rounded-full text-xs non-draggable interactive ${
+                      trigger.enabled ? 'bg-green-600' : 'bg-gray-600'
+                    }`}
+                  >
+                    {trigger.enabled ? 'On' : 'Off'}
+                  </button>
+                  <input
+                    type="text"
+                    value={trigger.name}
+                    onChange={(e) => updateTriggerName(trigger.id, e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded px-2 py-0.5 text-xs non-draggable interactive"
+                  />
+                </div>
                 <div className="space-x-1">
                   <button
-                    onClick={() => testPhrase(phrase.id)}
+                    onClick={() => testTrigger(trigger.id)}
                     className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-0.5 rounded non-draggable interactive"
+                    title="Test a random phrase from this trigger"
                   >
                     Test
                   </button>
                   <button
-                    onClick={() => deletePhrase(phrase.id)}
+                    onClick={() => state.editingTriggerId === trigger.id ? setEditingTrigger(null) : setEditingTrigger(trigger.id)}
+                    className="bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-0.5 rounded non-draggable interactive"
+                  >
+                    {state.editingTriggerId === trigger.id ? 'Close' : 'Edit'}
+                  </button>
+                  <button
+                    onClick={() => deleteTrigger(trigger.id)}
                     className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-0.5 rounded non-draggable interactive"
                   >
                     Delete
                   </button>
                 </div>
               </div>
-              <input
-                type="text"
-                value={phrase.text}
-                onChange={(e) => updatePhraseText(phrase.id, e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs mt-1 non-draggable interactive"
-              />
-              <div className="text-xs text-gray-400 mt-1">
-                Trigger: {phrase.trigger.condition}
-                {phrase.trigger.condition === 'interval' && ` (every ${(phrase.trigger.interval || 0) / 1000}s)`}
-                {phrase.trigger.condition === 'threshold' && ` (${phrase.trigger.telemetryKey} ${
-                  phrase.trigger.comparison === 'lt' ? '<' : 
-                  phrase.trigger.comparison === 'gt' ? '>' : 
-                  phrase.trigger.comparison === 'eq' ? '=' : 
+
+              {/* Trigger details */}
+              <div className="text-xs text-gray-400 mt-1 mb-2">
+                Type: {trigger.trigger.condition}
+                {trigger.trigger.condition === 'interval' && ` (every ${(trigger.trigger.interval || 0) / 1000}s)`}
+                {trigger.trigger.condition === 'threshold' && ` (${trigger.trigger.telemetryKey} ${
+                  trigger.trigger.comparison === 'lt' ? '<' : 
+                  trigger.trigger.comparison === 'gt' ? '>' : 
+                  trigger.trigger.comparison === 'eq' ? '=' : 
                   '≠'
-                } ${phrase.trigger.threshold})`}
+                } ${trigger.trigger.threshold})`}
+                • {trigger.phrases.length} phrase{trigger.phrases.length !== 1 ? 's' : ''}
               </div>
+
+              {/* Expanded view for editing phrases */}
+              {state.editingTriggerId === trigger.id && (
+                <div className="mt-3 border-t border-gray-700 pt-2">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-medium">Phrases ({trigger.phrases.length})</span>
+                    <button 
+                      onClick={() => addPhrase(trigger.id)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-1.5 py-0.5 rounded non-draggable interactive"
+                    >
+                      + Add Phrase
+                    </button>
+                  </div>
+                  
+                  {/* Phrase list */}
+                  <div className="space-y-2">
+                    {trigger.phrases.map((phrase, index) => (
+                      <div key={`${trigger.id}-phrase-${index}`} className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={phrase}
+                          onChange={(e) => updatePhrase(trigger.id, index, e.target.value)}
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs non-draggable interactive"
+                        />
+                        <button
+                          onClick={() => deletePhrase(trigger.id, index)}
+                          disabled={trigger.phrases.length <= 1}
+                          title={trigger.phrases.length <= 1 ? "At least one phrase is required" : "Delete phrase"}
+                          className="text-red-500 hover:text-red-400 disabled:text-gray-500 text-xs non-draggable interactive"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
