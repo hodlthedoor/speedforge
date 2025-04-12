@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
+// Import our speech module
+import { initSpeechModule, cleanup as cleanupSpeech } from './speech/speechModule.mjs';
+
 // In ES modules, we need to recreate __dirname and __filename
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -410,6 +413,9 @@ app.on('before-quit', () => {
   ipcMain.removeHandler('app:getDisplays');
   ipcMain.removeHandler('app:getCurrentDisplayId');
   
+  // Clean up speech module
+  cleanupSpeech();
+  
   // Close windows gracefully
   for (const win of windows) {
     try {
@@ -431,6 +437,9 @@ app.on('before-quit', () => {
 app.whenReady().then(() => {
   // Set application name for process manager
   app.setName('Speedforge');
+  
+  // Initialize the speech module
+  initSpeechModule();
   
   createWindows();
   setupIpcListeners();

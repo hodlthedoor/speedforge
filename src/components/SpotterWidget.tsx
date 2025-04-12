@@ -63,8 +63,8 @@ import WidgetManager from '../services/WidgetManager';
 declare global {
   interface Window {
     electronSpeech?: {
-      speak: (text: string, voice: string, rate: number, callback: () => void) => void;
-      stop: () => void;
+      speak: (text: string, voice: string, rate: number, volume: number) => Promise<any>;
+      stop: () => Promise<any>;
       getVoices: () => Promise<string[]>;
     };
     electronAPI?: {
@@ -564,57 +564,57 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
     // Set speaking state
     setState(prev => ({ ...prev, speaking: true }));
     
-    // Check if native speech synthesis is available (Electron)
+    // Check if native speech synthesis is available via Electron (preferred method)
     if (window.electronSpeech) {
+      console.log('Using native speech synthesis via Electron');
+      
+      // Determine which voice to use
+      const voiceToUse = state.selectedVoice || '';
+      
       // Use native speech synthesis for better quality
       window.electronSpeech.speak(
         processedText,
-        state.selectedVoice,
+        voiceToUse,
         state.rate * styleRateModifier,
-        () => {
+        state.volume
+      ).then(response => {
+        console.log('Native speech started:', response);
+        
+        // Speech has started successfully, but we'll mark it as completed 
+        // once the promise in the response resolves
+        if (response && response.promise) {
+          response.promise
+            .then(() => {
+              console.log('Native speech completed');
+              if (isMounted.current) {
+                setState(prev => ({ ...prev, speaking: false }));
+              }
+            })
+            .catch((error) => {
+              console.error('Error during native speech:', error);
+              if (isMounted.current) {
+                setState(prev => ({ ...prev, speaking: false }));
+              }
+            });
+        }
+      }).catch(error => {
+        console.error('Failed to start native speech:', error);
+        
+        // Fall back to Web Speech API if native speech fails
+        if (window.speechSynthesis && isMounted.current) {
+          console.log('Falling back to Web Speech API');
+          useWebSpeechAPI(processedText, styleRateModifier, stylePitchModifier);
+        } else {
           if (isMounted.current) {
             setState(prev => ({ ...prev, speaking: false }));
           }
         }
-      );
+      });
     } 
     // Fall back to Web Speech API
     else if (window.speechSynthesis) {
-      // Create a new utterance
-      const utterance = new SpeechSynthesisUtterance(processedText);
-      
-      // Add slight randomness to speech parameters for more natural sound
-      const rateVariation = 0.05; // Small random variation in rate
-      const pitchVariation = 0.05; // Small random variation in pitch
-      
-      // Apply voice settings with style modifications and slight randomization
-      utterance.rate = state.rate * styleRateModifier * (1 + (Math.random() * 2 - 1) * rateVariation);
-      utterance.pitch = state.pitch * stylePitchModifier * (1 + (Math.random() * 2 - 1) * pitchVariation);
-      utterance.volume = state.volume;
-      
-      // Set the selected voice
-      if (state.selectedVoice) {
-        const voice = state.availableVoices.find(v => v.name === state.selectedVoice);
-        if (voice) {
-          utterance.voice = voice;
-        }
-      }
-      
-      // Add event handlers
-      utterance.onend = () => {
-        if (isMounted.current) {
-          setState(prev => ({ ...prev, speaking: false }));
-        }
-      };
-      
-      utterance.onerror = () => {
-        if (isMounted.current) {
-          setState(prev => ({ ...prev, speaking: false }));
-        }
-      };
-      
-      // Speak
-      window.speechSynthesis.speak(utterance);
+      console.log('Native speech not available, using Web Speech API');
+      useWebSpeechAPI(processedText, styleRateModifier, stylePitchModifier);
     }
     // No speech synthesis available
     else {
@@ -622,12 +622,60 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
       setState(prev => ({ ...prev, speaking: false }));
     }
   };
+  
+  // Helper function to use Web Speech API
+  const useWebSpeechAPI = (text: string, rateModifier: number, pitchModifier: number) => {
+    // Create a new utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Add slight randomness to speech parameters for more natural sound
+    const rateVariation = 0.05; // Small random variation in rate
+    const pitchVariation = 0.05; // Small random variation in pitch
+    
+    // Apply voice settings with style modifications and slight randomization
+    utterance.rate = state.rate * rateModifier * (1 + (Math.random() * 2 - 1) * rateVariation);
+    utterance.pitch = state.pitch * pitchModifier * (1 + (Math.random() * 2 - 1) * pitchVariation);
+    utterance.volume = state.volume;
+    
+    // Set the selected voice
+    if (state.selectedVoice) {
+      const voice = state.availableVoices.find(v => v.name === state.selectedVoice);
+      if (voice) {
+        utterance.voice = voice;
+      }
+    }
+    
+    // Add event handlers
+    utterance.onend = () => {
+      if (isMounted.current) {
+        setState(prev => ({ ...prev, speaking: false }));
+      }
+    };
+    
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      if (isMounted.current) {
+        setState(prev => ({ ...prev, speaking: false }));
+      }
+    };
+    
+    // Speak
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Create a dedicated stop function that works with both APIs
   const stopSpeech = () => {
     if (window.electronSpeech) {
-      window.electronSpeech.stop();
+      // Using the native speech synthesis
+      window.electronSpeech.stop()
+        .then(() => {
+          console.log('Native speech stopped');
+        })
+        .catch(error => {
+          console.error('Error stopping native speech:', error);
+        });
     } else if (window.speechSynthesis) {
+      // Using the Web Speech API
       window.speechSynthesis.cancel();
     }
   };
@@ -784,13 +832,86 @@ const SpotterWidgetComponent: React.FC<SpotterWidgetProps> = ({ id, onClose }) =
     const checkNativeSpeech = async () => {
       if (window.electronSpeech) {
         try {
+          console.log("Checking for native speech capabilities...");
           const voices = await window.electronSpeech.getVoices();
-          setAvailableNativeVoices(voices);
-          setUseNativeSpeech(voices.length > 0);
-          console.log("Native voices available:", voices);
+          
+          if (Array.isArray(voices) && voices.length > 0) {
+            console.log("Native voices available:", voices);
+            
+            // Convert the voice strings to SpeechSynthesisVoice objects for compatibility
+            const voiceObjects = voices.map(voiceName => {
+              // Extract language code if available (usually in format: "Alex (en-US)")
+              const langMatch = voiceName.match(/\(([a-z]{2}(-[A-Z]{2})?)\)/);
+              const lang = langMatch ? langMatch[1] : 'en-US'; // Default to en-US if not found
+              
+              // Create a simplified voice object that matches SpeechSynthesisVoice interface
+              return {
+                name: voiceName,
+                lang: lang,
+                localService: true,
+                default: false,
+                voiceURI: voiceName
+              } as SpeechSynthesisVoice;
+            });
+            
+            setAvailableNativeVoices(voices);
+            setUseNativeSpeech(true);
+            
+            // Update state with voice objects and select the first voice
+            setState(prev => ({
+              ...prev,
+              availableVoices: voiceObjects,
+              selectedVoice: voiceObjects.length > 0 ? voiceObjects[0].name : ''
+            }));
+            
+            console.log("Native speech synthesis initialized with", voiceObjects.length, "voices");
+          } else {
+            console.log("No native voices found, falling back to Web Speech API");
+            setUseNativeSpeech(false);
+            
+            // Fall back to Web Speech API
+            loadWebSpeechVoices();
+          }
         } catch (error) {
           console.error("Error loading native voices:", error);
           setUseNativeSpeech(false);
+          
+          // Fall back to Web Speech API
+          loadWebSpeechVoices();
+        }
+      } else {
+        console.log("Native speech module not available, using Web Speech API");
+        setUseNativeSpeech(false);
+        
+        // Use Web Speech API
+        loadWebSpeechVoices();
+      }
+    };
+    
+    // Helper function to load Web Speech API voices
+    const loadWebSpeechVoices = () => {
+      const voices = window.speechSynthesis?.getVoices() || [];
+      if (voices.length > 0) {
+        console.log("Web Speech API voices loaded:", voices.length, "voices");
+        setState(prev => ({ 
+          ...prev, 
+          availableVoices: voices,
+          selectedVoice: voices.length > 0 ? voices[0].name : ''
+        }));
+      } else {
+        // Chrome loads voices asynchronously, set up event handler
+        if (window.speechSynthesis?.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = () => {
+            const updatedVoices = window.speechSynthesis.getVoices();
+            console.log("Web Speech API voices loaded (async):", updatedVoices.length, "voices");
+            if (isMounted.current) {
+              setState(prev => ({ 
+                ...prev, 
+                availableVoices: updatedVoices,
+                selectedVoice: updatedVoices.length > 0 ? updatedVoices[0].name : ''
+              }));
+            }
+          };
         }
       }
     };

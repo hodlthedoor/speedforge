@@ -78,5 +78,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 });
 
+// Expose speech synthesis API to renderer process
+contextBridge.exposeInMainWorld('electronSpeech', {
+  // Get available voices
+  getVoices: async (): Promise<string[]> => {
+    try {
+      return await ipcRenderer.invoke('speech:getVoices');
+    } catch (error) {
+      console.error('Error getting voices:', error);
+      return [];
+    }
+  },
+  
+  // Speak text with specified voice and parameters
+  speak: async (text: string, voice?: string, rate?: number, volume?: number): Promise<any> => {
+    try {
+      console.log(`Preload: Speaking "${text}" with voice=${voice}, rate=${rate}, volume=${volume}`);
+      return await ipcRenderer.invoke('speech:speak', text, voice, rate, volume);
+    } catch (error) {
+      console.error('Error speaking:', error);
+      throw error;
+    }
+  },
+  
+  // Stop speech
+  stop: async (id?: number): Promise<any> => {
+    try {
+      return await ipcRenderer.invoke('speech:stop', id);
+    } catch (error) {
+      console.error('Error stopping speech:', error);
+      throw error;
+    }
+  }
+});
+
 // Log when preload script has completed
 console.log('Preload script executed successfully');
