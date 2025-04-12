@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
+import { withControls } from '../widgets/WidgetRegistryAdapter';
+import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
+import { WidgetManager } from '../services/WidgetManager';
 
 interface PedalTraceWidgetProps {
   id: string;
@@ -14,11 +17,25 @@ interface PedalData {
   brake: number;
 }
 
-const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
+const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<PedalData[]>([]);
   const dataRef = useRef<PedalData[]>([]);
   const animationFrameId = useRef<number | null>(null);
+  const [historyLength, setHistoryLength] = useState<number>(100);
+  
+  // Listen for widget state updates to sync the historyLength
+  useEffect(() => {
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        if (event.state.historyLength !== undefined) {
+          setHistoryLength(Number(event.state.historyLength));
+        }
+      }
+    });
+    
+    return unsubscribe;
+  }, [id]);
   
   // Use our custom hook with throttle and brake metrics
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -37,7 +54,8 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       };
 
       // Update ref without causing a state update
-      dataRef.current = [...dataRef.current, newData].slice(-100);
+      // Use historyLength from state for the slice limit
+      dataRef.current = [...dataRef.current, newData].slice(-historyLength);
       
       // Only update state when we need to redraw
       if (!animationFrameId.current) {
@@ -55,7 +73,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
         animationFrameId.current = null;
       }
     };
-  }, [telemetryData]);
+  }, [telemetryData, historyLength]);
 
   // D3 drawing logic
   const updateChart = useCallback(() => {
@@ -63,7 +81,7 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
 
     const svg = d3.select(svgRef.current);
     const width = 400;
-    const height = 200;
+    const height = 150;
     const margin = { top: 3, right: 0, bottom: 3, left: 0 };
 
     // Clear previous content
@@ -132,11 +150,39 @@ const PedalTraceWidget: React.FC<PedalTraceWidgetProps> = ({ id, onClose }) => {
       <svg
         ref={svgRef}
         width={400}
-        height={200}
+        height={150}
         className="bg-transparent"
       />
     </Widget>
   );
 };
+
+// Define the controls that will appear in the control panel
+const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
+  // Default to 100 if not set
+  const historyLength = widgetState.historyLength || 100;
+  
+  const controls: WidgetControlDefinition[] = [
+    {
+      id: 'historyLength',
+      type: 'slider' as WidgetControlType,
+      label: `History Length: ${historyLength} points`,
+      value: historyLength,
+      options: [
+        { value: '20', label: 'Very Short' },
+        { value: '50', label: 'Short' },
+        { value: '100', label: 'Medium' },
+        { value: '200', label: 'Long' },
+        { value: '500', label: 'Very Long' }
+      ],
+      onChange: (value) => updateWidget({ historyLength: Number(value) })
+    }
+  ];
+  
+  return controls;
+};
+
+// Wrap the component with the controls
+const PedalTraceWidget = withControls(PedalTraceWidgetComponent, getPedalTraceControls);
 
 export default PedalTraceWidget; 
