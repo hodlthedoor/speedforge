@@ -6,6 +6,7 @@ const __dirname = path.dirname(__filename);
 process.env.DIST = path.join(__dirname, "../dist");
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, "../public");
 const windows = [];
+const displayWindowMap = /* @__PURE__ */ new Map();
 let stayOnTopInterval = null;
 let autoCreateWindowsForNewDisplays = true;
 function createWindows() {
@@ -65,8 +66,11 @@ function createWindows() {
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
     win.loadURL(mainUrl);
     windows.push(win);
+    displayWindowMap.set(display.id, win);
+    win.displayId = display.id;
     win.webContents.on("did-finish-load", () => {
       console.log(`Window for display ${display.id} is ready`);
+      win.webContents.send("display:id", display.id);
       if (process.platform === "darwin") {
         win.setBounds({
           x: display.bounds.x,
@@ -82,6 +86,31 @@ function createWindows() {
       win.webContents.openDevTools({ mode: "detach" });
     }
   }
+}
+function closeWindowForDisplay(displayId) {
+  console.log(`Attempting to close window for display ID: ${displayId}`);
+  const win = displayWindowMap.get(displayId);
+  if (!win) {
+    console.log(`No window found for display ID: ${displayId}`);
+    return false;
+  }
+  try {
+    if (!win.isDestroyed()) {
+      console.log(`Closing window for display ID: ${displayId}`);
+      win.removeAllListeners();
+      win.setClosable(true);
+      win.close();
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      return true;
+    }
+  } catch (error) {
+    console.error(`Error closing window for display ID: ${displayId}`, error);
+  }
+  return false;
 }
 function setupIpcListeners() {
   ipcMain.handle("app:quit", () => {
@@ -155,6 +184,53 @@ function setupIpcListeners() {
       return errorResponse;
     }
   });
+  ipcMain.handle("app:closeWindowForDisplay", (event, displayId) => {
+    console.log(`Received request to close window for display ID: ${displayId}`);
+    if (displayId === void 0) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        displayId = win.displayId;
+      }
+    }
+    if (displayId === void 0) {
+      return { success: false, error: "No display ID provided or found" };
+    }
+    const success = closeWindowForDisplay(displayId);
+    return { success };
+  });
+  ipcMain.handle("app:getDisplays", () => {
+    try {
+      const displays = screen.getAllDisplays();
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const displayInfo = displays.map((display) => ({
+        id: display.id,
+        bounds: display.bounds,
+        workArea: display.workArea,
+        isPrimary: display.id === primaryDisplay.id,
+        scaleFactor: display.scaleFactor,
+        rotation: display.rotation,
+        size: display.size,
+        label: display.label || `Display ${display.id}`
+      }));
+      return { success: true, displays: displayInfo };
+    } catch (error) {
+      console.error("Error getting displays:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+  ipcMain.handle("app:getCurrentDisplayId", (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        const displayId = win.displayId;
+        return { success: true, displayId };
+      }
+      return { success: false, error: "No window found for web contents" };
+    } catch (error) {
+      console.error("Error getting current display ID:", error);
+      return { success: false, error: String(error) };
+    }
+  });
 }
 app.on("window-all-closed", () => {
   globalShortcut.unregisterAll();
@@ -173,6 +249,9 @@ app.on("before-quit", () => {
   ipcMain.removeHandler("app:quit");
   ipcMain.removeHandler("app:toggleAutoNewWindows");
   ipcMain.removeHandler("app:toggleClickThrough");
+  ipcMain.removeHandler("app:closeWindowForDisplay");
+  ipcMain.removeHandler("app:getDisplays");
+  ipcMain.removeHandler("app:getCurrentDisplayId");
   for (const win of windows) {
     try {
       if (!win.isDestroyed()) {
@@ -259,10 +338,14 @@ app.whenReady().then(() => {
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
     win.loadURL(mainUrl);
     windows.push(win);
+    displayWindowMap.set(display.id, win);
+    win.displayId = display.id;
     console.log(`Created new window for display ${display.id}`);
   });
   screen.on("display-removed", (event, display) => {
     console.log("Display removed:", display);
+    const result = closeWindowForDisplay(display.id);
+    console.log(`Window for removed display ${display.id} was ${result ? "closed" : "not found or could not be closed"}`);
   });
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();

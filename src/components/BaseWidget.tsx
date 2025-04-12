@@ -66,7 +66,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
             <div className="text-sm font-medium text-slate-300 mb-2">{title}</div>
             <div className="rounded-full h-3 w-3 bg-red-500 mx-auto animate-pulse"></div>
             <p className="mt-2 text-sm font-medium text-red-400">Disconnected</p>
-            <p className="text-xs text-gray-500">Attempting to reconnect...</p>
+            <p className="text-xs text-gray-500">Waiting for connection...</p>
           </div>
         ) : (
           children

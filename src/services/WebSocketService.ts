@@ -88,6 +88,12 @@ export class WebSocketService {
           window.electronAPI.send('telemetry:connectionChange', false);
         }
 
+        // Clear any existing reconnect timer
+        if (this.reconnectTimer) {
+          window.clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+
         // Try to reconnect after a delay
         this.reconnectTimer = window.setTimeout(() => {
           console.log('WebSocketService: Attempting to reconnect...');
@@ -120,7 +126,10 @@ export class WebSocketService {
     // Close existing connection if any
     if (this.ws) {
       console.log('WebSocketService: Closing existing connection');
-      this.ws.close();
+      // Only close if it's already in an open state
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
+      }
       this.ws = null;
     }
     
@@ -130,9 +139,11 @@ export class WebSocketService {
       this.reconnectTimer = null;
     }
     
-    // Connect immediately
+    // Connect after a small delay to allow previous connections to clean up
     console.log('WebSocketService: Starting new connection');
-    this.connect();
+    setTimeout(() => {
+      this.connect();
+    }, 500);
     
     return;
   }

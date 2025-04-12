@@ -26,6 +26,24 @@ function App() {
   // Track all active widgets
   const [widgets, setWidgets] = useState<any[]>([]);
   
+  // Track WebSocket connection status
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  
+  // Listen for WebSocket connection status changes
+  useEffect(() => {
+    const webSocketService = WebSocketService.getInstance();
+    const handleConnectionChange = (connected: boolean) => {
+      setIsConnected(connected);
+      console.log(`WebSocket connection status changed: ${connected ? 'Connected' : 'Disconnected'}`);
+    };
+    
+    webSocketService.addConnectionListener('app', handleConnectionChange);
+    
+    return () => {
+      webSocketService.removeListeners('app');
+    };
+  }, []);
+  
   // Callback for when SimpleControlPanel adds a widget
   const handleAddWidget = useCallback((newWidget: any) => {
     // Check if this widget already exists (for updates)

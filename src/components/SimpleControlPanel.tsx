@@ -84,22 +84,6 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
   }, [onAddWidget, selectedWidget, activeWidgets]);
 
-  // Close widgets when connection is lost
-  useEffect(() => {
-    // Only close widgets if we were previously connected and now disconnected
-    if (!isConnected) {
-      // Close all active widgets
-      if (Array.isArray(activeWidgets)) {
-        activeWidgets.forEach(widget => {
-          if (widget.enabled) {
-            console.log(`Monitor disconnected, removing widget ${widget.id}`);
-            closeWidget(widget.id);
-          }
-        });
-      }
-    }
-  }, [isConnected, activeWidgets, closeWidget]);
-  
   // Function to manually reconnect
   const handleReconnect = () => {
     setReconnecting(true);
