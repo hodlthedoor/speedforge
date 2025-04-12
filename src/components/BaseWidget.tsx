@@ -75,7 +75,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
 
   return (
     <div 
-      className={`drag-handle w-auto max-w-[500px] ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} rounded-lg shadow-lg ${isBackgroundTransparent ? '' : 'backdrop-blur-md'} overflow-hidden m-0 border border-slate-600/30 ${className}`}
+      className={`drag-handle w-auto max-w-[500px] ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
       style={{ opacity: currentOpacity }}
       onClick={handleWidgetClick}
     >

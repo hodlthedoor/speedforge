@@ -441,6 +441,58 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     fetchDisplays();
   }, [fetchDisplays]);
   
+  // Function to show all widgets (reset opacity and transparency)
+  const handleShowAllWidgets = () => {
+    // Only proceed if there are active widgets
+    if (!activeWidgets?.length) return;
+    
+    // Create a new opacity object with 1 (100%) for all widgets
+    const newOpacity: Record<string, number> = {};
+    // Create a new transparency object with false for all widgets
+    const newTransparency: Record<string, boolean> = {};
+    
+    // Set values for all active widgets
+    activeWidgets.forEach(widget => {
+      if (widget.enabled) {
+        newOpacity[widget.id] = 1;
+        newTransparency[widget.id] = false;
+        
+        // Update widget opacity via event
+        const opacityEvent = new CustomEvent('widget:opacity', { 
+          detail: { widgetId: widget.id, opacity: 1 }
+        });
+        window.dispatchEvent(opacityEvent);
+        
+        // Update widget transparency via event
+        const transparencyEvent = new CustomEvent('widget:background-transparent', { 
+          detail: { widgetId: widget.id, transparent: false }
+        });
+        window.dispatchEvent(transparencyEvent);
+        
+        // If running in Electron, update widget parameters via API
+        if (window.electronAPI) {
+          try {
+            const widgetsAPI = window.electronAPI as unknown as { 
+              widgets: { updateParams: (id: string, params: any) => Promise<any> } 
+            };
+            if (widgetsAPI.widgets?.updateParams) {
+              widgetsAPI.widgets.updateParams(widget.id, { backgroundTransparent: false })
+                .catch((error: any) => {
+                  console.error('Error updating widget transparency:', error);
+                });
+            }
+          } catch (error) {
+            console.error('Error accessing widget API:', error);
+          }
+        }
+      }
+    });
+    
+    // Update state
+    setWidgetOpacity(newOpacity);
+    setWidgetBackgroundTransparent(newTransparency);
+  };
+  
   // Listen for display ID from main process
   useEffect(() => {
     // Check if we already have a stored display ID
@@ -586,12 +638,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
 
       <div className="panel-content w-full px-4 py-3">
         <div className="control-buttons flex flex-col gap-2 w-full">
-          <button 
-            className={`btn ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
-            onClick={toggleClickThrough}
-          >
-            {clickThrough ? 'Show Panel' : 'Hide Panel'}
-          </button>
+          <div className="flex gap-2 w-full">
+            <button 
+              className={`btn flex-1 ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
+              onClick={toggleClickThrough}
+            >
+              {clickThrough ? 'Show Panel' : 'Hide Panel'}
+            </button>
+            
+            <button 
+              className="btn flex-1 btn-secondary transition-all hover:shadow-md"
+              onClick={handleShowAllWidgets}
+              title="Reset all widgets to default visibility"
+            >
+              Show All Widgets
+            </button>
+          </div>
           
           <button 
             className="btn btn-primary transition-all hover:shadow-md"
