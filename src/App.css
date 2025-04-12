@@ -399,6 +399,11 @@ body, html {
   z-index: 10000;
 }
 
+/* Remove shadow when widget is transparent */
+.draggable-component.no-shadow {
+  box-shadow: none;
+}
+
 .drag-handle {
   cursor: grab;
   user-select: none;

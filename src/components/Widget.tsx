@@ -20,6 +20,7 @@ export const Widget: React.FC<WidgetProps> = ({
   className = ''
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
+  const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
   
   // Listen for highlight events
   useEffect(() => {
@@ -40,6 +41,37 @@ export const Widget: React.FC<WidgetProps> = ({
     
     window.addEventListener('widget:highlight', handleHighlight as EventListener);
     return () => window.removeEventListener('widget:highlight', handleHighlight as EventListener);
+  }, [id]);
+
+  // Listen for transparency changes
+  useEffect(() => {
+    const handleBackgroundTransparency = (e: CustomEvent) => {
+      if (e.detail && e.detail.widgetId === id) {
+        setIsBackgroundTransparent(e.detail.transparent);
+      }
+    };
+    
+    window.addEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
+    
+    // Check URL parameters on load
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const widgetId = urlParams.get('widgetId');
+      
+      // If this component's ID matches the URL widgetId, check for transparency parameter
+      if (widgetId === id) {
+        const backgroundTransparent = urlParams.get('backgroundTransparent');
+        if (backgroundTransparent === 'true') {
+          setIsBackgroundTransparent(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing URL parameters:', error);
+    }
+    
+    return () => {
+      window.removeEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
+    };
   }, [id]);
 
   // Generate a random position if none provided
@@ -65,13 +97,13 @@ export const Widget: React.FC<WidgetProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={defaultPosition} 
-      className="z-10"
+      className={`z-10 ${isBackgroundTransparent ? 'no-shadow' : ''}`}
     >
       <BaseWidget
         id={id}
         title={title}
         onClose={handleClose}
-        className={`${className} ${isHighlighted ? 'shadow-blue-500/50 animate-pulse' : ''}`}
+        className={`${className} ${isHighlighted && !isBackgroundTransparent ? 'shadow-blue-500/50 animate-pulse' : ''}`}
       >
         {children}
       </BaseWidget>

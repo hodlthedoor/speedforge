@@ -473,8 +473,21 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         if (window.electronAPI) {
           try {
             const widgetsAPI = window.electronAPI as unknown as { 
-              widgets: { updateParams: (id: string, params: any) => Promise<any> } 
+              widgets: { 
+                updateParams: (id: string, params: any) => Promise<any>,
+                setOpacity: (id: string, opacity: number) => Promise<any>
+              } 
             };
+            
+            // Update opacity through Electron API
+            if (widgetsAPI.widgets?.setOpacity) {
+              widgetsAPI.widgets.setOpacity(widget.id, 1)
+                .catch((error: any) => {
+                  console.error('Error updating widget opacity:', error);
+                });
+            }
+            
+            // Update transparency through Electron API
             if (widgetsAPI.widgets?.updateParams) {
               widgetsAPI.widgets.updateParams(widget.id, { backgroundTransparent: false })
                 .catch((error: any) => {
