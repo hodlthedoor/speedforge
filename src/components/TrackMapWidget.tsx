@@ -439,61 +439,86 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       };
     };
     
-    // Create the track path
-    const createTrackPath = () => {
-      ctx.beginPath();
-      const firstPoint = transformPoint(points[0]);
-      ctx.moveTo(firstPoint.x, firstPoint.y);
-      
-      for (let i = 1; i < points.length; i++) {
-        const point = transformPoint(points[i]);
-        ctx.lineTo(point.x, point.y);
-      }
-      
-      // Only connect back to the start when we're nearly complete (in 'complete' state)
-      // or when the first and last points are very close to each other
-      const lastPoint = transformPoint(points[points.length - 1]);
-      const isNearlyComplete = mapBuildingState === 'complete' || 
-        (Math.sqrt(
-          Math.pow(firstPoint.x - lastPoint.x, 2) + 
-          Math.pow(firstPoint.y - lastPoint.y, 2)
-        ) < 20); // 20px threshold for "nearly complete"
-      
-      if (isNearlyComplete) {
-        ctx.lineTo(firstPoint.x, firstPoint.y);
-        ctx.closePath();
-      }
-    };
+    // Create the path for the track
+    const firstPoint = transformPoint(points[0]);
+    const lastPoint = transformPoint(points[points.length - 1]);
+    const isNearlyComplete = mapBuildingState === 'complete' || 
+      (Math.sqrt(
+        Math.pow(firstPoint.x - lastPoint.x, 2) + 
+        Math.pow(firstPoint.y - lastPoint.y, 2)
+      ) < 20); // 20px threshold for "nearly complete"
     
-    // First draw the wider black outline
-    createTrackPath();
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 6; // Wider black stroke
-    ctx.stroke();
+    // First draw the filled black track
+    ctx.beginPath();
+    ctx.moveTo(firstPoint.x, firstPoint.y);
     
-    // Then draw the white border (two thin lines)
-    createTrackPath();
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.5; // Thin white stroke
-    ctx.stroke();
+    for (let i = 1; i < points.length; i++) {
+      const point = transformPoint(points[i]);
+      ctx.lineTo(point.x, point.y);
+    }
     
-    // Draw the inner white line
-    createTrackPath();
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.5; // Thin white stroke
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    if (isNearlyComplete) {
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+      ctx.closePath();
+    }
     
-    // Set clipping region to the inside of the path
-    ctx.save();
-    createTrackPath();
-    ctx.clip();
-    
-    // Fill with black inside the track
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    // Fill with black
+    ctx.fillStyle = '#000000';
     ctx.fill();
     
-    ctx.restore();
+    // Draw the outer white line
+    ctx.beginPath();
+    ctx.moveTo(firstPoint.x, firstPoint.y);
+    
+    for (let i = 1; i < points.length; i++) {
+      const point = transformPoint(points[i]);
+      ctx.lineTo(point.x, point.y);
+    }
+    
+    if (isNearlyComplete) {
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+    }
+    
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    // Draw the inner white line (slightly narrower than the outer track)
+    ctx.beginPath();
+    ctx.moveTo(firstPoint.x, firstPoint.y);
+    
+    // We'll create a slightly smaller track for the inner line
+    const trackCenter = {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2
+    };
+    
+    const scaleFactor = 0.94; // Make inner line 94% of the size of outer line
+    
+    for (let i = 1; i < points.length; i++) {
+      const point = transformPoint(points[i]);
+      // Calculate direction from center
+      const dirX = point.x - (padding + (trackCenter.x - minX) * scale);
+      const dirY = point.y - (padding + (trackCenter.y - minY) * scale);
+      // Scale down slightly for inner line
+      const innerX = point.x - dirX * (1 - scaleFactor);
+      const innerY = point.y - dirY * (1 - scaleFactor);
+      ctx.lineTo(innerX, innerY);
+    }
+    
+    if (isNearlyComplete) {
+      // Calculate for first point
+      const dirX = firstPoint.x - (padding + (trackCenter.x - minX) * scale);
+      const dirY = firstPoint.y - (padding + (trackCenter.y - minY) * scale);
+      // Scale down slightly for inner line
+      const innerX = firstPoint.x - dirX * (1 - scaleFactor);
+      const innerY = firstPoint.y - dirY * (1 - scaleFactor);
+      ctx.lineTo(innerX, innerY);
+    }
+    
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     
     // Draw the start/finish line
     if (points.length > 0) {
