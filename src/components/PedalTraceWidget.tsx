@@ -26,6 +26,9 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const [historyLength, setHistoryLength] = useState<number>(100);
   const historyLengthRef = useRef<number>(100);
   
+  // Maximum history buffer size - we'll store up to this many points
+  const MAX_HISTORY_BUFFER = 500;
+  
   // Update the ref whenever historyLength changes
   useEffect(() => {
     historyLengthRef.current = historyLength;
@@ -113,6 +116,15 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     
     console.log(`[PedalTrace:${id}] historyLength changed to ${historyLength}, updating WidgetManager`);
     WidgetManager.updateWidgetState(id, { historyLength });
+    
+    // When historyLength changes, update displayed data with what we have in buffer
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        // Slice the buffer to match current historyLength
+        setData(dataRef.current.slice(-historyLength));
+        animationFrameId.current = null;
+      });
+    }
   }, [historyLength, id]);
   
   // Use our custom hook to get telemetry data
@@ -122,7 +134,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     updateInterval: 50
   });
 
-  // Process telemetry data, respecting historyLength
+  // Process telemetry data, maintaining full buffer but displaying based on historyLength
   useEffect(() => {
     if (telemetryData) {
       const newData: PedalData = {
@@ -131,16 +143,14 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         brake: telemetryData.brake_pct || 0
       };
 
-      // Use the ref value to avoid dependency on the state
-      const currentHistoryLength = historyLengthRef.current;
+      // Update ref with full buffer (up to MAX_HISTORY_BUFFER)
+      dataRef.current = [...dataRef.current, newData].slice(-MAX_HISTORY_BUFFER);
       
-      // Update ref without causing a state update
-      dataRef.current = [...dataRef.current, newData].slice(-currentHistoryLength);
-      
-      // Only update state when we need to redraw
+      // Only update display state when we need to redraw, using current historyLength
       if (!animationFrameId.current) {
         animationFrameId.current = requestAnimationFrame(() => {
-          setData([...dataRef.current]);
+          // Slice from the buffer based on current historyLength
+          setData(dataRef.current.slice(-historyLengthRef.current));
           animationFrameId.current = null;
         });
       }
@@ -217,14 +227,14 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
       
-    // Add a label with history length
+    // Add a label with history length and buffer info
     svg.append('text')
       .attr('x', width / 2)
       .attr('y', height - 5)
       .attr('text-anchor', 'middle')
       .attr('fill', 'white')
       .attr('font-size', '10px')
-      .text(`History: ${historyLength} points (${(timeWindow/1000).toFixed(1)}s)`);
+      .text(`History: ${historyLength}/${dataRef.current.length} points (${(timeWindow/1000).toFixed(1)}s)`);
   }, [data, historyLength]);
 
   // Apply D3 visualization when data changes
@@ -283,7 +293,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         >
           Direct 200
         </button>
-        <span>Current: {historyLength}</span>
+        <span>Current: {historyLength}/{dataRef.current.length}</span>
       </div>
     </Widget>
   );
