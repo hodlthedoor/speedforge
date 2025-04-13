@@ -403,7 +403,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     const points = trackPointsRef.current;
     if (points.length < 2) return;
     
-    // Clear the canvas
+    // Clear the canvas with transparent background (not drawing a background fill)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Get computed opacity of parent element to respect Widget's opacity control
@@ -412,10 +412,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     
     // Apply parent opacity to all canvas drawing
     ctx.globalAlpha = parentOpacity;
-    
-    // Add dark background
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Calculate bounds to determine scale
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -711,7 +707,10 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
           </div>
         ) : (
           <div className="w-full h-full rounded">
-            <canvas ref={canvasRef} className="w-full h-full rounded" />
+            <canvas 
+              ref={canvasRef} 
+              className="w-full h-full rounded bg-transparent" 
+            />
           </div>
         )}
       </div>
