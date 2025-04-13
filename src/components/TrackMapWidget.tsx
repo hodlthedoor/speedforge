@@ -4,6 +4,7 @@ import { useTelemetryData } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
+import { WidgetManager } from '../services/WidgetManager';
 
 interface TrackMapWidgetProps {
   id: string;
@@ -11,10 +12,12 @@ interface TrackMapWidgetProps {
   onStateChange?: (state: { 
     mapBuildingState: MapBuildingState;
     colorMode: 'curvature' | 'acceleration' | 'none';
+    scaleFactor: number;
   }) => void;
   externalControls?: {
     mapBuildingState?: MapBuildingState;
     colorMode?: 'curvature' | 'acceleration' | 'none';
+    scaleFactor?: number;
   };
 }
 
@@ -56,6 +59,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   const [colorMode, setColorMode] = useState<'curvature' | 'acceleration' | 'none'>('none');
   const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
   const [lapInvalidated, setLapInvalidated] = useState<boolean>(false);
+  const [scaleFactor, setScaleFactor] = useState<number>(1.0);
+  const scaleFactorRef = useRef<number>(1.0);
 
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: [
@@ -426,16 +431,23 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     const width = canvas.width - padding * 2;
     const height = canvas.height - padding * 2;
     
-    // Calculate the scale to fit the track in the canvas
-    const xScale = width / (maxX - minX);
-    const yScale = height / (maxY - minY);
-    const scale = Math.min(xScale, yScale);
+    // Calculate the scale to fit the track in the canvas, applying the user's scale factor
+    const xScale = width / (maxX - minX) * scaleFactorRef.current;
+    const yScale = height / (maxY - minY) * scaleFactorRef.current;
+    const baseScale = Math.min(xScale, yScale);
     
-    // Function to transform track coordinates to canvas coordinates
+    // Calculate center for positioning the scaled track
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Function to transform track coordinates to canvas coordinates with proper centering
     const transformPoint = (point: { x: number, y: number }) => {
+      const trackCenterX = (minX + maxX) / 2;
+      const trackCenterY = (minY + maxY) / 2;
+      
       return {
-        x: padding + (point.x - minX) * scale,
-        y: padding + (point.y - minY) * scale
+        x: centerX + (point.x - trackCenterX) * baseScale,
+        y: centerY + (point.y - trackCenterY) * baseScale
       };
     };
     
@@ -575,7 +587,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     
     // Reset global alpha
     ctx.globalAlpha = 1.0;
-  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
+  }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance, scaleFactorRef]);
 
   const debouncedRenderCanvas = useCallback(() => {
     if (!animationFrameId.current) {
@@ -630,12 +642,54 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       if (externalControls.colorMode !== undefined) {
         setColorMode(externalControls.colorMode);
       }
+      if (externalControls.scaleFactor !== undefined) {
+        setScaleFactor(externalControls.scaleFactor);
+      }
     }
   }, [externalControls]);
 
   useEffect(() => {
-    onStateChange?.({ mapBuildingState, colorMode });
-  }, [mapBuildingState, colorMode, onStateChange]);
+    onStateChange?.({ mapBuildingState, colorMode, scaleFactor });
+  }, [mapBuildingState, colorMode, scaleFactor, onStateChange]);
+
+  useEffect(() => {
+    scaleFactorRef.current = scaleFactor;
+    
+    // Update WidgetManager with the new scale factor
+    WidgetManager.updateWidgetState(id, { scaleFactor });
+    
+    // Only render if we already have a track
+    if (trackPointsRef.current.length > 0) {
+      renderCanvas();
+    }
+  }, [scaleFactor, id]);
+
+  // Sync with WidgetManager on mount
+  useEffect(() => {
+    console.log(`[TrackMap:${id}] Setting up WidgetManager listener with initial scaleFactor=${scaleFactorRef.current}`);
+    
+    // Force resyncing from WidgetManager on every mount
+    const widget = WidgetManager.getWidget(id);
+    if (widget) {
+      console.log(`[TrackMap:${id}] Found widget in WidgetManager:`, widget.state);
+      
+      // Always resync with WidgetManager's state on mount
+      if (widget.state && widget.state.scaleFactor !== undefined) {
+        const storedScale = Number(widget.state.scaleFactor);
+        console.log(`[TrackMap:${id}] Found existing scaleFactor=${storedScale} in WidgetManager`);
+        
+        // Force update our local state to match WidgetManager
+        if (storedScale !== scaleFactorRef.current) {
+          console.log(`[TrackMap:${id}] Updating local scaleFactor to ${storedScale}`);
+          setScaleFactor(storedScale);
+        }
+      } else {
+        // If widget exists but doesn't have scaleFactor, set it
+        console.log(`[TrackMap:${id}] Setting initial scaleFactor=${scaleFactorRef.current} in WidgetManager`);
+        WidgetManager.updateWidgetState(id, { scaleFactor: scaleFactorRef.current });
+      }
+    }
+  }, [id]);
 
   const getTrackSurfaceName = (surface: number): string => {
     switch (surface) {
@@ -752,6 +806,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   const mapBuildingState = widgetState.mapBuildingState || 'idle';
   const colorMode = widgetState.colorMode || 'none';
+  const scaleFactor = widgetState.scaleFactor || 1.0;
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -765,6 +820,24 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
         { value: 'acceleration', label: 'Acceleration' }
       ],
       onChange: (value) => updateWidget({ colorMode: value })
+    },
+    {
+      type: 'slider' as WidgetControlType,
+      id: 'scaleFactor',
+      label: `Scale: ${scaleFactor.toFixed(1)}x`,
+      value: scaleFactor,
+      options: [
+        { value: 0.5, label: 'Small' },
+        { value: 1.0, label: 'Default' },
+        { value: 1.5, label: 'Large' },
+        { value: 2.0, label: 'Larger' },
+        { value: 2.5, label: 'Largest' }
+      ],
+      onChange: (value) => {
+        const numericValue = Number(value);
+        console.log(`[Controls] Slider onChange: setting scaleFactor to ${numericValue}`);
+        updateWidget({ scaleFactor: numericValue });
+      }
     }
   ];
   
