@@ -34,10 +34,8 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
         shiftIndicator: telemetryData.shift_indicator_pct || 0
       };
 
-      // Update ref without causing a state update
-      dataRef.current = [newData]; // Only keep the latest value
+      dataRef.current = [newData];
       
-      // Only update state when needed
       if (!animationFrameId.current) {
         animationFrameId.current = requestAnimationFrame(() => {
           setData([...dataRef.current]);
@@ -56,7 +54,6 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
 
   // Handle flashing effect for overrev
   useEffect(() => {
-    // Clear any existing interval
     if (flashingTimerRef.current) {
       clearInterval(flashingTimerRef.current);
       flashingTimerRef.current = null;
@@ -65,7 +62,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     if (data.length > 0 && data[0].shiftIndicator >= 90) {
       flashingTimerRef.current = window.setInterval(() => {
         setIsFlashing(prev => !prev);
-      }, 500);
+      }, 200); // Faster flashing for better feedback
     } else {
       setIsFlashing(false);
     }
@@ -85,72 +82,138 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     const svg = d3.select(svgRef.current);
     const width = 400;
     const height = 80;
-    const margin = { top: 0, right: 0, bottom: 0, left: 0 };
+    const margin = { top: 10, right: 10, bottom: 20, left: 10 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
 
     // Clear previous content
     svg.selectAll('*').remove();
 
+    // Create the main group with margins
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
     // Create scales
     const x = d3.scaleLinear()
-      .domain([0, 90])
-      .range([0, width]);
+      .domain([0, 100])
+      .range([0, innerWidth]);
 
-    // Define color zones
-    const zones = [
-      { start: 0, end: 60, color: '#4CAF50' },    // Green
-      { start: 60, end: 75, color: '#FFEB3B' },   // Yellow
-      { start: 75, end: 85, color: '#FF9800' },   // Orange
-      { start: 85, end: 90, color: '#F44336' }    // Red
-    ];
+    // Define gradient
+    const gradient = svg.append('defs')
+      .append('linearGradient')
+      .attr('id', 'shift-indicator-gradient')
+      .attr('x1', '0%')
+      .attr('x2', '100%')
+      .attr('y1', '0%')
+      .attr('y2', '0%');
 
-    // Add color zones
-    zones.forEach(zone => {
-      svg.append('rect')
-        .attr('x', x(zone.start))
-        .attr('y', 0)
-        .attr('width', x(zone.end) - x(zone.start))
-        .attr('height', height)
-        .attr('fill', zone.color)
-        .attr('opacity', 0.3);
+    // Add gradient stops
+    gradient.append('stop')
+      .attr('offset', '0%')
+      .attr('style', 'stop-color: #4CAF50; stop-opacity: 1');
+    gradient.append('stop')
+      .attr('offset', '60%')
+      .attr('style', 'stop-color: #FFEB3B; stop-opacity: 1');
+    gradient.append('stop')
+      .attr('offset', '75%')
+      .attr('style', 'stop-color: #FF9800; stop-opacity: 1');
+    gradient.append('stop')
+      .attr('offset', '90%')
+      .attr('style', 'stop-color: #F44336; stop-opacity: 1');
+
+    // Add background bar
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerWidth)
+      .attr('height', innerHeight)
+      .attr('rx', 4)
+      .attr('fill', '#1a1a1a')
+      .attr('stroke', '#333')
+      .attr('stroke-width', 1);
+
+    // Add tick marks
+    const ticks = [0, 25, 50, 75, 90, 100];
+    ticks.forEach(tick => {
+      g.append('line')
+        .attr('x1', x(tick))
+        .attr('x2', x(tick))
+        .attr('y1', innerHeight)
+        .attr('y2', innerHeight + 5)
+        .attr('stroke', '#666')
+        .attr('stroke-width', 1);
+
+      g.append('text')
+        .attr('x', x(tick))
+        .attr('y', innerHeight + 15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#666')
+        .attr('font-size', '10px')
+        .text(tick + '%');
     });
 
-    // Add current value bar
     if (data.length > 0) {
       const currentValue = data[0].shiftIndicator;
-      const displayValue = Math.min(currentValue, 90); // Cap at 90% for display
-      const currentColor = zones.find(zone => currentValue >= zone.start && currentValue < zone.end)?.color || '#4CAF50';
-      
-      // Add the main bar
-      svg.append('rect')
+      const displayValue = Math.min(currentValue, 100);
+
+      // Add the gradient bar
+      g.append('rect')
         .attr('x', 0)
         .attr('y', 0)
         .attr('width', x(displayValue))
-        .attr('height', height)
-        .attr('fill', currentValue >= 90 && isFlashing ? '#F44336' : currentColor)
-        .attr('opacity', 0.7);
+        .attr('height', innerHeight)
+        .attr('rx', 4)
+        .attr('fill', 'url(#shift-indicator-gradient)')
+        .attr('opacity', currentValue >= 90 && isFlashing ? 0.9 : 0.7)
+        .attr('filter', currentValue >= 90 ? 'url(#glow)' : null);
 
-      // If in overrev, add a thin red line at 90%
-      if (currentValue >= 90) {
-        svg.append('line')
+      // Add glow filter for overrev state
+      const defs = svg.append('defs');
+      const filter = defs.append('filter')
+        .attr('id', 'glow');
+      
+      filter.append('feGaussianBlur')
+        .attr('stdDeviation', '2')
+        .attr('result', 'coloredBlur');
+      
+      const feMerge = filter.append('feMerge');
+      feMerge.append('feMergeNode')
+        .attr('in', 'coloredBlur');
+      feMerge.append('feMergeNode')
+        .attr('in', 'SourceGraphic');
+
+      // Add current value text
+      g.append('text')
+        .attr('x', innerWidth / 2)
+        .attr('y', innerHeight / 2 + 5)
+        .attr('text-anchor', 'middle')
+        .attr('fill', currentValue >= 90 && isFlashing ? '#ff0000' : '#fff')
+        .attr('font-size', '16px')
+        .attr('font-weight', 'bold')
+        .text(`${Math.round(currentValue)}%`);
+
+      // Add shift indicator line at 90%
+      if (currentValue >= 85) {
+        g.append('line')
           .attr('x1', x(90))
           .attr('x2', x(90))
           .attr('y1', 0)
-          .attr('y2', height)
-          .attr('stroke', '#F44336')
+          .attr('y2', innerHeight)
+          .attr('stroke', '#ff0000')
           .attr('stroke-width', 2)
-          .attr('opacity', isFlashing ? 1 : 0.5);
+          .attr('stroke-dasharray', '4,4')
+          .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
   }, [data, isFlashing]);
 
-  // Only update chart when data or flashing state changes
   useEffect(() => {
     updateChart();
   }, [updateChart]);
 
   return (
-    <Widget id={id} title="Shift Indicator" className="p-0" onClose={onClose}>
-      <div className="w-full h-full">
+    <Widget id={id} title="Shift Indicator" className="p-2" onClose={onClose}>
+      <div className="w-full h-full flex items-center justify-center">
         <svg
           ref={svgRef}
           width={400}
