@@ -9,6 +9,46 @@ export interface BaseWidgetProps {
   title?: string;
 }
 
+// Define a type for the widget state update event
+export interface WidgetStateUpdateEvent {
+  widgetId: string;
+  state: Record<string, any>;
+}
+
+// Create a global event name for widget state updates
+export const WIDGET_STATE_UPDATE_EVENT = 'widget:state:direct-update';
+
+// Helper function to dispatch a widget state update event
+export function dispatchWidgetStateUpdate(widgetId: string, state: Record<string, any>) {
+  const event = new CustomEvent<WidgetStateUpdateEvent>(WIDGET_STATE_UPDATE_EVENT, {
+    detail: {
+      widgetId,
+      state
+    }
+  });
+  console.log(`[BaseWidget] Dispatching ${WIDGET_STATE_UPDATE_EVENT} for widget ${widgetId}:`, state);
+  window.dispatchEvent(event);
+}
+
+// Hook to listen for widget state updates for a specific widget
+export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: Record<string, any>) => void) {
+  useEffect(() => {
+    const handleStateUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<WidgetStateUpdateEvent>;
+      if (customEvent.detail && customEvent.detail.widgetId === widgetId) {
+        console.log(`[BaseWidget] Widget ${widgetId} received state update:`, customEvent.detail.state);
+        onStateUpdate(customEvent.detail.state);
+      }
+    };
+
+    window.addEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
+    
+    return () => {
+      window.removeEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
+    };
+  }, [widgetId, onStateUpdate]);
+}
+
 const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   id,
   onClose,
