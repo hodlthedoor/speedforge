@@ -5,6 +5,7 @@ import { TrackSurface } from '../types/telemetry';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetManager } from '../services/WidgetManager';
+import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
 
 interface TrackMapWidgetProps {
   id: string;
@@ -88,17 +89,33 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const container = canvas.parentElement;
       if (!container) return;
       
+      // Set the canvas dimensions to match its container
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
       
+      // Re-render after resize
       renderCanvas();
     };
 
     window.addEventListener('resize', resizeCanvas);
+    
+    // Also resize when scale factor changes
+    const observer = new ResizeObserver(() => {
+      resizeCanvas();
+    });
+    
+    if (canvasRef.current?.parentElement) {
+      observer.observe(canvasRef.current.parentElement);
+    }
+    
+    // Initial resize
     resizeCanvas();
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
+      if (canvasRef.current?.parentElement) {
+        observer.disconnect();
+      }
     };
   }, []);
 
@@ -664,6 +681,17 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
   }, [scaleFactor, id]);
 
+  // Use the generic widget state update hook
+  useWidgetStateUpdates(id, (state) => {
+    if (state.scaleFactor !== undefined) {
+      const newScale = Number(state.scaleFactor);
+      // Only update if the value has actually changed
+      if (scaleFactorRef.current !== newScale) {
+        setScaleFactor(newScale);
+      }
+    }
+  });
+  
   // Sync with WidgetManager on mount
   useEffect(() => {
     console.log(`[TrackMap:${id}] Setting up WidgetManager listener with initial scaleFactor=${scaleFactorRef.current}`);
@@ -689,6 +717,28 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         WidgetManager.updateWidgetState(id, { scaleFactor: scaleFactorRef.current });
       }
     }
+    
+    // Subscribe to future state changes
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        console.log(`[TrackMap:${id}] Received WidgetManager update:`, event.state);
+        
+        if (event.state.scaleFactor !== undefined) {
+          const newScale = Number(event.state.scaleFactor);
+          console.log(`[TrackMap:${id}] New scaleFactor=${newScale}, current=${scaleFactorRef.current}`);
+          
+          // Only update if the value has actually changed
+          if (scaleFactorRef.current !== newScale) {
+            console.log(`[TrackMap:${id}] Updating scaleFactor state to ${newScale}`);
+            setScaleFactor(newScale);
+          }
+        }
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   }, [id]);
 
   const getTrackSurfaceName = (surface: number): string => {
@@ -754,8 +804,15 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, []);
 
   return (
-    <Widget id={id} title="Track Map" className="w-auto max-w-[600px]" onClose={onClose}>
-      <div className="w-full max-w-[550px] h-[300px]">
+    <Widget id={id} title="Track Map" className={`w-auto`} onClose={onClose}>
+      <div 
+        className="rounded"
+        style={{
+          width: `${Math.max(300, 550 * scaleFactor)}px`,
+          height: `${Math.max(200, 300 * scaleFactor)}px`,
+          transition: 'width 0.3s, height 0.3s'
+        }}
+      >
         {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             {lapInvalidated ? (
@@ -799,6 +856,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
           </div>
         )}
       </div>
+      <div className="mt-2 flex justify-end text-xs">
+        <span>Scale: {scaleFactor.toFixed(1)}x</span>
+      </div>
     </Widget>
   );
 };
@@ -828,15 +888,24 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
       value: scaleFactor,
       options: [
         { value: 0.5, label: 'Small' },
+        { value: 0.75, label: 'Smaller' },
         { value: 1.0, label: 'Default' },
-        { value: 1.5, label: 'Large' },
-        { value: 2.0, label: 'Larger' },
-        { value: 2.5, label: 'Largest' }
+        { value: 1.5, label: 'Larger' },
+        { value: 2.0, label: 'Large' }
       ],
       onChange: (value) => {
         const numericValue = Number(value);
         console.log(`[Controls] Slider onChange: setting scaleFactor to ${numericValue}`);
+        
+        // Update both the widget state and dispatch a direct update for redundancy
         updateWidget({ scaleFactor: numericValue });
+        
+        // Also try direct update mechanism as fallback
+        try {
+          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { scaleFactor: numericValue });
+        } catch (err) {
+          console.error(`[Controls] Error in direct update:`, err);
+        }
       }
     }
   ];
