@@ -73,12 +73,16 @@ class WidgetRegistryClass {
     widgetState: any, 
     updateWidget: (updates: any) => void
   ): WidgetControlDefinition[] {
+    console.log(`[WidgetRegistry] getWidgetControls called for type ${type} with state:`, widgetState);
+    
     const definition = this.registry.get(type);
     if (!definition) {
+      console.warn(`[WidgetRegistry] No definition found for widget type: ${type}`);
       return [];
     }
     
     // Get controls from the component itself
+    console.log(`[WidgetRegistry] Getting controls from component for type: ${type}`);
     const componentControls = getComponentControls(
       definition.component,
       widgetState,
@@ -86,14 +90,17 @@ class WidgetRegistryClass {
     );
     
     if (componentControls.length > 0) {
+      console.log(`[WidgetRegistry] Found ${componentControls.length} component controls for ${type}`);
       return componentControls;
     }
     
     // Fallback to definition.getControls if available (for backwards compatibility)
     if (definition.getControls) {
+      console.log(`[WidgetRegistry] Using definition.getControls fallback for ${type}`);
       return definition.getControls(widgetState, updateWidget);
     }
     
+    console.log(`[WidgetRegistry] No controls found for ${type}`);
     return [];
   }
 }

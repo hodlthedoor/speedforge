@@ -507,6 +507,16 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     console.log(`[DEBUG] About to call control.onChange with value: ${numericValue}`);
                     console.log(`[DEBUG] control.onChange is:`, control.onChange);
                     console.log(`[DEBUG] Selected widget:`, selectedWidget);
+                    
+                    // Also dispatch a direct event to the widget
+                    const directEvent = new CustomEvent('pedal-trace:history-length', {
+                      detail: {
+                        widgetId: selectedWidget.id,
+                        historyLength: numericValue
+                      }
+                    });
+                    console.log(`[DEBUG] Dispatching direct pedal-trace:history-length event with value: ${numericValue}`);
+                    window.dispatchEvent(directEvent);
                   }
                   
                   control.onChange(numericValue);

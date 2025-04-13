@@ -232,6 +232,39 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     };
   }, []);
 
+  // Initialize and register widget state with WidgetManager when component mounts
+  useEffect(() => {
+    debugLog(`Initializing widget state for id=${id}`);
+    
+    // Register the initial historyLength with the WidgetManager
+    // Use a ref to get the current value to avoid dependency cycle
+    WidgetManager.updateWidgetState(id, { historyLength: 100 }); // Always start with default
+    
+    return () => {
+      debugLog(`Cleaning up widget state for id=${id}`);
+    };
+  }, [id]); // Only run when id changes (i.e., on mount/unmount)
+
+  // Listen for direct slider changes via custom events
+  useEffect(() => {
+    debugLog(`Setting up direct event listener for historyLength changes`);
+    
+    const handleHistoryLengthChange = (event: any) => {
+      if (event.detail && event.detail.widgetId === id && event.detail.historyLength !== undefined) {
+        const newLength = Number(event.detail.historyLength);
+        debugLog(`Received direct historyLength change event: ${newLength}`);
+        setHistoryLength(newLength);
+      }
+    };
+    
+    // Listen for both custom event and DOM event
+    window.addEventListener('pedal-trace:history-length', handleHistoryLengthChange);
+    
+    return () => {
+      window.removeEventListener('pedal-trace:history-length', handleHistoryLengthChange);
+    };
+  }, [id]);
+
   return (
     <Widget id={id} title="Pedal Trace" onClose={onClose}>
       <svg

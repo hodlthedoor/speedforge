@@ -7,7 +7,7 @@ interface WidgetControlPanelProps {
 }
 
 // Generic control renderer
-function ControlRenderer({ control }: { control: WidgetControlDefinition }) {
+function ControlRenderer({ control, widgetId }: { control: WidgetControlDefinition, widgetId?: string }) {
   // Render different control types
   switch (control.type) {
     case 'button':
@@ -46,7 +46,26 @@ function ControlRenderer({ control }: { control: WidgetControlDefinition }) {
             type="range"
             className="w-full"
             value={control.value}
-            onChange={(e) => control.onChange(parseFloat(e.target.value))}
+            onChange={(e) => {
+              const newValue = parseFloat(e.target.value);
+              console.log(`[WidgetControlPanel] Slider ${control.id} value changing to: ${newValue}`);
+              console.log(`[WidgetControlPanel] Control value before: ${control.value}`);
+              
+              // For historyLength sliders, also dispatch a direct event to ensure the widget receives it
+              if (control.id === 'historyLength' && widgetId) {
+                const directEvent = new CustomEvent('pedal-trace:history-length', {
+                  detail: {
+                    widgetId,
+                    historyLength: newValue
+                  }
+                });
+                console.log(`[WidgetControlPanel] Dispatching direct pedal-trace:history-length event with value: ${newValue}`);
+                window.dispatchEvent(directEvent);
+              }
+              
+              control.onChange(newValue);
+              console.log(`[WidgetControlPanel] After calling control.onChange(${newValue})`);
+            }}
             {...control.options?.reduce((acc, opt) => ({ ...acc, [opt.value]: opt.label }), {})}
           />
         </div>
@@ -121,18 +140,26 @@ const WidgetControlPanel: React.FC<WidgetControlPanelProps> = ({ className }) =>
 
   // Function to update controls based on widget type and state
   const updateControls = (type: string, id: string, state: Record<string, any>) => {
+    console.log(`[WidgetControlPanel] updateControls called for widget ${id} (${type}) with state:`, state);
+    
     const updateWidget = (updates: Record<string, any>) => {
+      console.log(`[WidgetControlPanel] updateWidget called with updates:`, updates);
+      console.log(`[WidgetControlPanel] Current widget ID: ${id}`);
       WidgetManager.updateWidgetState(id, updates);
+      console.log(`[WidgetControlPanel] Called WidgetManager.updateWidgetState(${id}, updates)`);
     };
 
     // Get controls from the widget registry
+    console.log(`[WidgetControlPanel] Getting widget controls from registry for type: ${type}`);
     const widgetControls = WidgetRegistry.getWidgetControls(type, state, updateWidget);
+    console.log(`[WidgetControlPanel] Got ${widgetControls.length} controls from registry`);
     
     // Filter controls based on conditionals
     const filteredControls = widgetControls.filter(
       (control) => !control.conditional || control.conditional(state)
     );
     
+    console.log(`[WidgetControlPanel] Setting ${filteredControls.length} filtered controls`);
     setControls(filteredControls);
   };
 
@@ -166,7 +193,7 @@ const WidgetControlPanel: React.FC<WidgetControlPanelProps> = ({ className }) =>
         <div className="widget-controls space-y-3 mt-4">
           {controls.map((control) => (
             <div key={control.id} className="control-item">
-              <ControlRenderer control={control} />
+              <ControlRenderer control={control} widgetId={selectedWidget.id} />
             </div>
           ))}
         </div>
