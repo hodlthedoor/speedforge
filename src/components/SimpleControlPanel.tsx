@@ -466,7 +466,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         return (
           <button 
             key={control.id}
-            className="btn btn-sm btn-primary transition-all hover:shadow-sm"
+            className="btn btn-sm btn-primary bg-blue-500 hover:bg-blue-600 text-white transition-all rounded px-3 py-1.5 text-xs font-medium shadow-sm hover:shadow"
             onClick={() => control.onChange(control.value)}
           >
             {control.label}
@@ -475,13 +475,17 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         
       case 'select':
         return (
-          <div key={control.id} className="mt-2">
-            <label className="detail-label text-sm">{control.label}:</label>
-            <div className="flex gap-1 mt-1">
+          <div key={control.id} className="mt-3">
+            <label className="detail-label text-sm text-gray-300 mb-1.5 block">{control.label}:</label>
+            <div className="flex gap-1.5">
               {control.options.map((option: any) => (
                 <button 
                   key={option.value}
-                  className={`btn btn-xs ${control.value === option.value ? 'btn-info hover:bg-blue-600' : 'btn-outline hover:bg-gray-700'} transition-all`}
+                  className={`px-2.5 py-1 rounded-md text-xs ${
+                    control.value === option.value 
+                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                  } transition-all`}
                   onClick={() => control.onChange(option.value)}
                 >
                   {option.label}
@@ -493,9 +497,14 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       
       case 'slider':
         return (
-          <div key={control.id} className="mt-2">
-            <label className="detail-label text-sm">{control.label}</label>
-            <div className="pl-2 mt-1">
+          <div key={control.id} className="mt-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="detail-label text-sm text-gray-300">{control.label}</label>
+              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
+                {control.value || 100}
+              </span>
+            </div>
+            <div className="pl-0 mt-1">
               <input
                 type="range"
                 min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
@@ -514,38 +523,42 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     console.log(`[DEBUG] About to call control.onChange with value: ${numericValue}`);
                     console.log(`[DEBUG] control.onChange is:`, control.onChange);
                     console.log(`[DEBUG] Selected widget:`, selectedWidget);
-                    
-                    // We no longer need to dispatch custom events
-                    // The control.onChange function will update the widget state through the WidgetManager
                   }
                   
                   control.onChange(numericValue);
                 }}
-                className="w-full"
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
-              <div className="flex justify-between text-xs text-gray-400 mt-1">
-                {control.options && control.options.map((option: any) => (
-                  <span key={option.value} className="cursor-pointer" onClick={() => control.onChange(Number(option.value))}>
-                    {option.label}
-                  </span>
-                ))}
-              </div>
+              {control.options && control.options.length > 0 && (
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  {control.options.map((option: any) => (
+                    <span 
+                      key={option.value} 
+                      className="cursor-pointer hover:text-blue-300 transition-colors" 
+                      onClick={() => control.onChange(Number(option.value))}
+                    >
+                      {option.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
         
       case 'toggle':
         return (
-          <div key={control.id} className="mt-2 flex items-center justify-between">
-            <label className="detail-label text-sm">{control.label}</label>
+          <div key={control.id} className="mt-3 flex items-center justify-between">
+            <label className="detail-label text-sm text-gray-300">{control.label}</label>
             <div
-              className={`w-10 h-5 rounded-full cursor-pointer ${
+              className={`relative inline-flex items-center w-11 h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${
                 control.value ? 'bg-blue-600' : 'bg-gray-700'
               }`}
               onClick={() => control.onChange(!control.value)}
             >
+              <span className="sr-only">Toggle {control.label}</span>
               <div
-                className={`transform h-5 w-5 bg-white rounded-full transition-transform ${
+                className={`absolute left-0.5 inline-block w-5 h-5 transform rounded-full bg-white shadow transition-transform duration-200 ease-in-out ${
                   control.value ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
@@ -555,7 +568,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         
       default:
         return (
-          <div key={control.id} className="mt-2 text-xs text-red-400">
+          <div key={control.id} className="mt-3 text-xs text-red-400 p-2 border border-red-400/20 rounded bg-red-400/10">
             Unsupported control type: {control.type}
           </div>
         );
@@ -766,15 +779,18 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
-      className={`w-[400px] max-h-[80vh] flex flex-col shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
+      className={`w-[400px] max-h-[80vh] flex flex-col shadow-xl border border-blue-300/10 bg-gray-900/90 rounded-lg text-gray-100 z-[1000] backdrop-blur-md ${clickThrough ? 'click-through opacity-90 hover:opacity-100' : ''} transition-all duration-200`}
     >
       {/* Header */}
-      <div className="w-full flex items-center justify-between bg-gray-900/80 border-b border-gray-700 px-6 py-3 drag-handle">
-        <h2 className="text-base font-medium tracking-wide">Control Panel</h2>
+      <div className="w-full flex items-center justify-between bg-gradient-to-r from-gray-900/90 to-gray-800/90 border-b border-gray-700 px-6 py-4 drag-handle shadow-sm">
+        <h2 className="text-base font-semibold tracking-wide flex items-center">
+          <span className="text-blue-400 mr-2">•</span>
+          Control Panel
+        </h2>
         
         <div className="flex items-center gap-3">
           <div 
-            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+            className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'} transition-colors duration-300`}
             title={`Game ${isConnected ? 'Connected' : 'Disconnected'}`}
           ></div>
           
@@ -782,26 +798,28 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             onClick={handleReconnect}
             disabled={reconnecting}
             title="Force WebSocket reconnection"
-            className={`text-xs px-3 py-1 rounded-md transition-colors ${
+            className={`text-xs px-3 py-1 rounded-md transition-all ${
               reconnecting 
                 ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                : 'bg-gray-700 hover:bg-blue-500 text-gray-200 hover:text-white'
             }`}
           >
-            {reconnecting ? '...' : 'Reconnect'}
+            {reconnecting ? 'Connecting...' : 'Reconnect'}
           </button>
         </div>
       </div>
 
       {/* Selected Widget Section - Fixed */}
       {selectedWidget && (
-        <div className="border-b border-gray-700 bg-gray-900/50">
+        <div className="border-b border-gray-700 bg-gradient-to-b from-gray-900/70 to-gray-800/60">
           <div className="px-6 py-4">
-            <div className="widget-details-panel space-y-3">
+            <div className="widget-details-panel space-y-4">
               <div className="widget-details-header flex items-center justify-between">
-                <h4 className="text-sm font-medium">{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
+                <h4 className="text-sm font-semibold text-blue-300">
+                  {selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}
+                </h4>
                 <button 
-                  className="hover:text-red-400 transition-colors p-1" 
+                  className="hover:text-red-400 transition-colors p-1.5 rounded-full hover:bg-gray-700/50" 
                   onClick={() => closeWidget(selectedWidget.id)}
                   title="Close Widget"
                 >
@@ -811,28 +829,31 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </button>
               </div>
 
-              <div className="space-y-3 text-sm">
+              <div className="space-y-3 text-sm bg-gray-800/30 rounded-lg p-3">
                 <div className="flex items-center justify-between text-gray-300">
-                  <span className="font-medium">ID:</span>
-                  <span className="font-mono text-xs">{selectedWidget.id.slice(0, 8)}...</span>
+                  <span className="font-medium text-gray-400">ID:</span>
+                  <span className="font-mono text-xs bg-gray-900/50 px-2 py-0.5 rounded">{selectedWidget.id.slice(0, 8)}...</span>
                 </div>
                 <div className="flex items-center justify-between text-gray-300">
-                  <span className="font-medium">Type:</span>
-                  <span>{selectedWidget.type || 'default'}</span>
+                  <span className="font-medium text-gray-400">Type:</span>
+                  <span className="bg-blue-900/30 text-blue-200 px-2 py-0.5 rounded-md text-xs">{selectedWidget.type || 'default'}</span>
                 </div>
                 {selectedWidget.options?.metric && (
                   <div className="flex items-center justify-between text-gray-300">
-                    <span className="font-medium">Metric:</span>
-                    <span>{selectedWidget.options.metric}</span>
+                    <span className="font-medium text-gray-400">Metric:</span>
+                    <span className="bg-gray-700/50 px-2 py-0.5 rounded-md text-xs">{selectedWidget.options.metric}</span>
                   </div>
                 )}
               </div>
               
               {/* Dynamic Widget Controls from Registry */}
               {getWidgetControls(selectedWidget).length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <span className="text-sm font-medium text-gray-200">Widget Controls</span>
-                  <div className="space-y-3">
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-gray-300">Widget Controls</span>
+                    <div className="h-px flex-grow bg-gray-700/50"></div>
+                  </div>
+                  <div className="space-y-3 bg-gray-800/30 rounded-lg p-3">
                     {getWidgetControls(selectedWidget).map(control => 
                       renderWidgetControl(control)
                     )}
@@ -840,34 +861,45 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </div>
               )}
               
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-200">Opacity</label>
-                  <input
-                    type="range"
-                    min="0.3"
-                    max="1"
-                    step="0.1"
-                    value={widgetOpacity[selectedWidget.id] ?? 1}
-                    onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                  />
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-300">Appearance</span>
+                  <div className="h-px flex-grow bg-gray-700/50"></div>
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200">Background</span>
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      widgetBackgroundTransparent[selectedWidget.id] 
-                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                        : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                    }`}
-                    onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
-                  >
-                    {widgetBackgroundTransparent[selectedWidget.id] 
-                      ? '✓ Transparent' 
-                      : 'Make Transparent'}
-                  </button>
+                <div className="space-y-3 bg-gray-800/30 rounded-lg p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-400">Opacity</label>
+                      <span className="text-xs text-gray-400">
+                        {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1"
+                      step="0.1"
+                      value={widgetOpacity[selectedWidget.id] ?? 1}
+                      onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-sm font-medium text-gray-400">Background</span>
+                    <button
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                        widgetBackgroundTransparent[selectedWidget.id] 
+                          ? 'bg-blue-500/80 hover:bg-blue-500 text-white' 
+                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                      }`}
+                      onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                    >
+                      {widgetBackgroundTransparent[selectedWidget.id] 
+                        ? '✓ Transparent' 
+                        : 'Make Transparent'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -879,34 +911,59 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
         <div className="p-6">
           {/* Main Controls Section */}
-          <div className="flex flex-col gap-4 bg-gray-800/50 rounded-lg p-4">
+          <div className="flex flex-col gap-4 bg-gray-800/60 rounded-lg p-5 shadow-inner border border-gray-700/30">
             {/* Top Buttons */}
             <div className="flex flex-col gap-3">
               <div className="flex gap-3">
                 <button 
-                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${
                     clickThrough 
-                      ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900' 
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900 hover:shadow' 
+                      : 'bg-blue-500 hover:bg-blue-600 text-white hover:shadow'
                   }`}
                   onClick={toggleClickThrough}
                 >
-                  {clickThrough ? 'Show Panel' : 'Hide Panel'}
+                  {clickThrough ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Show Panel
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                      Hide Panel
+                    </span>
+                  )}
                 </button>
                 
                 <button 
-                  className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-500 hover:bg-indigo-600 text-white transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
                   onClick={handleShowAllWidgets}
                   title="Reset all widgets to default visibility"
                 >
-                  Show All Widgets
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Show All
                 </button>
               </div>
               
               <button 
-                className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                className="w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
                 onClick={toggleTelemetryOptions}
               >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {showTelemetryOptions ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
                 {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
               </button>
             </div>
@@ -914,35 +971,43 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             {/* Quit Button */}
             {window.electronAPI && (
               <button 
-                className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-red-500/80 hover:bg-red-600 text-white transition-all shadow-sm hover:shadow-md duration-200 flex items-center justify-center gap-2 group"
                 onClick={quitApplication}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 group-hover:rotate-90 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                Quit Application
+                <span className="group-hover:tracking-wider transition-all duration-300">Quit Application</span>
               </button>
             )}
 
             {/* Widget Options */}
             {showTelemetryOptions && (
-              <div className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium text-gray-200">Display Options</h3>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-sm font-medium text-gray-200">Widgets Library</h3>
+                  <div className="h-px flex-grow bg-gray-700/50"></div>
+                </div>
                 
-                <div className="flex flex-col gap-2">
-                  <details className="group">
-                    <summary className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg cursor-pointer transition-colors">
-                      Add Telemetry Widget
-                      <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex flex-col gap-3">
+                  <details className="group bg-gray-800/40 rounded-lg overflow-hidden">
+                    <summary className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium bg-gradient-to-r from-blue-600/80 to-blue-500/80 hover:from-blue-600 hover:to-blue-500 text-white rounded-lg cursor-pointer transition-all outline-none">
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Add Telemetry Widget
+                      </div>
+                      <svg className="w-4 h-4 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </summary>
-                    <div className="mt-2">
+                    <div className="p-4 bg-gray-800/60">
                       <div className="grid grid-cols-2 gap-2">
                         {availableMetrics.map(metric => (
                           <button 
                             key={metric.id}
-                            className="px-3 py-2 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                            className="px-3 py-2 text-xs font-medium bg-gray-700/80 hover:bg-blue-600/80 text-white rounded-lg transition-all flex items-center justify-center"
                             onClick={() => addTelemetryWidget(metric.id, metric.name)}
                           >
                             {metric.name}
@@ -952,22 +1017,30 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     </div>
                   </details>
 
-                  <details className="group">
-                    <summary className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg cursor-pointer transition-colors">
-                      Add Speedforge Widget
-                      <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <details className="group bg-gray-800/40 rounded-lg overflow-hidden">
+                    <summary className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium bg-gradient-to-r from-indigo-600/80 to-indigo-500/80 hover:from-indigo-600 hover:to-indigo-500 text-white rounded-lg cursor-pointer transition-all outline-none">
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Add Speedforge Widget
+                      </div>
+                      <svg className="w-4 h-4 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </summary>
-                    <div className="mt-2">
+                    <div className="p-4 bg-gray-800/60">
                       {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                        <div key={category} className="mb-3">
-                          <h4 className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">{category}</h4>
+                        <div key={category} className="mb-4 last:mb-0">
+                          <h4 className="text-xs font-medium uppercase tracking-wider text-blue-300 mb-2 flex items-center">
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>
+                            {category}
+                          </h4>
                           <div className="grid grid-cols-2 gap-2">
                             {widgets.map(widget => (
                               <button 
                                 key={widget.type}
-                                className="px-3 py-2 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                className="px-3 py-2 text-xs font-medium bg-gray-700/80 hover:bg-indigo-600/80 text-white rounded-lg transition-all"
                                 onClick={() => addWidgetFromRegistry(widget.type)}
                                 title={widget.description}
                               >
