@@ -45,7 +45,12 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         if (event.state.historyLength !== undefined) {
           const newHistoryLength = Number(event.state.historyLength);
           debugLog(`Widget state update: historyLength changing from ${historyLength} to ${newHistoryLength}`);
-          setHistoryLength(newHistoryLength);
+          
+          // Use the functional form of setState to avoid dependency on current historyLength
+          setHistoryLength(prevLength => {
+            debugLog(`Updating historyLength from ${prevLength} to ${newHistoryLength}`);
+            return newHistoryLength;
+          });
         }
       }
     });
