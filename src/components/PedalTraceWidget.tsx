@@ -55,33 +55,46 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   
   // Listen for state updates from WidgetManager
   useEffect(() => {
+    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener with initial historyLength=${historyLength}`);
+    
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
     if (widget) {
+      console.log(`[PedalTrace:${id}] Found widget in WidgetManager:`, widget.state);
+      
       // Always resync with WidgetManager's state on mount
       if (widget.state && widget.state.historyLength !== undefined) {
         const storedLength = Number(widget.state.historyLength);
+        console.log(`[PedalTrace:${id}] Found existing historyLength=${storedLength} in WidgetManager`);
         
         // Force update our local state to match WidgetManager
         if (storedLength !== historyLengthRef.current) {
+          console.log(`[PedalTrace:${id}] Updating local historyLength to ${storedLength}`);
           setHistoryLength(storedLength);
         }
       } else {
         // If widget exists but doesn't have historyLength, set it
+        console.log(`[PedalTrace:${id}] Setting initial historyLength=${historyLengthRef.current} in WidgetManager`);
         WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
       }
     } else {
       // If widget doesn't exist in WidgetManager at all
+      console.log(`[PedalTrace:${id}] Widget not found in WidgetManager, registering with historyLength=${historyLengthRef.current}`);
       WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
     }
     
     // Subscribe to future state changes
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        console.log(`[PedalTrace:${id}] Received WidgetManager update:`, event.state);
+        
         if (event.state.historyLength !== undefined) {
           const newLength = Number(event.state.historyLength);
+          console.log(`[PedalTrace:${id}] New historyLength=${newLength}, current=${historyLengthRef.current}`);
+          
           // Only update if the value has actually changed
           if (historyLengthRef.current !== newLength) {
+            console.log(`[PedalTrace:${id}] Updating historyLength state to ${newLength}`);
             setHistoryLength(newLength);
           }
         }
@@ -91,7 +104,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     return () => {
       unsubscribe();
     };
-  }, [id]); // Only depends on id, not historyLength
+  }, [id, historyLength]); // Include historyLength in dependencies to ensure WidgetManager is updated
   
   // Use our custom hook to get telemetry data
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -273,6 +286,8 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
   // Default to 100 if not set
   const historyLength = widgetState.historyLength || 100;
   
+  console.log(`[Controls] getPedalTraceControls called with historyLength=${historyLength}`);
+  
   const controls: WidgetControlDefinition[] = [
     {
       id: 'historyLength',
@@ -288,8 +303,17 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
       ],
       onChange: (value) => {
         const numericValue = Number(value);
-        // Use a single update method
+        console.log(`[Controls] Slider onChange: setting historyLength to ${numericValue}`);
+        
+        // Update both the widget state and dispatch a direct update for redundancy
         updateWidget({ historyLength: numericValue });
+        
+        // Also try direct update mechanism as fallback
+        try {
+          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { historyLength: numericValue });
+        } catch (err) {
+          console.error(`[Controls] Error in direct update:`, err);
+        }
       }
     }
   ];

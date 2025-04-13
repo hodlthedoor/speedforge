@@ -9,31 +9,43 @@ export interface BaseWidgetProps {
   title?: string;
 }
 
-// Define a type for the widget state update event
-export interface WidgetStateUpdateEvent {
+// Constants for event names
+const WIDGET_STATE_UPDATE_EVENT = 'widget:state:update';
+
+// Type for widget state update events
+interface WidgetStateUpdateEvent {
   widgetId: string;
   state: Record<string, any>;
 }
 
-// Create a global event name for widget state updates
-export const WIDGET_STATE_UPDATE_EVENT = 'widget:state:direct-update';
-
-// Helper function to dispatch a widget state update event
+// Function to dispatch a widget state update
 export function dispatchWidgetStateUpdate(widgetId: string, state: Record<string, any>) {
+  console.log(`[BaseWidget] Dispatching state update for widget ${widgetId}:`, state);
+  
   const event = new CustomEvent<WidgetStateUpdateEvent>(WIDGET_STATE_UPDATE_EVENT, {
     detail: {
       widgetId,
-      state
-    }
+      state,
+    },
   });
-  console.log(`[BaseWidget] Dispatching ${WIDGET_STATE_UPDATE_EVENT} for widget ${widgetId}:`, state);
+  
+  // Log the event and listeners before dispatching
+  console.log(`[BaseWidget] Event created with type: ${WIDGET_STATE_UPDATE_EVENT}`, event);
+  
+  // Dispatch the event
   window.dispatchEvent(event);
+  
+  console.log(`[BaseWidget] State update event dispatched for ${widgetId}`);
 }
 
 // Hook to listen for widget state updates for a specific widget
 export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: Record<string, any>) => void) {
   useEffect(() => {
+    console.log(`[BaseWidget] Setting up state update listener for widget ${widgetId}`);
+    
     const handleStateUpdate = (event: Event) => {
+      console.log(`[BaseWidget] Received event in useWidgetStateUpdates:`, event);
+      
       const customEvent = event as CustomEvent<WidgetStateUpdateEvent>;
       if (customEvent.detail && customEvent.detail.widgetId === widgetId) {
         console.log(`[BaseWidget] Widget ${widgetId} received state update:`, customEvent.detail.state);
@@ -42,8 +54,10 @@ export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: R
     };
 
     window.addEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
+    console.log(`[BaseWidget] Added event listener for ${WIDGET_STATE_UPDATE_EVENT} for widget ${widgetId}`);
     
     return () => {
+      console.log(`[BaseWidget] Removing state update listener for widget ${widgetId}`);
       window.removeEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
     };
   }, [widgetId, onStateUpdate]);

@@ -98,8 +98,24 @@ class WidgetManagerService {
     
     const widget = this.widgets.get(widgetId);
     if (!widget) {
-      console.warn(`[WidgetManager] Widget with ID ${widgetId} not found`);
-      return false;
+      console.warn(`[WidgetManager] Widget with ID ${widgetId} not found, creating new entry`);
+      // If widget doesn't exist, create it as a placeholder
+      const newWidget: WidgetInstance = {
+        id: widgetId,
+        type: 'unknown',
+        title: 'Unknown',
+        options: {},
+        state,
+        enabled: true
+      };
+      this.widgets.set(widgetId, newWidget);
+      console.log(`[WidgetManager] Created placeholder widget for ${widgetId}:`, newWidget);
+      this.dispatch({ 
+        type: 'widget:state:updated', 
+        widgetId, 
+        state
+      });
+      return true;
     }
 
     const oldState = { ...widget.state };
@@ -114,7 +130,8 @@ class WidgetManagerService {
     this.widgets.set(widgetId, updatedWidget);
     
     console.log(`[WidgetManager] Dispatching widget:state:updated event for ${widgetId} with state:`, state);
-    console.log(`[WidgetManager] Number of listeners:`, this.listeners.length);
+    console.log(`[WidgetManager] Number of listeners: ${this.listeners.length}`);
+    console.log(`[WidgetManager] Listeners:`, this.listeners.map((_, i) => `Listener ${i}`));
     
     this.dispatch({ 
       type: 'widget:state:updated', 
