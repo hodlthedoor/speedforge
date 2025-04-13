@@ -48,7 +48,7 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   onClose
 }) => {
   // Use the new hook with the specific metric we want to track
-  const { data, connected } = useTelemetryData(id, { metrics: [metric] });
+  const { data } = useTelemetryData(id, { metrics: [metric] });
   
   const handleClose = () => {
     if (onClose) {

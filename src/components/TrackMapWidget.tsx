@@ -405,6 +405,14 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Get computed opacity of parent element to respect Widget's opacity control
+    const computedStyle = window.getComputedStyle(canvas.parentElement || canvas);
+    const parentOpacity = parseFloat(computedStyle.opacity) || 1;
+    
+    // Apply parent opacity to all canvas drawing
+    ctx.globalAlpha = parentOpacity;
+    
     // Add dark background
     ctx.fillStyle = '#1f2937';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -537,6 +545,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       ctx.fillStyle = '#FF0000';
       ctx.fill();
     }
+    
+    // Reset global alpha
+    ctx.globalAlpha = 1.0;
   }, [trackPoints, colorMode, currentPositionIndex, mapBuildingState, telemetryData, findPositionAtLapDistance]);
 
   const debouncedRenderCanvas = useCallback(() => {
