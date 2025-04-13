@@ -81,8 +81,8 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
 
     const svg = d3.select(svgRef.current);
     const width = 400;
-    const height = 80;
-    const margin = { top: 10, right: 10, bottom: 20, left: 10 };
+    const height = 120;
+    const margin = { top: 15, right: 10, bottom: 25, left: 10 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -188,7 +188,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
         .attr('y', innerHeight / 2 + 5)
         .attr('text-anchor', 'middle')
         .attr('fill', currentValue >= 90 && isFlashing ? '#ff0000' : '#fff')
-        .attr('font-size', '16px')
+        .attr('font-size', '24px')
         .attr('font-weight', 'bold')
         .text(`${Math.round(currentValue)}%`);
 
@@ -217,7 +217,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
         <svg
           ref={svgRef}
           width={400}
-          height={80}
+          height={120}
           className="bg-transparent w-full h-full"
           style={{ pointerEvents: 'none' }}
         />
