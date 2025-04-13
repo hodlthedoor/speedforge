@@ -24,87 +24,71 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const dataRef = useRef<PedalData[]>([]);
   const animationFrameId = useRef<number | null>(null);
   const [historyLength, setHistoryLength] = useState<number>(100);
+  const historyLengthRef = useRef<number>(100);
+  
+  // Update the ref whenever historyLength changes
+  useEffect(() => {
+    historyLengthRef.current = historyLength;
+  }, [historyLength]);
   
   // Create a callback to be usable by controls
   const updateHistoryLength = useCallback((newLength: number) => {
-    console.log(`[PedalTrace:${id}] Direct updateHistoryLength called with value: ${newLength}`);
-    setHistoryLength(newLength);
-  }, [id]);
+    // Only update if the value has actually changed
+    if (historyLengthRef.current !== newLength) {
+      setHistoryLength(newLength);
+    }
+  }, []);
   
   // Expose this function via a static property for the component
   (PedalTraceWidgetComponent as any).updateHistoryLength = updateHistoryLength;
   
-  // This logs each render to help with debugging 
-  console.log(`[PedalTrace:${id}] Rendering with historyLength=${historyLength}`);
-  
   // Use the generic widget state update hook
   useWidgetStateUpdates(id, (state) => {
-    console.log(`[PedalTrace:${id}] Received state update from generic event system:`, state);
     if (state.historyLength !== undefined) {
       const newLength = Number(state.historyLength);
-      console.log(`[PedalTrace:${id}] Updating historyLength to ${newLength} from generic event`);
-      setHistoryLength(newLength);
+      // Only update if the value has actually changed
+      if (historyLengthRef.current !== newLength) {
+        setHistoryLength(newLength);
+      }
     }
   });
   
   // Listen for state updates from WidgetManager
   useEffect(() => {
-    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener`);
-    
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
     if (widget) {
-      console.log(`[PedalTrace:${id}] Found widget in WidgetManager:`, widget);
-      console.log(`[PedalTrace:${id}] Widget state:`, widget.state);
-      
       // Always resync with WidgetManager's state on mount
       if (widget.state && widget.state.historyLength !== undefined) {
         const storedLength = Number(widget.state.historyLength);
-        console.log(`[PedalTrace:${id}] Found existing historyLength=${storedLength} in WidgetManager`);
         
         // Force update our local state to match WidgetManager
-        if (storedLength !== historyLength) {
-          console.log(`[PedalTrace:${id}] Updating local historyLength to match WidgetManager`);
+        if (storedLength !== historyLengthRef.current) {
           setHistoryLength(storedLength);
         }
       } else {
         // If widget exists but doesn't have historyLength, set it
-        console.log(`[PedalTrace:${id}] Registering historyLength=${historyLength} to existing widget`);
-        WidgetManager.updateWidgetState(id, { historyLength });
+        WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
       }
     } else {
       // If widget doesn't exist in WidgetManager at all
-      console.log(`[PedalTrace:${id}] Widget not found in WidgetManager, registering default state`);
-      WidgetManager.updateWidgetState(id, { historyLength });
+      WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
     }
-    
-    // Log on each render to check for widget manager issues
-    console.log(`[PedalTrace:${id}] Current WidgetManager instance:`, WidgetManager);
     
     // Subscribe to future state changes
     const unsubscribe = WidgetManager.subscribe((event) => {
-      // Log ALL events for debugging
-      console.log(`[PedalTrace:${id}] WidgetManager event:`, event.type, event);
-      
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        console.log(`[PedalTrace:${id}] State update for this widget:`, event.state);
-        
         if (event.state.historyLength !== undefined) {
           const newLength = Number(event.state.historyLength);
-          console.log(`[PedalTrace:${id}] WidgetManager notified historyLength change: ${newLength}`);
-          setHistoryLength(newLength);
+          // Only update if the value has actually changed
+          if (historyLengthRef.current !== newLength) {
+            setHistoryLength(newLength);
+          }
         }
       }
     });
     
-    // Test the WidgetManager subscription by directly calling updateWidgetState
-    setTimeout(() => {
-      console.log(`[PedalTrace:${id}] Testing WidgetManager subscription with setTimeout...`);
-      WidgetManager.updateWidgetState(id, { historyLength });
-    }, 1000);
-    
     return () => {
-      console.log(`[PedalTrace:${id}] Cleaning up WidgetManager listener`);
       unsubscribe();
     };
   }, [id]); // Only depends on id, not historyLength
@@ -125,8 +109,11 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         brake: telemetryData.brake_pct || 0
       };
 
+      // Use the ref value to avoid dependency on the state
+      const currentHistoryLength = historyLengthRef.current;
+      
       // Update ref without causing a state update
-      dataRef.current = [...dataRef.current, newData].slice(-historyLength);
+      dataRef.current = [...dataRef.current, newData].slice(-currentHistoryLength);
       
       // Only update state when we need to redraw
       if (!animationFrameId.current) {
@@ -143,7 +130,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         animationFrameId.current = null;
       }
     };
-  }, [telemetryData, historyLength]);
+  }, [telemetryData]);
 
   // D3 drawing logic
   const updateChart = useCallback(() => {
@@ -244,8 +231,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       <div className="mt-2 flex justify-between text-xs">
         <button 
           onClick={() => {
-            console.log(`[PedalTrace:${id}] Test button: setting historyLength to 20`);
-            // For testing, we'll directly update the WidgetManager
             WidgetManager.updateWidgetState(id, { historyLength: 20 });
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
@@ -254,7 +239,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         </button>
         <button 
           onClick={() => {
-            console.log(`[PedalTrace:${id}] Test button: setting historyLength to 100`);
             WidgetManager.updateWidgetState(id, { historyLength: 100 });
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
@@ -263,7 +247,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         </button>
         <button 
           onClick={() => {
-            console.log(`[PedalTrace:${id}] Test button: setting historyLength to 500`);
             WidgetManager.updateWidgetState(id, { historyLength: 500 });
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
@@ -272,8 +255,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         </button>
         <button 
           onClick={() => {
-            // Test the new direct state update mechanism
-            console.log(`[PedalTrace:${id}] Testing generic event system with value 200`);
             dispatchWidgetStateUpdate(id, { historyLength: 200 });
           }}
           className="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs"
@@ -292,9 +273,6 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
   // Default to 100 if not set
   const historyLength = widgetState.historyLength || 100;
   
-  console.log(`[Controls] getPedalTraceControls called with widgetState:`, widgetState);
-  console.log(`[Controls] updateWidget function:`, updateWidget);
-  
   const controls: WidgetControlDefinition[] = [
     {
       id: 'historyLength',
@@ -310,31 +288,8 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
       ],
       onChange: (value) => {
         const numericValue = Number(value);
-        console.log(`[Controls] Slider onChange called with value: ${numericValue}`);
-        
-        // APPROACH 1: Update via WidgetManager (standard approach)
-        console.log(`[Controls] APPROACH 1: Updating via provided updateWidget function`);
+        // Use a single update method
         updateWidget({ historyLength: numericValue });
-        
-        try {
-          // APPROACH 2: Try to directly call our component's update method (if accessible)
-          console.log(`[Controls] APPROACH 2: Attempting direct component update`);
-          if ((PedalTraceWidgetComponent as any).updateHistoryLength) {
-            console.log(`[Controls] Found static updateHistoryLength on component, calling it`);
-            (PedalTraceWidgetComponent as any).updateHistoryLength(numericValue);
-          } else {
-            console.log(`[Controls] No static updateHistoryLength found on component`);
-          }
-          
-          // APPROACH 3: Use our new generic event system
-          console.log(`[Controls] APPROACH 3: Using generic widget state update system`);
-          dispatchWidgetStateUpdate(widgetState.id, { historyLength: numericValue });
-          
-        } catch (error) {
-          console.error(`[Controls] Error in direct update approaches:`, error);
-        }
-        
-        console.log(`[Controls] After all update approaches, slider value: ${numericValue}`);
       }
     }
   ];
