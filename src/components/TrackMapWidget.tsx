@@ -86,12 +86,12 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const canvas = canvasRef.current;
       if (!canvas) return;
       
-      const container = canvas.parentElement;
-      if (!container) return;
+      // Set canvas size based on scale factor
+      const width = Math.max(300, Math.round(550 * scaleFactorRef.current));
+      const height = Math.max(200, Math.round(300 * scaleFactorRef.current));
       
-      // Set the canvas dimensions to match its container
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
+      canvas.width = width;
+      canvas.height = height;
       
       // Re-render after resize
       renderCanvas();
@@ -805,17 +805,15 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, []);
 
   return (
-    <Widget id={id} title="Track Map" className={`w-auto`} onClose={onClose}>
-      <div 
-        className="rounded"
-        style={{
-          width: `${Math.max(300, 550 * scaleFactor)}px`,
-          height: `${Math.max(200, 300 * scaleFactor)}px`,
-          transition: 'width 0.3s, height 0.3s',
-          maxWidth: 'calc(100vw - 40px)',  // Ensure it doesn't exceed viewport width
-          maxHeight: 'calc(100vh - 100px)' // Ensure it doesn't exceed viewport height
-        }}
-      >
+    <Widget 
+      id={id} 
+      title="Track Map" 
+      className="w-auto"
+      width={Math.max(300, Math.round(550 * scaleFactor))}
+      height={Math.max(200, Math.round(300 * scaleFactor))}
+      onClose={onClose}
+    >
+      <div className="w-full h-full rounded">
         {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             {lapInvalidated ? (
@@ -853,8 +851,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         ) : (
           <div className="w-full h-full rounded">
             <canvas 
-              ref={canvasRef} 
-              className="w-full h-full rounded bg-transparent" 
+              ref={canvasRef}
+              className="w-full h-full rounded bg-transparent"
             />
           </div>
         )}

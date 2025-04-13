@@ -7,6 +7,7 @@ export interface BaseWidgetProps {
   onClose: () => void;
   className?: string;
   title?: string;
+  style?: React.CSSProperties;
 }
 
 // Constants for event names
@@ -69,7 +70,8 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   onClose,
   className = '',
   title = 'Widget',
-  children
+  children,
+  style
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -131,7 +133,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   return (
     <div 
       className={`drag-handle w-auto max-w-[500px] ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
-      style={{ opacity: currentOpacity }}
+      style={{ opacity: currentOpacity, ...style }}
       onClick={handleWidgetClick}
     >
       <div className="p-3 min-w-[200px] max-w-full min-h-[100px] max-h-[500px] overflow-auto">

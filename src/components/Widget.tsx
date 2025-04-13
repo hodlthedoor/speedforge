@@ -9,6 +9,8 @@ export interface WidgetProps {
   children?: React.ReactNode;
   id: string;
   className?: string;
+  width?: string | number;
+  height?: string | number;
 }
 
 export const Widget: React.FC<WidgetProps> = ({ 
@@ -17,7 +19,9 @@ export const Widget: React.FC<WidgetProps> = ({
   onClose, 
   children, 
   id,
-  className = ''
+  className = '',
+  width = 'auto',
+  height = 'auto'
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
@@ -104,6 +108,11 @@ export const Widget: React.FC<WidgetProps> = ({
         title={title}
         onClose={handleClose}
         className={`${className} ${isHighlighted && !isBackgroundTransparent ? 'shadow-blue-500/50 animate-pulse' : ''}`}
+        style={{
+          width: width ? (typeof width === 'number' ? `${width}px` : width) : undefined,
+          height: height ? (typeof height === 'number' ? `${height}px` : height) : undefined,
+          transition: 'width 0.3s, height 0.3s'
+        }}
       >
         {children}
       </BaseWidget>
