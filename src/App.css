@@ -13,8 +13,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  background-color: transparent !important;
-  background: transparent !important;
+  background-color: rgba(59, 130, 246, 0.05) !important; /* Very subtle blue background */
   pointer-events: auto; /* Receive all events by default (not click-through) */
   -webkit-app-region: no-drag; /* Disable window dragging */
 }
@@ -22,11 +21,13 @@
 /* When in click-through mode, pass events to underlying window */
 .app-container.click-through {
   pointer-events: none !important;
+  background-color: transparent !important; /* Remove background when in click-through mode */
 }
 
 /* Alternative method using body class */
 body.click-through-mode {
   pointer-events: none !important;
+  background-color: transparent !important;
 }
 
 /* But make specific UI elements still receive events even in click-through mode */
