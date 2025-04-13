@@ -769,12 +769,12 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       className={`w-[400px] max-h-[80vh] flex flex-col shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
     >
       {/* Header */}
-      <div className="w-full flex items-center justify-between bg-gray-900/80 border-b border-gray-700 py-3 px-4 drag-handle">
-        <h2 className="text-base font-semibold">Control Panel</h2>
+      <div className="w-full flex items-center justify-between bg-gray-900/80 border-b border-gray-700 px-6 py-3 drag-handle">
+        <h2 className="text-base font-medium tracking-wide">Control Panel</h2>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div 
-            className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
             title={`Game ${isConnected ? 'Connected' : 'Disconnected'}`}
           ></div>
           
@@ -782,10 +782,10 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             onClick={handleReconnect}
             disabled={reconnecting}
             title="Force WebSocket reconnection"
-            className={`text-xs rounded px-2 py-0.5 transition-colors ${
+            className={`text-xs px-3 py-1 rounded-md transition-colors ${
               reconnecting 
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
-                : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
             }`}
           >
             {reconnecting ? '...' : 'Reconnect'}
@@ -796,39 +796,43 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       {/* Selected Widget Section - Fixed */}
       {selectedWidget && (
         <div className="border-b border-gray-700 bg-gray-900/50">
-          <div className="p-4">
-            <div className="widget-details-panel">
-              <div className="widget-details-header">
-                <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
+          <div className="px-6 py-4">
+            <div className="widget-details-panel space-y-3">
+              <div className="widget-details-header flex items-center justify-between">
+                <h4 className="text-sm font-medium">{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
                 <button 
-                  className="widget-close-btn hover:text-red-400 transition-colors" 
+                  className="hover:text-red-400 transition-colors p-1" 
                   onClick={() => closeWidget(selectedWidget.id)}
                   title="Close Widget"
                 >
-                  ×
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-              <div className="widget-detail">
-                <span className="detail-label">ID:</span>
-                <span className="detail-value">{selectedWidget.id.slice(0, 8)}...</span>
-              </div>
-              <div className="widget-detail">
-                <span className="detail-label">Type:</span>
-                <span className="detail-value">{selectedWidget.type || 'default'}</span>
-              </div>
-              {selectedWidget.options?.metric && (
-                <div className="widget-detail">
-                  <span className="detail-label">Metric:</span>
-                  <span className="detail-value">{selectedWidget.options.metric}</span>
+
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between text-gray-300">
+                  <span className="font-medium">ID:</span>
+                  <span className="font-mono text-xs">{selectedWidget.id.slice(0, 8)}...</span>
                 </div>
-              )}
+                <div className="flex items-center justify-between text-gray-300">
+                  <span className="font-medium">Type:</span>
+                  <span>{selectedWidget.type || 'default'}</span>
+                </div>
+                {selectedWidget.options?.metric && (
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="font-medium">Metric:</span>
+                    <span>{selectedWidget.options.metric}</span>
+                  </div>
+                )}
+              </div>
               
               {/* Dynamic Widget Controls from Registry */}
               {getWidgetControls(selectedWidget).length > 0 && (
-                <div className="widget-controls mt-3">
-                  <div className="flex flex-col gap-2">
-                    <span className="detail-label">Widget Controls:</span>
-                    
+                <div className="space-y-3 pt-2">
+                  <span className="text-sm font-medium text-gray-200">Widget Controls</span>
+                  <div className="space-y-3">
                     {getWidgetControls(selectedWidget).map(control => 
                       renderWidgetControl(control)
                     )}
@@ -836,9 +840,9 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </div>
               )}
               
-              <div className="widget-detail">
-                <span className="detail-label">Opacity:</span>
-                <div className="pl-2">
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-200">Opacity</label>
                   <input
                     type="range"
                     min="0.3"
@@ -846,19 +850,17 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     step="0.1"
                     value={widgetOpacity[selectedWidget.id] ?? 1}
                     onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
-              </div>
-              
-              <div className="widget-detail">
-                <span className="detail-label">Background:</span>
-                <div className="pl-2">
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-200">Background</span>
                   <button
-                    className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       widgetBackgroundTransparent[selectedWidget.id] 
                         ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
                     }`}
                     onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
                   >
@@ -875,18 +877,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-        <div className="p-4">
-          <div className="control-buttons flex flex-col gap-2 w-full">
-            <div className="flex gap-2 w-full">
+        <div className="px-4 py-3 space-y-3">
+          <div className="space-y-2">
+            <div className="flex gap-2 justify-center">
               <button 
-                className={`btn flex-1 ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
+                className={`px-6 py-1.5 rounded text-sm font-medium transition-all ${
+                  clickThrough 
+                    ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900' 
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
                 onClick={toggleClickThrough}
               >
                 {clickThrough ? 'Show Panel' : 'Hide Panel'}
               </button>
               
               <button 
-                className="btn flex-1 btn-secondary transition-all hover:shadow-md"
+                className="px-6 py-1.5 rounded text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white transition-all"
                 onClick={handleShowAllWidgets}
                 title="Reset all widgets to default visibility"
               >
@@ -895,97 +901,84 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
             </div>
             
             <button 
-              className="btn btn-primary transition-all hover:shadow-md"
+              className="w-full px-6 py-1.5 rounded text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-all"
               onClick={toggleTelemetryOptions}
             >
               {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
             </button>
-            
-            {window.electronAPI && (
-              <>
-                <button 
-                  className="btn btn-error mt-4 flex items-center justify-center gap-2 transition-all hover:shadow-md hover:bg-red-700"
-                  onClick={quitApplication}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Quit Application
-                </button>
-                
-                {/* Display management section */}
-                {displays.length > 1 && (
-                  <div className="mt-2 border-t border-gray-700 pt-2">
-                    <h3 className="text-sm font-semibold mb-2">Display Management</h3>
-                    <div className="flex flex-col gap-1">
-                      {displays.map(display => (
-                        <div key={display.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                          <span className="text-sm">
-                            {display.isPrimary ? '🖥️ Primary: ' : '🖥️ '} 
-                            {display.label || `Display ${display.id}`}
-                          </span>
-                          <button 
-                            className="btn btn-xs btn-error transition-all hover:bg-red-700"
-                            onClick={() => closeDisplayWindow(display.id)}
-                          >
-                            Close
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
           </div>
           
-          {showTelemetryOptions && <div className="mt-4">
-            <h3 className="text-sm font-semibold mb-2">Display Options</h3>
-            <details className="telemetry-details">
-              <summary className="btn btn-primary telemetry-summary">
-                Add Telemetry Widget
-              </summary>
-              <div className="telemetry-options">
-                <h3>Select Telemetry Metric</h3>
-                <div className="metric-buttons">
-                  {availableMetrics.map(metric => (
-                    <button 
-                      key={metric.id}
-                      className="btn btn-sm btn-secondary metric-btn"
-                      onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                    >
-                      {metric.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </details>
-
-            <details className="telemetry-details">
-              <summary className="btn btn-primary telemetry-summary">
-                Add Speedforge Widget
-              </summary>
-              <div className="telemetry-options">
-                {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                  <div key={category} className="widget-category mb-4">
-                    <h3 className="text-sm uppercase tracking-wider text-gray-400 mb-2">{category}</h3>
-                    <div className="metric-buttons">
-                      {widgets.map(widget => (
+          {window.electronAPI && (
+            <div className="space-y-2">
+              <button 
+                className="w-full px-6 py-1.5 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-all flex items-center justify-center gap-2"
+                onClick={quitApplication}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Quit Application
+              </button>
+            </div>
+          )}
+          
+          {showTelemetryOptions && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-200 px-1">Display Options</h3>
+              
+              <div className="space-y-2">
+                <details className="group">
+                  <summary className="flex items-center justify-between w-full px-4 py-1.5 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded cursor-pointer transition-all">
+                    Add Telemetry Widget
+                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="mt-2 px-1">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {availableMetrics.map(metric => (
                         <button 
-                          key={widget.type}
-                          className="btn btn-sm btn-secondary metric-btn"
-                          onClick={() => addWidgetFromRegistry(widget.type)}
-                          title={widget.description}
+                          key={metric.id}
+                          className="px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded transition-all"
+                          onClick={() => addTelemetryWidget(metric.id, metric.name)}
                         >
-                          {widget.defaultTitle}
+                          {metric.name}
                         </button>
                       ))}
                     </div>
                   </div>
-                ))}
+                </details>
+
+                <details className="group">
+                  <summary className="flex items-center justify-between w-full px-4 py-1.5 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded cursor-pointer transition-all">
+                    Add Speedforge Widget
+                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="mt-2">
+                    {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                      <div key={category} className="mb-2">
+                        <h4 className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-1 px-1">{category}</h4>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {widgets.map(widget => (
+                            <button 
+                              key={widget.type}
+                              className="px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded transition-all"
+                              onClick={() => addWidgetFromRegistry(widget.type)}
+                              title={widget.description}
+                            >
+                              {widget.defaultTitle}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </div>
-            </details>
-          </div>}
+            </div>
+          )}
         </div>
       </div>
     </BaseDraggableComponent>
