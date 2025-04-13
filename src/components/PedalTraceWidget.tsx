@@ -228,6 +228,7 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
   const historyLength = widgetState.historyLength || 100;
   
   console.log(`getPedalTraceControls called with widgetState:`, widgetState);
+  console.log(`[DEBUG] getPedalTraceControls - updateWidget function:`, updateWidget);
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -244,7 +245,12 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
       ],
       onChange: (value) => {
         console.log(`Slider onChange called with value: ${value}`);
+        console.log(`[DEBUG] Slider onChange - Will call updateWidget with:`, { historyLength: value });
+        
+        // Call updateWidget with the new value
         updateWidget({ historyLength: value });
+        
+        console.log(`[DEBUG] Slider onChange - After calling updateWidget`);
       }
     }
   ];

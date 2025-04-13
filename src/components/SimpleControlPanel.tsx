@@ -118,11 +118,17 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   const updateWidgetState = useCallback((widgetId: string, updates: any) => {
     // Get the widget
     const widget = activeWidgets.find(w => w.id === widgetId);
-    if (!widget) return;
+    if (!widget) {
+      console.error(`[CRITICAL] Cannot update widget state: widget with ID ${widgetId} not found`);
+      return;
+    }
+    
+    console.log(`[SimpleControlPanel] updateWidgetState called for widget ${widgetId} with updates:`, updates);
     
     // Update widget state in the widget object itself
     if (!widget.state) widget.state = {};
     widget.state = { ...widget.state, ...updates };
+    console.log(`[SimpleControlPanel] Widget state after update:`, widget.state);
     
     // Handle track map widgets specifically
     if (widget.type === 'track-map') {
@@ -139,6 +145,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     }
     
     // Update the widget state using WidgetManager
+    console.log(`[SimpleControlPanel] Calling WidgetManager.updateWidgetState for widget ${widgetId}`);
     WidgetManager.updateWidgetState(widgetId, updates);
     
     // For all widget types, dispatch a generic widget:state:update event
@@ -495,9 +502,20 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                   // Special logging for historyLength which seems to have issues
                   if (control.id === 'historyLength') {
                     console.log(`[Debug] historyLength slider changed to: ${numericValue}. Current widget state:`, selectedWidget?.state);
+                    
+                    // Add debugging for callback
+                    console.log(`[DEBUG] About to call control.onChange with value: ${numericValue}`);
+                    console.log(`[DEBUG] control.onChange is:`, control.onChange);
+                    console.log(`[DEBUG] Selected widget:`, selectedWidget);
                   }
                   
                   control.onChange(numericValue);
+                  
+                  // Add post-callback debugging
+                  if (control.id === 'historyLength') {
+                    console.log(`[DEBUG] After calling control.onChange with value: ${numericValue}`);
+                    console.log(`[DEBUG] Selected widget state after update:`, selectedWidget?.state);
+                  }
                 }}
                 className="w-full"
               />

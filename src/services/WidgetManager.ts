@@ -94,20 +94,34 @@ class WidgetManagerService {
 
   // Update a widget's state
   updateWidgetState(widgetId: string, state: Record<string, any>): boolean {
+    console.log(`[WidgetManager] updateWidgetState called for widget ${widgetId} with state:`, state);
+    
     const widget = this.widgets.get(widgetId);
-    if (!widget) return false;
+    if (!widget) {
+      console.warn(`[WidgetManager] Widget with ID ${widgetId} not found`);
+      return false;
+    }
 
+    const oldState = { ...widget.state };
     const updatedWidget = {
       ...widget,
       state: { ...widget.state, ...state }
     };
 
+    console.log(`[WidgetManager] Widget ${widgetId} state before:`, oldState);
+    console.log(`[WidgetManager] Widget ${widgetId} state after:`, updatedWidget.state);
+    
     this.widgets.set(widgetId, updatedWidget);
+    
+    console.log(`[WidgetManager] Dispatching widget:state:updated event for ${widgetId} with state:`, state);
+    console.log(`[WidgetManager] Number of listeners:`, this.listeners.length);
+    
     this.dispatch({ 
       type: 'widget:state:updated', 
       widgetId, 
       state: updatedWidget.state 
     });
+    
     return true;
   }
 
