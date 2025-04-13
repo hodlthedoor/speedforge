@@ -24,6 +24,10 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const animationFrameId = useRef<number | null>(null);
   const [historyLength, setHistoryLength] = useState<number>(100);
   const initialRenderRef = useRef<boolean>(true);
+  // Use a ref to track when a state update comes from external sources
+  const externalUpdateRef = useRef<boolean>(false);
+  // Track the last known state from WidgetManager
+  const lastKnownManagerStateRef = useRef<Record<string, any>>({});
   
   // Debug logs for first render
   useEffect(() => {
@@ -38,26 +42,29 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     console.log(`[PedalTrace:${id}] ${message}`);
   };
   
-  // Listen for widget state updates to sync the historyLength
+  // Listen for widget state updates from WidgetManager
   useEffect(() => {
-    debugLog(`Setting up WidgetManager subscription, id=${id}`);
-    
-    // Keep track of the previous historyLength to avoid circular updates
-    let lastKnownExternalHistoryLength = historyLength;
+    debugLog(`Setting up WidgetManager subscription for widget ${id}`);
     
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
         debugLog(`Received state update event: ${JSON.stringify(event.state)}`);
         
-        // Check if historyLength has changed
         if (event.state.historyLength !== undefined) {
           const newHistoryLength = Number(event.state.historyLength);
           
-          // Only update if the value is different and not a result of our own sync
-          if (newHistoryLength !== historyLength && newHistoryLength !== lastKnownExternalHistoryLength) {
-            debugLog(`External historyLength change detected: ${newHistoryLength} (current: ${historyLength})`);
-            lastKnownExternalHistoryLength = newHistoryLength;
+          // If the value is different from our current state
+          if (newHistoryLength !== historyLength) {
+            debugLog(`External historyLength change detected: ${newHistoryLength}`);
+            // Set flag to indicate this is an external update
+            externalUpdateRef.current = true;
+            // Update our state to match WidgetManager's
             setHistoryLength(newHistoryLength);
+            // Save the WidgetManager state for reference
+            lastKnownManagerStateRef.current = {
+              ...lastKnownManagerStateRef.current,
+              historyLength: newHistoryLength
+            };
           }
         }
       }
@@ -69,9 +76,32 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     };
   }, [id, historyLength]);
 
-  // Add a new effect to update existing data when historyLength changes
+  // Only sync our internal state back to WidgetManager when we make local changes
   useEffect(() => {
-    debugLog(`historyLength changed to ${historyLength}`);
+    // Skip initial render
+    if (initialRenderRef.current) {
+      return;
+    }
+    
+    // Only update WidgetManager if this wasn't triggered by an external update
+    if (!externalUpdateRef.current) {
+      debugLog(`Local historyLength changed to ${historyLength}, updating WidgetManager`);
+      WidgetManager.updateWidgetState(id, { historyLength });
+      // Update our reference of WidgetManager state
+      lastKnownManagerStateRef.current = {
+        ...lastKnownManagerStateRef.current,
+        historyLength
+      };
+    } else {
+      // Reset the external update flag
+      debugLog(`External update flag reset after processing historyLength=${historyLength}`);
+      externalUpdateRef.current = false;
+    }
+  }, [id, historyLength]);
+
+  // Effect to update the data buffer when historyLength changes
+  useEffect(() => {
+    debugLog(`historyLength changed to ${historyLength}, updating data buffer`);
     
     // Immediately resize the existing data buffer when historyLength changes
     if (dataRef.current.length > 0) {
@@ -88,7 +118,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       }
     }
   }, [historyLength]);
-  
+
   // Use our custom hook with throttle and brake metrics
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: ['throttle_pct', 'brake_pct'],
@@ -132,20 +162,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     };
   }, [telemetryData, historyLength]);
   
-  // Synchronize local state with WidgetManager
-  // When our internal state changes, update the WidgetManager
-  useEffect(() => {
-    // We don't want to update WidgetManager on the initial render
-    if (initialRenderRef.current) {
-      return;
-    }
-    
-    // This effect synchronizes our internal state with the WidgetManager
-    // When historyLength changes internally, we update the WidgetManager
-    debugLog(`Syncing historyLength=${historyLength} to WidgetManager`);
-    WidgetManager.updateWidgetState(id, { historyLength });
-  }, [id, historyLength]);
-
   // D3 drawing logic is created outside of component dependency arrays
   const updateChart = useCallback(() => {
     if (!svgRef.current || data.length === 0) return;
@@ -253,10 +269,29 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     if (widgetState.historyLength !== undefined) {
       const storedLength = Number(widgetState.historyLength);
       debugLog(`Found existing historyLength=${storedLength} in WidgetManager, using it`);
+      
+      // Set flag to indicate this is an external update
+      externalUpdateRef.current = true;
+      
+      // Save this state as our last known state
+      lastKnownManagerStateRef.current = {
+        ...lastKnownManagerStateRef.current,
+        historyLength: storedLength
+      };
+      
+      // Apply the WidgetManager's value to our local state
       setHistoryLength(storedLength);
     } else {
       // Otherwise, register our default historyLength with the WidgetManager
       debugLog(`No existing historyLength in WidgetManager, registering default (${historyLength})`);
+      
+      // Initialize our reference of WidgetManager state
+      lastKnownManagerStateRef.current = {
+        ...lastKnownManagerStateRef.current,
+        historyLength
+      };
+      
+      // Register our default state with the WidgetManager
       WidgetManager.updateWidgetState(id, { historyLength });
     }
     
@@ -276,23 +311,32 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       <div className="mt-2 flex justify-between text-xs">
         <button 
           onClick={() => {
-            debugLog(`Manually setting historyLength to 50`);
-            // Just update the internal state, the effect will sync with WidgetManager
-            setHistoryLength(50);
+            debugLog(`Setting historyLength to 20 (test button)`);
+            // Using direct setHistoryLength will trigger local state update
+            // which will sync with WidgetManager via our effects
+            setHistoryLength(20);
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
         >
-          Set to 50
+          Set to 20
         </button>
         <button 
           onClick={() => {
-            debugLog(`Manually setting historyLength to 200`);
-            // Just update the internal state, the effect will sync with WidgetManager
-            setHistoryLength(200);
+            debugLog(`Setting historyLength to 100 (test button)`);
+            setHistoryLength(100);
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
         >
-          Set to 200
+          Set to 100
+        </button>
+        <button 
+          onClick={() => {
+            debugLog(`Setting historyLength to 500 (test button)`);
+            setHistoryLength(500);
+          }}
+          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
+        >
+          Set to 500
         </button>
         <span>Current: {historyLength}</span>
       </div>
