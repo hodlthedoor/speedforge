@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Widget from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
-import { useWidgetState } from '../hooks/useWidgetState';
+import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
+import { WidgetManager } from '../services/WidgetManager';
 
 interface SpeedWidgetProps {
   id: string;
@@ -16,9 +17,106 @@ const SpeedWidgetComponent: React.FC<SpeedWidgetProps> = ({
   onClose,
   unit: initialUnit = 'kph'
 }) => {
-  // Use our custom hook for widget state (much cleaner!)
-  const [displaySize, setDisplaySize, displaySizeRef] = useWidgetState<number>(id, 'displaySize', 100);
-  const [unit, setUnit] = useWidgetState<'kph' | 'mph'>(id, 'unit', initialUnit);
+  // Define state for the size with default value (normal size = 100)
+  const [displaySize, setDisplaySize] = useState<number>(100);
+  const displaySizeRef = useRef<number>(100);
+  
+  // Define state for the unit
+  const [unit, setUnit] = useState<'kph' | 'mph'>(initialUnit);
+  const unitRef = useRef<'kph' | 'mph'>(initialUnit);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    displaySizeRef.current = displaySize;
+  }, [displaySize]);
+  
+  useEffect(() => {
+    unitRef.current = unit;
+  }, [unit]);
+  
+  // Listen for custom events via the useWidgetStateUpdates hook
+  useWidgetStateUpdates(id, (state) => {
+    if (state.displaySize !== undefined) {
+      const newSize = Number(state.displaySize);
+      if (displaySizeRef.current !== newSize) {
+        setDisplaySize(newSize);
+      }
+    }
+    
+    if (state.unit !== undefined && state.unit !== unitRef.current) {
+      setUnit(state.unit);
+    }
+  });
+  
+  // Initialize from WidgetManager and listen for its updates
+  useEffect(() => {
+    // Get initial state from WidgetManager
+    const widget = WidgetManager.getWidget(id);
+    if (widget) {
+      if (widget.state) {
+        if (widget.state.displaySize !== undefined) {
+          const storedSize = Number(widget.state.displaySize);
+          if (storedSize !== displaySizeRef.current) {
+            setDisplaySize(storedSize);
+          }
+        }
+        
+        if (widget.state.unit !== undefined && widget.state.unit !== unitRef.current) {
+          setUnit(widget.state.unit);
+        }
+      } else {
+        // Set initial state in WidgetManager
+        WidgetManager.updateWidgetState(id, { 
+          displaySize: displaySizeRef.current,
+          unit: unitRef.current
+        });
+      }
+    } else {
+      // Widget doesn't exist yet, create state
+      WidgetManager.updateWidgetState(id, { 
+        displaySize: displaySizeRef.current,
+        unit: unitRef.current
+      });
+    }
+    
+    // Subscribe to WidgetManager updates
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        if (event.state.displaySize !== undefined) {
+          const newSize = Number(event.state.displaySize);
+          if (displaySizeRef.current !== newSize) {
+            setDisplaySize(newSize);
+          }
+        }
+        
+        if (event.state.unit !== undefined && event.state.unit !== unitRef.current) {
+          setUnit(event.state.unit);
+        }
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [id]);
+  
+  // Sync local displaySize changes to WidgetManager
+  useEffect(() => {
+    // Skip initial render
+    if (displaySizeRef.current === displaySize) return;
+    
+    // Update WidgetManager with new value
+    WidgetManager.updateWidgetState(id, { displaySize });
+  }, [displaySize, id]);
+  
+  // Sync local unit changes to WidgetManager
+  useEffect(() => {
+    // Skip initial render
+    if (unitRef.current === unit) return;
+    
+    // Update WidgetManager with new value
+    WidgetManager.updateWidgetState(id, { unit });
+  }, [unit, id]);
   
   // Use telemetry data
   const { data: telemetryData } = useTelemetryData(id, { 

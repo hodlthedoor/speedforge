@@ -63,5 +63,51 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
     }
   }
 });
+import_electron.contextBridge.exposeInMainWorld("electronSpeech", {
+  // Get available voices
+  getVoices: async () => {
+    try {
+      return await import_electron.ipcRenderer.invoke("speech:getVoices");
+    } catch (error) {
+      console.error("Error getting voices:", error);
+      return [];
+    }
+  },
+  // Speak text with specified voice and parameters
+  speak: async (text, voice, rate, volume) => {
+    try {
+      console.log(`Preload: Speaking "${text}" with voice=${voice}, rate=${rate}, volume=${volume}`);
+      return await import_electron.ipcRenderer.invoke("speech:speak", text, voice, rate, volume);
+    } catch (error) {
+      console.error("Error speaking:", error);
+      throw error;
+    }
+  },
+  // Stop speech
+  stop: async (id) => {
+    try {
+      return await import_electron.ipcRenderer.invoke("speech:stop", id);
+    } catch (error) {
+      console.error("Error stopping speech:", error);
+      throw error;
+    }
+  },
+  // Add listener for speech completion
+  onSpeechComplete: (callback) => {
+    const wrappedCallback = (_event, data) => callback(data);
+    import_electron.ipcRenderer.on("speech:complete", wrappedCallback);
+    return () => {
+      import_electron.ipcRenderer.removeListener("speech:complete", wrappedCallback);
+    };
+  },
+  // Add listener for speech errors
+  onSpeechError: (callback) => {
+    const wrappedCallback = (_event, data) => callback(data);
+    import_electron.ipcRenderer.on("speech:error", wrappedCallback);
+    return () => {
+      import_electron.ipcRenderer.removeListener("speech:error", wrappedCallback);
+    };
+  }
+});
 console.log("Preload script executed successfully");
 //# sourceMappingURL=preload.js.map
