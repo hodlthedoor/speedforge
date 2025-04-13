@@ -766,9 +766,9 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
-      className={`w-[400px] max-h-[80vh] overflow-y-auto overflow-x-hidden scrollbar-none shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
+      className={`w-[400px] max-h-[80vh] flex flex-col shadow-lg border border-blue-200/20 bg-gray-800/85 rounded-lg text-gray-100 z-[1000] backdrop-blur-sm ${clickThrough ? 'click-through' : ''}`}
     >
-      {/* Completely redesigned header with proper spacing */}
+      {/* Header */}
       <div className="w-full flex items-center justify-between bg-gray-900/80 border-b border-gray-700 py-3 px-4 drag-handle">
         <h2 className="text-base font-semibold">Control Panel</h2>
         
@@ -793,122 +793,10 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         </div>
       </div>
 
-      <div className="panel-content w-full px-4 py-3">
-        <div className="control-buttons flex flex-col gap-2 w-full">
-          <div className="flex gap-2 w-full">
-            <button 
-              className={`btn flex-1 ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
-              onClick={toggleClickThrough}
-            >
-              {clickThrough ? 'Show Panel' : 'Hide Panel'}
-            </button>
-            
-            <button 
-              className="btn flex-1 btn-secondary transition-all hover:shadow-md"
-              onClick={handleShowAllWidgets}
-              title="Reset all widgets to default visibility"
-            >
-              Show All Widgets
-            </button>
-          </div>
-          
-          <button 
-            className="btn btn-primary transition-all hover:shadow-md"
-            onClick={toggleTelemetryOptions}
-          >
-            {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
-          </button>
-          
-          {window.electronAPI && (
-            <>
-              <button 
-                className="btn btn-error mt-4 flex items-center justify-center gap-2 transition-all hover:shadow-md hover:bg-red-700"
-                onClick={quitApplication}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Quit Application
-              </button>
-              
-              {/* Display management section */}
-              {displays.length > 1 && (
-                <div className="mt-2 border-t border-gray-700 pt-2">
-                  <h3 className="text-sm font-semibold mb-2">Display Management</h3>
-                  <div className="flex flex-col gap-1">
-                    {displays.map(display => (
-                      <div key={display.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                        <span className="text-sm">
-                          {display.isPrimary ? '🖥️ Primary: ' : '🖥️ '} 
-                          {display.label || `Display ${display.id}`}
-                        </span>
-                        <button 
-                          className="btn btn-xs btn-error transition-all hover:bg-red-700"
-                          onClick={() => closeDisplayWindow(display.id)}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        
-        {showTelemetryOptions && <div className="mt-4">
-          <h3 className="text-sm font-semibold mb-2">Display Options</h3>
-          <details className="telemetry-details">
-            <summary className="btn btn-primary telemetry-summary">
-              Add Telemetry Widget
-            </summary>
-            <div className="telemetry-options">
-              <h3>Select Telemetry Metric</h3>
-              <div className="metric-buttons">
-                {availableMetrics.map(metric => (
-                  <button 
-                    key={metric.id}
-                    className="btn btn-sm btn-secondary metric-btn"
-                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                  >
-                    {metric.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </details>
-
-          <details className="telemetry-details">
-            <summary className="btn btn-primary telemetry-summary">
-              Add Speedforge Widget
-            </summary>
-            <div className="telemetry-options">
-              {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                <div key={category} className="widget-category mb-4">
-                  <h3 className="text-sm uppercase tracking-wider text-gray-400 mb-2">{category}</h3>
-                  <div className="metric-buttons">
-                    {widgets.map(widget => (
-                      <button 
-                        key={widget.type}
-                        className="btn btn-sm btn-secondary metric-btn"
-                        onClick={() => addWidgetFromRegistry(widget.type)}
-                        title={widget.description}
-                      >
-                        {widget.defaultTitle}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        </div>}
-        
-        {/* Selected Widget Details Section */}
-        {selectedWidget && (
-          <div className="active-widgets-section">
-            <h3>Selected Widget</h3>
+      {/* Selected Widget Section - Fixed */}
+      {selectedWidget && (
+        <div className="border-b border-gray-700 bg-gray-900/50">
+          <div className="p-4">
             <div className="widget-details-panel">
               <div className="widget-details-header">
                 <h4>{selectedWidget.title || `Widget ${selectedWidget.id.slice(0, 6)}`}</h4>
@@ -982,7 +870,123 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
+        <div className="p-4">
+          <div className="control-buttons flex flex-col gap-2 w-full">
+            <div className="flex gap-2 w-full">
+              <button 
+                className={`btn flex-1 ${clickThrough ? 'btn-warning' : 'btn-primary'} transition-all hover:shadow-md`}
+                onClick={toggleClickThrough}
+              >
+                {clickThrough ? 'Show Panel' : 'Hide Panel'}
+              </button>
+              
+              <button 
+                className="btn flex-1 btn-secondary transition-all hover:shadow-md"
+                onClick={handleShowAllWidgets}
+                title="Reset all widgets to default visibility"
+              >
+                Show All Widgets
+              </button>
+            </div>
+            
+            <button 
+              className="btn btn-primary transition-all hover:shadow-md"
+              onClick={toggleTelemetryOptions}
+            >
+              {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
+            </button>
+            
+            {window.electronAPI && (
+              <>
+                <button 
+                  className="btn btn-error mt-4 flex items-center justify-center gap-2 transition-all hover:shadow-md hover:bg-red-700"
+                  onClick={quitApplication}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Quit Application
+                </button>
+                
+                {/* Display management section */}
+                {displays.length > 1 && (
+                  <div className="mt-2 border-t border-gray-700 pt-2">
+                    <h3 className="text-sm font-semibold mb-2">Display Management</h3>
+                    <div className="flex flex-col gap-1">
+                      {displays.map(display => (
+                        <div key={display.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                          <span className="text-sm">
+                            {display.isPrimary ? '🖥️ Primary: ' : '🖥️ '} 
+                            {display.label || `Display ${display.id}`}
+                          </span>
+                          <button 
+                            className="btn btn-xs btn-error transition-all hover:bg-red-700"
+                            onClick={() => closeDisplayWindow(display.id)}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          
+          {showTelemetryOptions && <div className="mt-4">
+            <h3 className="text-sm font-semibold mb-2">Display Options</h3>
+            <details className="telemetry-details">
+              <summary className="btn btn-primary telemetry-summary">
+                Add Telemetry Widget
+              </summary>
+              <div className="telemetry-options">
+                <h3>Select Telemetry Metric</h3>
+                <div className="metric-buttons">
+                  {availableMetrics.map(metric => (
+                    <button 
+                      key={metric.id}
+                      className="btn btn-sm btn-secondary metric-btn"
+                      onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                    >
+                      {metric.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </details>
+
+            <details className="telemetry-details">
+              <summary className="btn btn-primary telemetry-summary">
+                Add Speedforge Widget
+              </summary>
+              <div className="telemetry-options">
+                {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                  <div key={category} className="widget-category mb-4">
+                    <h3 className="text-sm uppercase tracking-wider text-gray-400 mb-2">{category}</h3>
+                    <div className="metric-buttons">
+                      {widgets.map(widget => (
+                        <button 
+                          key={widget.type}
+                          className="btn btn-sm btn-secondary metric-btn"
+                          onClick={() => addWidgetFromRegistry(widget.type)}
+                          title={widget.description}
+                        >
+                          {widget.defaultTitle}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>}
+        </div>
       </div>
     </BaseDraggableComponent>
   );
