@@ -171,7 +171,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     const svg = d3.select(svgRef.current);
     const width = 400;
     const height = 150;
-    const margin = { top: 3, right: 0, bottom: 20, left: 0 };
+    const margin = { top: 3, right: 0, bottom: 5, left: 0 };
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -187,16 +187,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     const y = d3.scaleLinear()
       .domain([0, 100])
       .range([height - margin.bottom, margin.top]);
-      
-    // Add axis to show time scale
-    const xAxis = d3.axisBottom(x)
-      .ticks(3)
-      .tickFormat(d => `-${((now - Number(d)) / 1000).toFixed(1)}s`);
-      
-    svg.append("g")
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(xAxis);
-
+    
     // Create line generators
     const line = d3.line<PedalData>()
       .x(d => x(d.timestamp))
@@ -231,15 +222,6 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
-      
-    // Add a label with history length and buffer info
-    svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', height - 5)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'white')
-      .attr('font-size', '10px')
-      .text(`History: ${historyLength}/${dataRef.current.length} points (${(timeWindow/1000).toFixed(1)}s)`);
   }, [data, historyLength]);
 
   // Apply D3 visualization when data changes
