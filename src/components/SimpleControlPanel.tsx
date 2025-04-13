@@ -9,6 +9,7 @@ import TrackMapWidget from './TrackMapWidget';
 import WidgetRegistry from '../widgets/WidgetRegistry';
 import { WebSocketService } from '../services/WebSocketService';
 import { useTelemetryData } from '../hooks/useTelemetryData';
+import { WidgetManager } from '../services/WidgetManager';
 
 interface WidgetData {
   id: string;
@@ -136,6 +137,9 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         [widgetId]: { ...(prev[widgetId] || {}), ...updates }
       }));
     }
+    
+    // Update the widget state using WidgetManager
+    WidgetManager.updateWidgetState(widgetId, updates);
     
     // For all widget types, dispatch a generic widget:state:update event
     const updateEvent = new CustomEvent('widget:state:updated', { 
@@ -486,7 +490,13 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 value={control.value || 100}
                 onChange={(e) => {
                   const numericValue = Number(e.target.value);
-                  console.log(`Slider value changed to: ${numericValue}`);
+                  console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
+                  
+                  // Special logging for historyLength which seems to have issues
+                  if (control.id === 'historyLength') {
+                    console.log(`[Debug] historyLength slider changed to: ${numericValue}. Current widget state:`, selectedWidget?.state);
+                  }
+                  
                   control.onChange(numericValue);
                 }}
                 className="w-full"

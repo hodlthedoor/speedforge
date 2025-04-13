@@ -27,15 +27,24 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   // Debug logs for first render
   console.log(`PedalTraceWidget Initial render, id=${id}, historyLength=${historyLength}`);
   
+  // Debug log function for PedalTraceWidget with ID prefix
+  const debugLog = (message: string) => {
+    console.log(`[PedalTrace:${id}] ${message}`);
+  };
+  
   // Listen for widget state updates to sync the historyLength
   useEffect(() => {
-    console.log(`Setting up WidgetManager subscription, id=${id}`);
+    debugLog(`Setting up WidgetManager subscription, id=${id}`);
     
     const unsubscribe = WidgetManager.subscribe((event) => {
+      debugLog(`Received WidgetManager event: ${event.type}`);
+      
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        debugLog(`Received state update event with state: ${JSON.stringify(event.state)}`);
+        
         if (event.state.historyLength !== undefined) {
           const newHistoryLength = Number(event.state.historyLength);
-          console.log(`Widget state update: historyLength changing from ${historyLength} to ${newHistoryLength}`);
+          debugLog(`Widget state update: historyLength changing from ${historyLength} to ${newHistoryLength}`);
           setHistoryLength(newHistoryLength);
         }
       }
