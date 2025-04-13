@@ -201,12 +201,17 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     const line = d3.line<PedalData>()
       .x(d => x(d.timestamp))
       .y(d => y(d.throttle))
-      .curve(d3.curveMonotoneX);
+      // Using a smoother curve interpolation:
+      // - curveMonotoneX: Preserves monotonicity but can be slightly angular
+      // - curveBasis: Very smooth but can overshoot
+      // - curveCardinal: Good balance, tension can be adjusted (0.5 = moderate smoothing)
+      // - curveCatmullRom: Similar to cardinal but with different parameterization
+      .curve(d3.curveCardinal.tension(0.5));
 
     const brakeLine = d3.line<PedalData>()
       .x(d => x(d.timestamp))
       .y(d => y(d.brake))
-      .curve(d3.curveMonotoneX);
+      .curve(d3.curveCardinal.tension(0.5));
 
     // Add lines with proper styling
     svg.append('path')
@@ -260,39 +265,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         height={150}
         className="bg-transparent"
       />
-      <div className="mt-2 flex justify-between text-xs">
-        <button 
-          onClick={() => {
-            WidgetManager.updateWidgetState(id, { historyLength: 20 });
-          }}
-          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
-        >
-          Set to 20
-        </button>
-        <button 
-          onClick={() => {
-            WidgetManager.updateWidgetState(id, { historyLength: 100 });
-          }}
-          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
-        >
-          Set to 100
-        </button>
-        <button 
-          onClick={() => {
-            WidgetManager.updateWidgetState(id, { historyLength: 500 });
-          }}
-          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
-        >
-          Set to 500
-        </button>
-        <button 
-          onClick={() => {
-            dispatchWidgetStateUpdate(id, { historyLength: 200 });
-          }}
-          className="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs"
-        >
-          Direct 200
-        </button>
+      <div className="mt-2 flex justify-end text-xs">
         <span>Current: {historyLength}/{dataRef.current.length}</span>
       </div>
     </Widget>
