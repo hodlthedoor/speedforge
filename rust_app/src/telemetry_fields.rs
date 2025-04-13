@@ -4,38 +4,6 @@ use iracing::telemetry::Value;
 use std::convert::TryInto;
 use std::f32::consts::PI;
 
-// Add From implementation for converting Value to String
-impl From<Value> for String {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::CHAR(c) => c.to_string(),
-            Value::BOOL(b) => b.to_string(),
-            Value::INT(i) => i.to_string(),
-            Value::BITS(b) => b.to_string(),
-            Value::FLOAT(f) => f.to_string(),
-            Value::DOUBLE(d) => d.to_string(),
-            _ => String::new(), // Empty string for other cases
-        }
-    }
-}
-
-// Add TryFrom implementation to enable TryInto for Value to String
-impl TryFrom<Value> for String {
-    type Error = &'static str;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        Ok(match value {
-            Value::CHAR(c) => c.to_string(),
-            Value::BOOL(b) => b.to_string(),
-            Value::INT(i) => i.to_string(),
-            Value::BITS(b) => b.to_string(),
-            Value::FLOAT(f) => f.to_string(),
-            Value::DOUBLE(d) => d.to_string(),
-            _ => return Err("Cannot convert this Value type to String"),
-        })
-    }
-}
-
 /// Represents car left/right indicators from iRacing SDK
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CarLeftRight {
