@@ -132,11 +132,11 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
 
   return (
     <div 
-      className={`drag-handle w-auto max-w-[500px] ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
+      className={`drag-handle w-auto ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
       style={{ opacity: currentOpacity, ...style }}
       onClick={handleWidgetClick}
     >
-      <div className="p-3 min-w-[200px] max-w-full min-h-[100px] max-h-[500px] overflow-auto">
+      <div className="p-3 min-w-[200px] min-h-[100px] overflow-auto">
         {isLoading ? (
           <div className="text-center">
             <div className="text-sm font-medium text-slate-300 mb-2">{title}</div>
