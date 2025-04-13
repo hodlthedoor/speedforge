@@ -13,7 +13,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  background-color: rgba(59, 130, 246, 0.05) !important; /* Very subtle blue background */
+  background-color: rgba(59, 130, 246, 0.15) !important; /* Increased opacity from 0.05 to 0.15 */
   pointer-events: auto; /* Receive all events by default (not click-through) */
   -webkit-app-region: no-drag; /* Disable window dragging */
 }
