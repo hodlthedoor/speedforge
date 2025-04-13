@@ -58,6 +58,14 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     updateInterval: 1000
   });
 
+  // Auto-reconnect when connection is lost
+  useEffect(() => {
+    if (!isConnected && !reconnecting) {
+      console.log('Connection lost, attempting auto-reconnect...');
+      handleReconnect();
+    }
+  }, [isConnected, reconnecting]);
+
   // Function to close a widget - defined early to avoid reference errors
   const closeWidget = useCallback((id: string) => {
     console.log(`Closing widget ${id}`);
@@ -95,11 +103,9 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
       console.log('Triggering manual WebSocket reconnect');
       webSocketService.reconnect();
       
-      // Reset reconnecting state after a timeout if still not connected
+      // Reset reconnecting state after a timeout regardless of connection status
       setTimeout(() => {
-        if (!isConnected) {
-          setReconnecting(false);
-        }
+        setReconnecting(false);
       }, 5000);
     } else {
       console.warn('WebSocketService.reconnect() method not found');

@@ -77,7 +77,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       'PlayerTrackSurface'
     ],
     throttleUpdates: true,
-    updateInterval: 50
+    updateInterval: 75
   });
 
   // Remove PIXI initialization and use Canvas instead
