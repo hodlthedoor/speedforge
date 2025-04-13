@@ -508,24 +508,11 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                     console.log(`[DEBUG] control.onChange is:`, control.onChange);
                     console.log(`[DEBUG] Selected widget:`, selectedWidget);
                     
-                    // Also dispatch a direct event to the widget
-                    const directEvent = new CustomEvent('pedal-trace:history-length', {
-                      detail: {
-                        widgetId: selectedWidget.id,
-                        historyLength: numericValue
-                      }
-                    });
-                    console.log(`[DEBUG] Dispatching direct pedal-trace:history-length event with value: ${numericValue}`);
-                    window.dispatchEvent(directEvent);
+                    // We no longer need to dispatch custom events
+                    // The control.onChange function will update the widget state through the WidgetManager
                   }
                   
                   control.onChange(numericValue);
-                  
-                  // Add post-callback debugging
-                  if (control.id === 'historyLength') {
-                    console.log(`[DEBUG] After calling control.onChange with value: ${numericValue}`);
-                    console.log(`[DEBUG] Selected widget state after update:`, selectedWidget?.state);
-                  }
                 }}
                 className="w-full"
               />

@@ -42,10 +42,8 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   useEffect(() => {
     debugLog(`Setting up WidgetManager subscription, id=${id}`);
     
-    // Clean up any previous widget state listeners
-    const cleanupStateListener = () => {
-      // No direct cleanup needed with the subscribe pattern
-    };
+    // Keep track of the previous historyLength to avoid circular updates
+    let lastKnownExternalHistoryLength = historyLength;
     
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
@@ -55,24 +53,21 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         if (event.state.historyLength !== undefined) {
           const newHistoryLength = Number(event.state.historyLength);
           
-          // Only update state if it's actually different
-          setHistoryLength(prevLength => {
-            if (prevLength !== newHistoryLength) {
-              debugLog(`Updating historyLength from ${prevLength} to ${newHistoryLength}`);
-              return newHistoryLength;
-            }
-            return prevLength;
-          });
+          // Only update if the value is different and not a result of our own sync
+          if (newHistoryLength !== historyLength && newHistoryLength !== lastKnownExternalHistoryLength) {
+            debugLog(`External historyLength change detected: ${newHistoryLength} (current: ${historyLength})`);
+            lastKnownExternalHistoryLength = newHistoryLength;
+            setHistoryLength(newHistoryLength);
+          }
         }
       }
     });
     
-    // Clean up subscription when component unmounts
     return () => {
-      cleanupStateListener();
+      debugLog(`Cleaning up WidgetManager subscription`);
       unsubscribe();
     };
-  }, [id]); // Only recreate if the id changes
+  }, [id, historyLength]);
 
   // Add a new effect to update existing data when historyLength changes
   useEffect(() => {
@@ -136,6 +131,20 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       }
     };
   }, [telemetryData, historyLength]);
+  
+  // Synchronize local state with WidgetManager
+  // When our internal state changes, update the WidgetManager
+  useEffect(() => {
+    // We don't want to update WidgetManager on the initial render
+    if (initialRenderRef.current) {
+      return;
+    }
+    
+    // This effect synchronizes our internal state with the WidgetManager
+    // When historyLength changes internally, we update the WidgetManager
+    debugLog(`Syncing historyLength=${historyLength} to WidgetManager`);
+    WidgetManager.updateWidgetState(id, { historyLength });
+  }, [id, historyLength]);
 
   // D3 drawing logic is created outside of component dependency arrays
   const updateChart = useCallback(() => {
@@ -232,38 +241,29 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     };
   }, []);
 
-  // Initialize and register widget state with WidgetManager when component mounts
+  // Initialize widget state with WidgetManager when component mounts
   useEffect(() => {
     debugLog(`Initializing widget state for id=${id}`);
     
-    // Register the initial historyLength with the WidgetManager
-    // Use a ref to get the current value to avoid dependency cycle
-    WidgetManager.updateWidgetState(id, { historyLength: 100 }); // Always start with default
+    // Get current state from WidgetManager first
+    const widget = WidgetManager.getWidget(id);
+    const widgetState = widget?.state || {};
+    
+    // If there's already a historyLength in the widget state, use it
+    if (widgetState.historyLength !== undefined) {
+      const storedLength = Number(widgetState.historyLength);
+      debugLog(`Found existing historyLength=${storedLength} in WidgetManager, using it`);
+      setHistoryLength(storedLength);
+    } else {
+      // Otherwise, register our default historyLength with the WidgetManager
+      debugLog(`No existing historyLength in WidgetManager, registering default (${historyLength})`);
+      WidgetManager.updateWidgetState(id, { historyLength });
+    }
     
     return () => {
       debugLog(`Cleaning up widget state for id=${id}`);
     };
   }, [id]); // Only run when id changes (i.e., on mount/unmount)
-
-  // Listen for direct slider changes via custom events
-  useEffect(() => {
-    debugLog(`Setting up direct event listener for historyLength changes`);
-    
-    const handleHistoryLengthChange = (event: any) => {
-      if (event.detail && event.detail.widgetId === id && event.detail.historyLength !== undefined) {
-        const newLength = Number(event.detail.historyLength);
-        debugLog(`Received direct historyLength change event: ${newLength}`);
-        setHistoryLength(newLength);
-      }
-    };
-    
-    // Listen for both custom event and DOM event
-    window.addEventListener('pedal-trace:history-length', handleHistoryLengthChange);
-    
-    return () => {
-      window.removeEventListener('pedal-trace:history-length', handleHistoryLengthChange);
-    };
-  }, [id]);
 
   return (
     <Widget id={id} title="Pedal Trace" onClose={onClose}>
@@ -277,10 +277,8 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         <button 
           onClick={() => {
             debugLog(`Manually setting historyLength to 50`);
-            // Update local state
+            // Just update the internal state, the effect will sync with WidgetManager
             setHistoryLength(50);
-            // Also update the WidgetManager state to keep things in sync
-            WidgetManager.updateWidgetState(id, { historyLength: 50 });
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
         >
@@ -289,10 +287,8 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         <button 
           onClick={() => {
             debugLog(`Manually setting historyLength to 200`);
-            // Update local state
+            // Just update the internal state, the effect will sync with WidgetManager
             setHistoryLength(200);
-            // Also update the WidgetManager state to keep things in sync
-            WidgetManager.updateWidgetState(id, { historyLength: 200 });
           }}
           className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
         >

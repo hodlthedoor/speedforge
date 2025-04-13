@@ -51,18 +51,8 @@ function ControlRenderer({ control, widgetId }: { control: WidgetControlDefiniti
               console.log(`[WidgetControlPanel] Slider ${control.id} value changing to: ${newValue}`);
               console.log(`[WidgetControlPanel] Control value before: ${control.value}`);
               
-              // For historyLength sliders, also dispatch a direct event to ensure the widget receives it
-              if (control.id === 'historyLength' && widgetId) {
-                const directEvent = new CustomEvent('pedal-trace:history-length', {
-                  detail: {
-                    widgetId,
-                    historyLength: newValue
-                  }
-                });
-                console.log(`[WidgetControlPanel] Dispatching direct pedal-trace:history-length event with value: ${newValue}`);
-                window.dispatchEvent(directEvent);
-              }
-              
+              // We no longer need custom events for historyLength - the WidgetManager handles it
+              // Just call the control's onChange which will update the widget state through the proper channels
               control.onChange(newValue);
               console.log(`[WidgetControlPanel] After calling control.onChange(${newValue})`);
             }}
