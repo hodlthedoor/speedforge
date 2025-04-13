@@ -446,25 +446,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       (Math.sqrt(
         Math.pow(firstPoint.x - lastPoint.x, 2) + 
         Math.pow(firstPoint.y - lastPoint.y, 2)
-      ) < 20); // 20px threshold for "nearly complete"
-    
-    // First draw the filled black track
-    ctx.beginPath();
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-    
-    for (let i = 1; i < points.length; i++) {
-      const point = transformPoint(points[i]);
-      ctx.lineTo(point.x, point.y);
-    }
-    
-    if (isNearlyComplete) {
-      ctx.lineTo(firstPoint.x, firstPoint.y);
-      ctx.closePath();
-    }
-    
-    // Fill with black
-    ctx.fillStyle = '#000000';
-    ctx.fill();
+      ) < 10); // 20px threshold for "nearly complete"
     
     // Draw the outer white line
     ctx.beginPath();
@@ -495,6 +477,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     
     const scaleFactor = 0.94; // Make inner line 94% of the size of outer line
     
+    // Store inner points for filling
+    const innerPoints = [];
+    
     for (let i = 1; i < points.length; i++) {
       const point = transformPoint(points[i]);
       // Calculate direction from center
@@ -504,6 +489,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const innerX = point.x - dirX * (1 - scaleFactor);
       const innerY = point.y - dirY * (1 - scaleFactor);
       ctx.lineTo(innerX, innerY);
+      innerPoints.push({ x: innerX, y: innerY });
     }
     
     if (isNearlyComplete) {
@@ -514,11 +500,38 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const innerX = firstPoint.x - dirX * (1 - scaleFactor);
       const innerY = firstPoint.y - dirY * (1 - scaleFactor);
       ctx.lineTo(innerX, innerY);
+      innerPoints.push({ x: innerX, y: innerY });
     }
     
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    
+    // Create a path for the track with a black fill
+    if (isNearlyComplete && innerPoints.length > 0) {
+      const outerPoints = points.map(p => transformPoint(p));
+      
+      // Draw the track area (between outer and inner lines)
+      ctx.beginPath();
+      
+      // Draw outer track counterclockwise
+      ctx.moveTo(outerPoints[0].x, outerPoints[0].y);
+      for (let i = 1; i < outerPoints.length; i++) {
+        ctx.lineTo(outerPoints[i].x, outerPoints[i].y);
+      }
+      ctx.lineTo(outerPoints[0].x, outerPoints[0].y);
+      
+      // Draw inner track clockwise to create a hole
+      ctx.moveTo(innerPoints[innerPoints.length - 1].x, innerPoints[innerPoints.length - 1].y);
+      for (let i = innerPoints.length - 2; i >= 0; i--) {
+        ctx.lineTo(innerPoints[i].x, innerPoints[i].y);
+      }
+      ctx.lineTo(innerPoints[innerPoints.length - 1].x, innerPoints[innerPoints.length - 1].y);
+      
+      // Fill with black
+      ctx.fillStyle = '#000000';
+      ctx.fill('evenodd'); // Use even-odd fill rule to create the hole
+    }
     
     // Draw the start/finish line
     if (points.length > 0) {
