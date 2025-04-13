@@ -448,7 +448,30 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         Math.pow(firstPoint.y - lastPoint.y, 2)
       ) < 10); // 10px threshold for "nearly complete"
     
-    // Draw the track with a thicker black line first
+    // Draw the track with white borders and black fill by drawing:
+    // 1. First a thick white line
+    // 2. Then a slightly thinner black line over it
+    
+    // Draw the thick white line for the border
+    ctx.beginPath();
+    ctx.moveTo(firstPoint.x, firstPoint.y);
+    
+    for (let i = 1; i < points.length; i++) {
+      const point = transformPoint(points[i]);
+      ctx.lineTo(point.x, point.y);
+    }
+    
+    if (isNearlyComplete) {
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+    }
+    
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 6.0; // Thicker white line for the border
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    
+    // Draw the slightly thinner black line over it
     ctx.beginPath();
     ctx.moveTo(firstPoint.x, firstPoint.y);
     
@@ -462,42 +485,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
     
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4.5;
-    ctx.stroke();
-    
-    // Now draw the two white lines
-    // Outer white line
-    ctx.beginPath();
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-    
-    for (let i = 1; i < points.length; i++) {
-      const point = transformPoint(points[i]);
-      ctx.lineTo(point.x, point.y);
-    }
-    
-    if (isNearlyComplete) {
-      ctx.lineTo(firstPoint.x, firstPoint.y);
-    }
-    
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 5.0;
-    ctx.stroke();
-    
-    // Inner white line
-    ctx.beginPath();
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-    
-    for (let i = 1; i < points.length; i++) {
-      const point = transformPoint(points[i]);
-      ctx.lineTo(point.x, point.y);
-    }
-    
-    if (isNearlyComplete) {
-      ctx.lineTo(firstPoint.x, firstPoint.y);
-    }
-    
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.0;
+    ctx.lineWidth = 4.0; // Thinner black line to leave white borders
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.stroke();
     
     // Draw the start/finish line
