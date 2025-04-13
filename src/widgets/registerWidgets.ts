@@ -7,6 +7,7 @@ import CarLeftIndicatorWidget from '../components/CarLeftIndicatorWidget';
 import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
 import SpotterWidget from '../components/SpotterWidget';
 import WeekendInfoWidget from '../components/WeekendInfoWidget';
+import SpeedWidget from '../components/SpeedWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -80,6 +81,17 @@ WidgetRegistry.register('weekend-info', {
   defaultOptions: {},
   description: 'Display track and session information',
   category: 'Data'
+});
+
+// Register Speed Widget
+WidgetRegistry.register('speed', {
+  component: SpeedWidget,
+  defaultTitle: 'Speed',
+  defaultOptions: {
+    unit: 'kph'
+  },
+  description: 'Display current speed with customizable size',
+  category: 'Driving Data'
 });
 
 export default WidgetRegistry; 

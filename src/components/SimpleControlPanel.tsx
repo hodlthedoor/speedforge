@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import PedalTraceWidget from './PedalTraceWidget';
 import ShiftIndicatorWidget from './ShiftIndicatorWidget';
 import TrackMapWidget from './TrackMapWidget';
+import SpeedWidget from './SpeedWidget';
 import WidgetRegistry from '../widgets/WidgetRegistry';
 import { WebSocketService } from '../services/WebSocketService';
 import { useTelemetryData } from '../hooks/useTelemetryData';
