@@ -36,6 +36,15 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     
     return unsubscribe;
   }, [id]);
+
+  // Add a new effect to update existing data when historyLength changes
+  useEffect(() => {
+    // Immediately resize the existing data buffer when historyLength changes
+    if (dataRef.current.length > 0) {
+      dataRef.current = dataRef.current.slice(-historyLength);
+      setData([...dataRef.current]);
+    }
+  }, [historyLength]);
   
   // Use our custom hook with throttle and brake metrics
   const { data: telemetryData } = useTelemetryData(id, { 
