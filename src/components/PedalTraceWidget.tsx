@@ -96,9 +96,13 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     // Clear previous content
     svg.selectAll('*').remove();
 
-    // Create scales
+    // Create scales - Use fixed time range based on historyLength rather than just data min/max
+    // This ensures consistent scrolling speed regardless of how many points are stored
+    const now = Date.now();
+    const timeWindow = 50 * historyLength; // 50ms is the update interval
+    
     const x = d3.scaleTime()
-      .domain([data[0].timestamp, data[data.length - 1].timestamp])
+      .domain([now - timeWindow, now])
       .range([margin.left, width - margin.right]);
 
     const y = d3.scaleLinear()
@@ -134,7 +138,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
-  }, [data]);
+  }, [data, historyLength]);
 
   // Apply D3 visualization when data changes
   useEffect(() => {
