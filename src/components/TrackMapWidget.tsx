@@ -670,6 +670,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, [mapBuildingState, colorMode, scaleFactor, onStateChange]);
 
   useEffect(() => {
+    console.log(`[TrackMap:${id}] Setting scaleFactor to ${scaleFactor}`);
     scaleFactorRef.current = scaleFactor;
     
     // Update WidgetManager with the new scale factor
@@ -810,7 +811,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
         style={{
           width: `${Math.max(300, 550 * scaleFactor)}px`,
           height: `${Math.max(200, 300 * scaleFactor)}px`,
-          transition: 'width 0.3s, height 0.3s'
+          transition: 'width 0.3s, height 0.3s',
+          maxWidth: 'calc(100vw - 40px)',  // Ensure it doesn't exceed viewport width
+          maxHeight: 'calc(100vh - 100px)' // Ensure it doesn't exceed viewport height
         }}
       >
         {mapBuildingState === 'idle' && trackPoints.length === 0 ? (
@@ -891,7 +894,9 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
         { value: 0.75, label: 'Smaller' },
         { value: 1.0, label: 'Default' },
         { value: 1.5, label: 'Larger' },
-        { value: 2.0, label: 'Large' }
+        { value: 2.0, label: 'Large' },
+        { value: 2.5, label: 'Very Large' },
+        { value: 3.0, label: 'Maximum' }
       ],
       onChange: (value) => {
         const numericValue = Number(value);
