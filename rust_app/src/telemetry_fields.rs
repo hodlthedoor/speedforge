@@ -4,6 +4,38 @@ use iracing::telemetry::Value;
 use std::convert::TryInto;
 use std::f32::consts::PI;
 
+// Add From implementation for converting Value to String
+impl From<Value> for String {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::CHAR(c) => c.to_string(),
+            Value::BOOL(b) => b.to_string(),
+            Value::INT(i) => i.to_string(),
+            Value::BITS(b) => b.to_string(),
+            Value::FLOAT(f) => f.to_string(),
+            Value::DOUBLE(d) => d.to_string(),
+            _ => String::new(), // Empty string for other cases
+        }
+    }
+}
+
+// Add TryFrom implementation to enable TryInto for Value to String
+impl TryFrom<Value> for String {
+    type Error = &'static str;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Ok(match value {
+            Value::CHAR(c) => c.to_string(),
+            Value::BOOL(b) => b.to_string(),
+            Value::INT(i) => i.to_string(),
+            Value::BITS(b) => b.to_string(),
+            Value::FLOAT(f) => f.to_string(),
+            Value::DOUBLE(d) => d.to_string(),
+            _ => return Err("Cannot convert this Value type to String"),
+        })
+    }
+}
+
 /// Represents car left/right indicators from iRacing SDK
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CarLeftRight {
@@ -48,17 +80,6 @@ impl Default for EngineWarnings {
             raw_value: 0,
         }
     }
-}
-
-/// Weekend info summary
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct WeekendInfo {
-    pub track_name: String,
-    pub track_config: String,
-    pub temperature_unit: String,
-    pub speed_unit: String,
-    pub session_type: String,
-    pub track_length_km: f32,
 }
 
 /// Represents all telemetry data organized into logical sections
@@ -118,9 +139,6 @@ pub struct TelemetryData {
     pub delta_optimal: f32,
     pub position: i32,
     pub incident_count: i32, // PlayerCarDriverIncidentCount
-    
-    // Weekend Info
-    pub weekend_info: WeekendInfo,
     
     // Fuel & Temps
     pub fuel_level: f32,
@@ -247,43 +265,6 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                 oil_temp_warning: (warnings_val & ENGINE_OIL_TEMP_WARNING) != 0,
                 raw_value: warnings_val,
             };
-        }
-    }
-    
-    // Extract Weekend Info fields
-    if let Ok(track_name) = telem.get("WeekendInfo:TrackName") {
-        if let Ok(track_name_str) = TryInto::<String>::try_into(track_name) {
-            data.weekend_info.track_name = track_name_str;
-        }
-    }
-    
-    if let Ok(track_config) = telem.get("WeekendInfo:TrackConfigName") {
-        if let Ok(track_config_str) = TryInto::<String>::try_into(track_config) {
-            data.weekend_info.track_config = track_config_str;
-        }
-    }
-    
-    if let Ok(temp_unit) = telem.get("WeekendInfo:TempUnit") {
-        if let Ok(temp_unit_str) = TryInto::<String>::try_into(temp_unit) {
-            data.weekend_info.temperature_unit = temp_unit_str;
-        }
-    }
-    
-    if let Ok(speed_unit) = telem.get("WeekendInfo:SpeedUnit") {
-        if let Ok(speed_unit_str) = TryInto::<String>::try_into(speed_unit) {
-            data.weekend_info.speed_unit = speed_unit_str;
-        }
-    }
-    
-    if let Ok(session_type) = telem.get("WeekendInfo:SessionType") {
-        if let Ok(session_type_str) = TryInto::<String>::try_into(session_type) {
-            data.weekend_info.session_type = session_type_str;
-        }
-    }
-    
-    if let Ok(track_length) = telem.get("WeekendInfo:TrackLength") {
-        if let Ok(track_length_f32) = TryInto::<f32>::try_into(track_length) {
-            data.weekend_info.track_length_km = track_length_f32;
         }
     }
     
