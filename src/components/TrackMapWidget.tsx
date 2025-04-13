@@ -439,34 +439,61 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       };
     };
     
-    // Draw the track outline
-    ctx.beginPath();
+    // Create the track path
+    const createTrackPath = () => {
+      ctx.beginPath();
+      const firstPoint = transformPoint(points[0]);
+      ctx.moveTo(firstPoint.x, firstPoint.y);
+      
+      for (let i = 1; i < points.length; i++) {
+        const point = transformPoint(points[i]);
+        ctx.lineTo(point.x, point.y);
+      }
+      
+      // Only connect back to the start when we're nearly complete (in 'complete' state)
+      // or when the first and last points are very close to each other
+      const lastPoint = transformPoint(points[points.length - 1]);
+      const isNearlyComplete = mapBuildingState === 'complete' || 
+        (Math.sqrt(
+          Math.pow(firstPoint.x - lastPoint.x, 2) + 
+          Math.pow(firstPoint.y - lastPoint.y, 2)
+        ) < 20); // 20px threshold for "nearly complete"
+      
+      if (isNearlyComplete) {
+        ctx.lineTo(firstPoint.x, firstPoint.y);
+        ctx.closePath();
+      }
+    };
     
-    const firstPoint = transformPoint(points[0]);
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-    
-    for (let i = 1; i < points.length; i++) {
-      const point = transformPoint(points[i]);
-      ctx.lineTo(point.x, point.y);
-    }
-    
-    // Only connect back to the start when we're nearly complete (in 'complete' state)
-    // or when the first and last points are very close to each other
-    const lastPoint = transformPoint(points[points.length - 1]);
-    const isNearlyComplete = mapBuildingState === 'complete' || 
-      (Math.sqrt(
-        Math.pow(firstPoint.x - lastPoint.x, 2) + 
-        Math.pow(firstPoint.y - lastPoint.y, 2)
-      ) < 20); // 20px threshold for "nearly complete"
-    
-    if (isNearlyComplete) {
-      ctx.lineTo(firstPoint.x, firstPoint.y);
-    }
-    
-    // Draw the track path - always white for better visibility
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 2;
+    // First draw the wider black outline
+    createTrackPath();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6; // Wider black stroke
     ctx.stroke();
+    
+    // Then draw the white border (two thin lines)
+    createTrackPath();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5; // Thin white stroke
+    ctx.stroke();
+    
+    // Draw the inner white line
+    createTrackPath();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5; // Thin white stroke
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    
+    // Set clipping region to the inside of the path
+    ctx.save();
+    createTrackPath();
+    ctx.clip();
+    
+    // Fill with black inside the track
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fill();
+    
+    ctx.restore();
     
     // Draw the start/finish line
     if (points.length > 0) {
