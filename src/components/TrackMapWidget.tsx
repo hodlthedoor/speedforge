@@ -512,15 +512,24 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const length = Math.sqrt(dx * dx + dy * dy);
       
       if (length > 0) {
-        const perpX = -dy / length * 10; // 10px length for start/finish line
-        const perpY = dx / length * 10;
+        const perpX = -dy / length * 8; // 8px length for each start/finish line
+        const perpY = dx / length * 8;
         
-        // Draw the start/finish line
+        // Draw two thin white start/finish lines with a small gap between them
+        // First line
         ctx.beginPath();
         ctx.moveTo(start.x - perpX, start.y - perpY);
+        ctx.lineTo(start.x, start.y);
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
+        // Second line
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
         ctx.lineTo(start.x + perpX, start.y + perpY);
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
