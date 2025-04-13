@@ -877,41 +877,44 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
-        <div className="px-4 py-3 space-y-3">
-          <div className="space-y-2">
-            <div className="flex gap-2 justify-center">
-              <button 
-                className={`px-6 py-1.5 rounded text-sm font-medium transition-all ${
-                  clickThrough 
-                    ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900' 
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
-                }`}
-                onClick={toggleClickThrough}
-              >
-                {clickThrough ? 'Show Panel' : 'Hide Panel'}
-              </button>
+        <div className="p-6">
+          {/* Main Controls Section */}
+          <div className="flex flex-col gap-4 bg-gray-800/50 rounded-lg p-4">
+            {/* Top Buttons */}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <button 
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    clickThrough 
+                      ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900' 
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
+                  onClick={toggleClickThrough}
+                >
+                  {clickThrough ? 'Show Panel' : 'Hide Panel'}
+                </button>
+                
+                <button 
+                  className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+                  onClick={handleShowAllWidgets}
+                  title="Reset all widgets to default visibility"
+                >
+                  Show All Widgets
+                </button>
+              </div>
               
               <button 
-                className="px-6 py-1.5 rounded text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white transition-all"
-                onClick={handleShowAllWidgets}
-                title="Reset all widgets to default visibility"
+                className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                onClick={toggleTelemetryOptions}
               >
-                Show All Widgets
+                {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
               </button>
             </div>
-            
-            <button 
-              className="w-full px-6 py-1.5 rounded text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-all"
-              onClick={toggleTelemetryOptions}
-            >
-              {showTelemetryOptions ? 'Hide Widget Menu' : 'Show Widget Menu'}
-            </button>
-          </div>
-          
-          {window.electronAPI && (
-            <div className="space-y-2">
+
+            {/* Quit Button */}
+            {window.electronAPI && (
               <button 
-                className="w-full px-6 py-1.5 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-all flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors flex items-center justify-center gap-2"
                 onClick={quitApplication}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -919,66 +922,67 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                 </svg>
                 Quit Application
               </button>
-            </div>
-          )}
-          
-          {showTelemetryOptions && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-200 px-1">Display Options</h3>
-              
-              <div className="space-y-2">
-                <details className="group">
-                  <summary className="flex items-center justify-between w-full px-4 py-1.5 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded cursor-pointer transition-all">
-                    Add Telemetry Widget
-                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </summary>
-                  <div className="mt-2 px-1">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {availableMetrics.map(metric => (
-                        <button 
-                          key={metric.id}
-                          className="px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded transition-all"
-                          onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                        >
-                          {metric.name}
-                        </button>
+            )}
+
+            {/* Widget Options */}
+            {showTelemetryOptions && (
+              <div className="flex flex-col gap-3">
+                <h3 className="text-sm font-medium text-gray-200">Display Options</h3>
+                
+                <div className="flex flex-col gap-2">
+                  <details className="group">
+                    <summary className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg cursor-pointer transition-colors">
+                      Add Telemetry Widget
+                      <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </summary>
+                    <div className="mt-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        {availableMetrics.map(metric => (
+                          <button 
+                            key={metric.id}
+                            className="px-3 py-2 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                            onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                          >
+                            {metric.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+
+                  <details className="group">
+                    <summary className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg cursor-pointer transition-colors">
+                      Add Speedforge Widget
+                      <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </summary>
+                    <div className="mt-2">
+                      {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                        <div key={category} className="mb-3">
+                          <h4 className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-2">{category}</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {widgets.map(widget => (
+                              <button 
+                                key={widget.type}
+                                className="px-3 py-2 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                                onClick={() => addWidgetFromRegistry(widget.type)}
+                                title={widget.description}
+                              >
+                                {widget.defaultTitle}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
-                  </div>
-                </details>
-
-                <details className="group">
-                  <summary className="flex items-center justify-between w-full px-4 py-1.5 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded cursor-pointer transition-all">
-                    Add Speedforge Widget
-                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </summary>
-                  <div className="mt-2">
-                    {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                      <div key={category} className="mb-2">
-                        <h4 className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-1 px-1">{category}</h4>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {widgets.map(widget => (
-                            <button 
-                              key={widget.type}
-                              className="px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded transition-all"
-                              onClick={() => addWidgetFromRegistry(widget.type)}
-                              title={widget.description}
-                            >
-                              {widget.defaultTitle}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
+                  </details>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </BaseDraggableComponent>
