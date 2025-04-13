@@ -10,7 +10,7 @@ export interface BaseWidgetProps {
 }
 
 // Constants for event names
-const WIDGET_STATE_UPDATE_EVENT = 'widget:state:update';
+export const WIDGET_STATE_UPDATE_EVENT = 'widget:state:direct-update';
 
 // Type for widget state update events
 interface WidgetStateUpdateEvent {
@@ -29,38 +29,39 @@ export function dispatchWidgetStateUpdate(widgetId: string, state: Record<string
     },
   });
   
-  // Log the event and listeners before dispatching
-  console.log(`[BaseWidget] Event created with type: ${WIDGET_STATE_UPDATE_EVENT}`, event);
-  
   // Dispatch the event
   window.dispatchEvent(event);
-  
-  console.log(`[BaseWidget] State update event dispatched for ${widgetId}`);
 }
 
 // Hook to listen for widget state updates for a specific widget
 export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: Record<string, any>) => void) {
-  useEffect(() => {
+  // Use a ref to store the callback to prevent unnecessary effect runs
+  const callbackRef = React.useRef(onStateUpdate);
+  
+  // Update the ref when the callback changes
+  React.useEffect(() => {
+    callbackRef.current = onStateUpdate;
+  }, [onStateUpdate]);
+  
+  React.useEffect(() => {
     console.log(`[BaseWidget] Setting up state update listener for widget ${widgetId}`);
     
     const handleStateUpdate = (event: Event) => {
-      console.log(`[BaseWidget] Received event in useWidgetStateUpdates:`, event);
-      
       const customEvent = event as CustomEvent<WidgetStateUpdateEvent>;
       if (customEvent.detail && customEvent.detail.widgetId === widgetId) {
         console.log(`[BaseWidget] Widget ${widgetId} received state update:`, customEvent.detail.state);
-        onStateUpdate(customEvent.detail.state);
+        // Use the ref to get the latest callback
+        callbackRef.current(customEvent.detail.state);
       }
     };
 
     window.addEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
-    console.log(`[BaseWidget] Added event listener for ${WIDGET_STATE_UPDATE_EVENT} for widget ${widgetId}`);
     
     return () => {
       console.log(`[BaseWidget] Removing state update listener for widget ${widgetId}`);
       window.removeEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
     };
-  }, [widgetId, onStateUpdate]);
+  }, [widgetId]); // Only re-run when widgetId changes
 }
 
 const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({

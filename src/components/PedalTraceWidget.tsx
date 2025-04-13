@@ -55,7 +55,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   
   // Listen for state updates from WidgetManager
   useEffect(() => {
-    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener with initial historyLength=${historyLength}`);
+    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener with initial historyLength=${historyLengthRef.current}`);
     
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
@@ -104,7 +104,16 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     return () => {
       unsubscribe();
     };
-  }, [id, historyLength]); // Include historyLength in dependencies to ensure WidgetManager is updated
+  }, [id]); // Only depends on id, not historyLength
+  
+  // Sync historyLength changes with WidgetManager
+  useEffect(() => {
+    // Skip initial render
+    if (historyLengthRef.current === historyLength) return;
+    
+    console.log(`[PedalTrace:${id}] historyLength changed to ${historyLength}, updating WidgetManager`);
+    WidgetManager.updateWidgetState(id, { historyLength });
+  }, [historyLength, id]);
   
   // Use our custom hook to get telemetry data
   const { data: telemetryData } = useTelemetryData(id, { 
