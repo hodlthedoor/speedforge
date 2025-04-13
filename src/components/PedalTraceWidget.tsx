@@ -23,9 +23,15 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const dataRef = useRef<PedalData[]>([]);
   const animationFrameId = useRef<number | null>(null);
   const [historyLength, setHistoryLength] = useState<number>(100);
+  const initialRenderRef = useRef<boolean>(true);
   
   // Debug logs for first render
-  console.log(`PedalTraceWidget Initial render, id=${id}, historyLength=${historyLength}`);
+  useEffect(() => {
+    if (initialRenderRef.current) {
+      console.log(`PedalTraceWidget Initial render, id=${id}, historyLength=${historyLength}`);
+      initialRenderRef.current = false;
+    }
+  }, []);
   
   // Debug log function for PedalTraceWidget with ID prefix
   const debugLog = (message: string) => {
@@ -36,40 +42,55 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   useEffect(() => {
     debugLog(`Setting up WidgetManager subscription, id=${id}`);
     
+    // Clean up any previous widget state listeners
+    const cleanupStateListener = () => {
+      // No direct cleanup needed with the subscribe pattern
+    };
+    
     const unsubscribe = WidgetManager.subscribe((event) => {
-      debugLog(`Received WidgetManager event: ${event.type}`);
-      
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        debugLog(`Received state update event with state: ${JSON.stringify(event.state)}`);
+        debugLog(`Received state update event: ${JSON.stringify(event.state)}`);
         
+        // Check if historyLength has changed
         if (event.state.historyLength !== undefined) {
           const newHistoryLength = Number(event.state.historyLength);
-          debugLog(`Widget state update: historyLength changing from ${historyLength} to ${newHistoryLength}`);
           
-          // Use the functional form of setState to avoid dependency on current historyLength
+          // Only update state if it's actually different
           setHistoryLength(prevLength => {
-            debugLog(`Updating historyLength from ${prevLength} to ${newHistoryLength}`);
-            return newHistoryLength;
+            if (prevLength !== newHistoryLength) {
+              debugLog(`Updating historyLength from ${prevLength} to ${newHistoryLength}`);
+              return newHistoryLength;
+            }
+            return prevLength;
           });
         }
       }
     });
     
-    return unsubscribe;
-  }, [id]);
+    // Clean up subscription when component unmounts
+    return () => {
+      cleanupStateListener();
+      unsubscribe();
+    };
+  }, [id]); // Only recreate if the id changes
 
   // Add a new effect to update existing data when historyLength changes
   useEffect(() => {
-    console.log(`historyLength changed to ${historyLength}`);
+    debugLog(`historyLength changed to ${historyLength}`);
     
     // Immediately resize the existing data buffer when historyLength changes
     if (dataRef.current.length > 0) {
       const oldLength = dataRef.current.length;
-      dataRef.current = dataRef.current.slice(-historyLength);
-      const newLength = dataRef.current.length;
-      console.log(`Resized data buffer from ${oldLength} to ${newLength} points`);
       
-      setData([...dataRef.current]);
+      // Only slice if we need to (if current data is longer than the new history length)
+      if (oldLength > historyLength) {
+        dataRef.current = dataRef.current.slice(-historyLength);
+        const newLength = dataRef.current.length;
+        debugLog(`Resized data buffer from ${oldLength} to ${newLength} points`);
+        
+        // Update the displayed data
+        setData([...dataRef.current]);
+      }
     }
   }, [historyLength]);
   
@@ -91,7 +112,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
 
       // Log the current history length for debugging
       if (dataRef.current.length % 10 === 0) { // Only log every 10 points to avoid spam
-        console.log(`Processing telemetry with historyLength=${historyLength}, current data points=${dataRef.current.length}`);
+        debugLog(`Processing telemetry with historyLength=${historyLength}, current data points=${dataRef.current.length}`);
       }
 
       // Update ref without causing a state update
@@ -116,11 +137,12 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     };
   }, [telemetryData, historyLength]);
 
-  // D3 drawing logic
+  // D3 drawing logic is created outside of component dependency arrays
   const updateChart = useCallback(() => {
     if (!svgRef.current || data.length === 0) return;
     
-    console.log(`Running updateChart with historyLength=${historyLength}, data points=${data.length}`);
+    const currentHistoryLength = historyLength; // Capture current history length
+    console.log(`Running updateChart with historyLength=${currentHistoryLength}, data points=${data.length}`);
 
     const svg = d3.select(svgRef.current);
     const width = 400;
@@ -133,7 +155,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     // Create scales - Use fixed time range based on historyLength rather than just data min/max
     // This ensures consistent scrolling speed regardless of how many points are stored
     const now = Date.now();
-    const timeWindow = 50 * historyLength; // 50ms is the update interval
+    const timeWindow = 50 * currentHistoryLength; // 50ms is the update interval
     
     const x = d3.scaleTime()
       .domain([now - timeWindow, now])
@@ -189,7 +211,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .attr('text-anchor', 'middle')
       .attr('fill', 'white')
       .attr('font-size', '10px')
-      .text(`History: ${historyLength} points (${(timeWindow/1000).toFixed(1)}s)`);
+      .text(`History: ${currentHistoryLength} points (${(timeWindow/1000).toFixed(1)}s)`);
   }, [data, historyLength]);
 
   // Apply D3 visualization when data changes
@@ -218,6 +240,33 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         height={150}
         className="bg-transparent"
       />
+      <div className="mt-2 flex justify-between text-xs">
+        <button 
+          onClick={() => {
+            debugLog(`Manually setting historyLength to 50`);
+            // Update local state
+            setHistoryLength(50);
+            // Also update the WidgetManager state to keep things in sync
+            WidgetManager.updateWidgetState(id, { historyLength: 50 });
+          }}
+          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
+        >
+          Set to 50
+        </button>
+        <button 
+          onClick={() => {
+            debugLog(`Manually setting historyLength to 200`);
+            // Update local state
+            setHistoryLength(200);
+            // Also update the WidgetManager state to keep things in sync
+            WidgetManager.updateWidgetState(id, { historyLength: 200 });
+          }}
+          className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs"
+        >
+          Set to 200
+        </button>
+        <span>Current: {historyLength}</span>
+      </div>
     </Widget>
   );
 };
@@ -228,7 +277,6 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
   const historyLength = widgetState.historyLength || 100;
   
   console.log(`getPedalTraceControls called with widgetState:`, widgetState);
-  console.log(`[DEBUG] getPedalTraceControls - updateWidget function:`, updateWidget);
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -244,13 +292,16 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
         { value: 500, label: 'Very Long' }
       ],
       onChange: (value) => {
-        console.log(`Slider onChange called with value: ${value}`);
-        console.log(`[DEBUG] Slider onChange - Will call updateWidget with:`, { historyLength: value });
+        const numericValue = Number(value);
+        console.log(`Slider onChange called with value: ${numericValue}`);
         
-        // Call updateWidget with the new value
-        updateWidget({ historyLength: value });
+        // Call the updateWidget function from the registry adapter
+        // This function will feed into SimpleControlPanel's updateWidgetState
+        // which in turn calls WidgetManager.updateWidgetState
+        updateWidget({ historyLength: numericValue });
         
-        console.log(`[DEBUG] Slider onChange - After calling updateWidget`);
+        // Log after updating
+        console.log(`After calling updateWidget with historyLength: ${numericValue}`);
       }
     }
   ];
