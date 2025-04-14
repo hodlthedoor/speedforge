@@ -60,7 +60,8 @@ impl TelemetryWebSocketServer {
     
     /// Start the WebSocket server
     pub async fn start(&self) -> Result<(), Box<dyn Error>> {
-        let addr = self.address.parse()
+        // Parse the address string to a SocketAddr
+        let addr: SocketAddr = self.address.parse()
             .map_err(|e| {
                 eprintln!("[{}] Failed to parse address {}: {}", get_timestamp(), self.address, e);
                 e
@@ -74,7 +75,7 @@ impl TelemetryWebSocketServer {
         // Spawn a task to listen for incoming WebSocket connections
         tokio::spawn(async move {
             // Create the TCP listener
-            let listener = match tokio::net::TcpListener::bind(&addr).await {
+            let listener = match TcpListener::bind(addr).await {
                 Ok(listener) => {
                     println!("[{}] WebSocket server listening on: {}", get_timestamp(), addr);
                     listener
@@ -187,7 +188,7 @@ async fn handle_connection(
     let timestamp = get_timestamp();
     
     // Perform WebSocket handshake
-    let mut ws_stream = match tokio_tungstenite::accept_async(stream).await {
+    let ws_stream = match tokio_tungstenite::accept_async(stream).await {
         Ok(ws_stream) => {
             println!("[{}] 🤝 WebSocket handshake completed with {}", timestamp, addr);
             ws_stream

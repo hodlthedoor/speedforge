@@ -12,11 +12,11 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "build:rust": "cd rust_app && cargo build --release",
-    "build:rust:dev": "cd rust_app && cargo build",
+    "build:rust:debug": "cd rust_app && cargo build",
     "build:all": "npm run build:rust && npm run build",
     "build:portable:all": "npm run build:rust && npm run build:portable",
-    "rust:dev": "cd rust_app && cargo run",
-    "dev:all": "npm run build:rust:dev && concurrently \"npm run rust:dev\" \"npm run electron:dev\"",
+    "rust:dev": "cd rust_app && cargo run --verbose",
+    "dev:all": "npm run build:rust:debug && concurrently \"npm run rust:dev\" \"npm run electron:dev\"",
     "start": "electron ."
   },
   "dependencies": {

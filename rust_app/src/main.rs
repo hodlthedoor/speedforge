@@ -8,6 +8,7 @@ use std::io::{stdout, Write};
 use websocket_server::TelemetryWebSocketServer;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::{Arc, Mutex};
+use serde_json::Value;
 
 // Global flag for verbose logging
 static mut VERBOSE_LOGGING: bool = false;
@@ -174,7 +175,13 @@ async fn main() {
                                         log_debug!("Received telemetry sample");
                                         
                                         let telemetry_data = telemetry_fields::extract_telemetry(&sample);
-                                        match ws_server_clone.broadcast_telemetry(&telemetry_data) {
+                                        // Convert TelemetryData to serde_json::Value
+                                        let json_value = serde_json::to_value(&telemetry_data).unwrap_or_else(|e| {
+                                            log_error!("Failed to convert telemetry data to JSON: {}", e);
+                                            serde_json::json!({})
+                                        });
+                                        
+                                        match ws_server_clone.broadcast_telemetry(&json_value) {
                                             Ok(_) => {
                                                 log_debug!("Broadcast telemetry data to clients");
                                             },
