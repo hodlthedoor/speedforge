@@ -6,6 +6,7 @@ use std::{thread, time::Duration};
 use std::io::{self, stdout, Write};
 use websocket_server::TelemetryWebSocketServer;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
 
 // Get timestamp function - reused from websocket_server.rs
 fn get_timestamp() -> String {
@@ -50,9 +51,12 @@ async fn main() {
         return;
     }
     
-    // Start a background task to continuously try connecting to iRacing
-    let ws_server_clone = ws_server.clone();
-    tokio::spawn(async move {
+    // Create a shared WebSocket server that can be accessed from a separate thread
+    let ws_server_arc = Arc::new(ws_server);
+    let ws_server_clone = ws_server_arc.clone();
+    
+    // Start a separate thread (not async task) for the iRacing connection
+    let iracing_thread = thread::spawn(move || {
         let mut last_attempt = SystemTime::now();
         const CONNECTION_CHECK_INTERVAL: u64 = 5000; // 5 seconds between connection attempts
         let mut connection_status = "disconnected";
@@ -91,7 +95,7 @@ async fn main() {
                                         break; // Exit the telemetry loop and try reconnecting
                                     }
                                 }
-                                tokio::time::sleep(Duration::from_millis(50)).await;
+                                thread::sleep(Duration::from_millis(50));
                             }
                         }
                     },
@@ -106,19 +110,19 @@ async fn main() {
             }
             
             // Sleep for a short time to avoid busy waiting
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            thread::sleep(Duration::from_millis(100));
         }
     });
     
-    // Start a background task to monitor WebSocket connections
-    let ws_server_clone = ws_server.clone();
+    // Start a background task to monitor WebSocket connections - this is safe as async
+    let ws_server_for_monitoring = ws_server_arc.clone();
     tokio::spawn(async move {
         let mut last_report = SystemTime::now();
         const REPORT_INTERVAL: u64 = 10000; // 10 seconds between reports
         
         loop {
             if last_report.elapsed().unwrap_or(Duration::from_secs(0)) >= Duration::from_millis(REPORT_INTERVAL) {
-                let client_count = ws_server_clone.client_count();
+                let client_count = ws_server_for_monitoring.client_count();
                 println!("[{}] Status: {} WebSocket clients connected", get_timestamp(), client_count);
                 last_report = SystemTime::now();
             }
