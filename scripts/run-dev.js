@@ -1,7 +1,13 @@
 // Simple script to run both Rust and Electron development servers
-const { spawn } = require('child_process');
-const path = require('path');
-const os = require('os');
+import { spawn } from 'child_process';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
+
+// Get the current directory path (equivalent to __dirname in CommonJS)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
 
 // Determine the platform-specific command to use
 const isWindows = os.platform() === 'win32';
@@ -39,7 +45,7 @@ function spawnProcess(cmd, args, cwd, name) {
 const rustProcess = spawnProcess(
   cargoCmd,
   ['run', '--verbose'],
-  path.join(process.cwd(), 'rust_app'),
+  path.join(projectRoot, 'rust_app'),
   'Rust'
 );
 
@@ -47,7 +53,7 @@ const rustProcess = spawnProcess(
 const electronProcess = spawnProcess(
   npmCmd,
   ['run', 'electron:dev'],
-  process.cwd(),
+  projectRoot,
   'Electron'
 );
 
