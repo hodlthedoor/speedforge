@@ -158,7 +158,7 @@ async fn main() {
                 log_debug!("Attempting to connect to iRacing");
                 
                 match Connection::new() {
-                    Ok(conn) => {
+                    Ok(mut conn) => {
                         if connection_status != "connected" {
                             log_info!("Successfully connected to iRacing!");
                             connection_status = "connected";
