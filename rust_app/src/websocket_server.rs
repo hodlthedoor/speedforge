@@ -118,34 +118,63 @@ impl TelemetryWebSocketServer {
     
     /// Broadcast telemetry data to all connected clients
     pub fn broadcast_telemetry(&self, data: &serde_json::Value) -> Result<(), Box<dyn Error>> {
-        let clients = self.clients.lock().unwrap();
-        
-        // Don't do anything if there are no clients
-        if clients.is_empty() {
-            return Ok(());
-        }
-        
-        // Convert telemetry data to JSON string
-        let json_str = serde_json::to_string(data)?;
-        let message = Message::Text(json_str);
-        
-        // Send to all clients
-        let mut dead_clients = Vec::new();
-        
-        for client in clients.iter() {
-            if let Err(e) = client.0.send(message.clone()) {
-                eprintln!("[{}] Failed to send to client: {}", get_timestamp(), e);
-                // Mark this client for removal
-                dead_clients.push(client.clone());
+        // Check if any clients exist before doing work
+        {
+            let clients_guard = self.clients.lock().unwrap();
+            if clients_guard.is_empty() {
+                return Ok(());
             }
         }
         
-        // If we found any dead clients, remove them
+        // Convert telemetry data to JSON string outside the lock
+        let json_str = serde_json::to_string(data)?;
+        let message = Message::Text(json_str);
+        
+        // Collect clients that need to be removed
+        let mut dead_clients = Vec::new();
+        
+        // First, try to send to all clients
+        {
+            let clients = self.clients.lock().unwrap();
+            for client in clients.iter() {
+                if let Err(e) = client.0.send(message.clone()) {
+                    // Add this client to the removal list
+                    dead_clients.push(client.clone());
+                    
+                    // Only log occasionally to reduce spam
+                    static mut LAST_ERROR_LOG: u64 = 0;
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    
+                    unsafe {
+                        if now - LAST_ERROR_LOG > 30 {
+                            eprintln!("[{}] Client disconnected (channel closed), will clean up ({} clients)", 
+                                get_timestamp(), clients.len());
+                            LAST_ERROR_LOG = now;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Then remove dead clients outside the lock to avoid deadlocks
         if !dead_clients.is_empty() {
-            drop(clients); // Release the lock first
             let mut clients = self.clients.lock().unwrap();
-            for dead_client in dead_clients {
-                clients.remove(&dead_client);
+            let before_count = clients.len();
+            
+            for dead_client in &dead_clients {
+                clients.remove(dead_client);
+            }
+            
+            let after_count = clients.len();
+            let removed = before_count - after_count;
+            
+            // Only log if we actually removed clients
+            if removed > 0 {
+                println!("[{}] Removed {} disconnected clients, now serving {} clients", 
+                    get_timestamp(), removed, after_count);
             }
         }
         

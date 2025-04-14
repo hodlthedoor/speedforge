@@ -9,6 +9,7 @@ use websocket_server::TelemetryWebSocketServer;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::{Arc, Mutex};
 use serde_json::Value;
+use chrono;
 
 // Global flag for verbose logging
 static mut VERBOSE_LOGGING: bool = false;
@@ -179,7 +180,68 @@ async fn main() {
                                         
                                         // Don't try to get session info for now - we'll add it later when we find the correct method
                                         // For session info widget to work, we'll just set a placeholder
-                                        telemetry_data.session_info = format!("Session Info not available in this version of the iRacing SDK.\n\nTelemetry sample data is still being transmitted.");
+                                        telemetry_data.session_info = format!("\
+---
+SessionInfo:
+  Sessions:
+    - SessionNum: 0
+      SessionType: Practice
+      SessionName: Practice
+      SessionStartTime: {session_time}
+      SessionState: Racing
+      SessionTime: {elapsed_time:.1} sec
+      SessionTimeRemain: 3600.0 sec
+  WeekendInfo:
+    TrackName: Unknown
+    TrackID: 0
+    TrackLength: 0.0
+    TrackDisplayName: Telemetry Connected
+    TrackDisplayShortName: Connected
+    TrackConfigName: Test Mode
+    TrackCity: SpeedForge
+    TrackCountry: Telemetry
+    TrackAltitude: 0
+    TrackLatitude: 0
+    TrackLongitude: 0
+    TrackNorthOffset: 0.0
+    TrackNumTurns: 0
+    TrackPitSpeedLimit: 0.0
+    TrackType: Road
+    TrackDirection: Clockwise
+    TrackWeatherType: Constant
+    TrackSkies: Clear
+    TrackSurfaceTemp: {track_temp:.1}
+    TrackAirTemp: {air_temp:.1}
+    TrackAirPressure: 0
+    TrackWindVel: {wind_vel:.1}
+    TrackWindDir: {wind_dir:.1}
+    TrackRelativeHumidity: {humidity:.1}
+    TrackFogLevel: {fog:.1}
+  DriverInfo:
+    DriverCarIdx: 0
+    DriverUserID: 0
+    PaceCarIdx: -1
+    DriverHeadPosX: 0.0
+    DriverHeadPosY: 0.0
+    DriverHeadPosZ: 0.0
+    DriverCarIdleRPM: 0
+    DriverCarRedLine: 0
+    DriverCarEngCylinderCount: 0
+    DriverCarFuelKgPerLtr: 0.0
+    DriverCarSLFirstRPM: 0
+    DriverCarSLShiftRPM: 0
+    DriverCarSLLastRPM: 0
+    DriverCarSLBlinkRPM: 0
+note: This is simulated session info. The actual session_info API is being implemented.",
+    session_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+    elapsed_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f32() % 3600.0,
+    track_temp = telemetry_data.track_temp_c,
+    air_temp = telemetry_data.air_temp_c,
+    wind_vel = telemetry_data.wind_vel_ms,
+    wind_dir = telemetry_data.wind_dir_rad * 180.0 / std::f32::consts::PI,
+    humidity = telemetry_data.humidity_pct,
+    fog = telemetry_data.fog_level_pct
+);
                                         
                                         // Convert TelemetryData to serde_json::Value
                                         let json_value = serde_json::to_value(&telemetry_data).unwrap_or_else(|e| {
