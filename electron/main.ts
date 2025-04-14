@@ -40,30 +40,35 @@ function debugLog(...args: any[]) {
 // Function to check if the WebSocket server is running
 async function isWebSocketServerRunning(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const net = require('net');
-    const client = new net.Socket();
-    
-    client.setTimeout(1000);
-    
-    client.on('connect', () => {
-      client.destroy();
-      console.log(`WebSocket server is running on port ${port}`);
-      resolve(true);
-    });
-    
-    client.on('timeout', () => {
-      client.destroy();
-      console.log(`Timeout connecting to WebSocket server on port ${port}`);
+    // Use ES module-compatible import instead of require
+    import('net').then(net => {
+      const client = new net.default.Socket();
+      
+      client.setTimeout(1000);
+      
+      client.on('connect', () => {
+        client.destroy();
+        console.log(`WebSocket server is running on port ${port}`);
+        resolve(true);
+      });
+      
+      client.on('timeout', () => {
+        client.destroy();
+        console.log(`Timeout connecting to WebSocket server on port ${port}`);
+        resolve(false);
+      });
+      
+      client.on('error', (err) => {
+        client.destroy();
+        console.log(`WebSocket server is not running on port ${port}: ${err.message}`);
+        resolve(false);
+      });
+      
+      client.connect(port, 'localhost');
+    }).catch(err => {
+      console.error('Error importing net module:', err);
       resolve(false);
     });
-    
-    client.on('error', (err) => {
-      client.destroy();
-      console.log(`WebSocket server is not running on port ${port}: ${err.message}`);
-      resolve(false);
-    });
-    
-    client.connect(port, 'localhost');
   });
 }
 
