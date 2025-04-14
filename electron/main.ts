@@ -31,48 +31,132 @@ let autoCreateWindowsForNewDisplays = true;
 // Reference to the Rust backend process
 let rustBackendProcess: ChildProcess | null = null;
 
+// Function to check if the WebSocket server is running
+async function isWebSocketServerRunning(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const client = new net.Socket();
+    
+    client.setTimeout(1000);
+    
+    client.on('connect', () => {
+      client.destroy();
+      console.log(`WebSocket server is running on port ${port}`);
+      resolve(true);
+    });
+    
+    client.on('timeout', () => {
+      client.destroy();
+      console.log(`Timeout connecting to WebSocket server on port ${port}`);
+      resolve(false);
+    });
+    
+    client.on('error', (err) => {
+      client.destroy();
+      console.log(`WebSocket server is not running on port ${port}: ${err.message}`);
+      resolve(false);
+    });
+    
+    client.connect(port, 'localhost');
+  });
+}
+
+// Function to wait for the WebSocket server to be ready
+async function waitForWebSocketServer(maxAttempts = 10): Promise<boolean> {
+  console.log('Waiting for WebSocket server to start...');
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`Checking WebSocket server (attempt ${attempt}/${maxAttempts})...`);
+    
+    if (await isWebSocketServerRunning(8080)) {
+      console.log('WebSocket server is running!');
+      return true;
+    }
+    
+    // Wait before checking again
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  console.error(`WebSocket server did not start after ${maxAttempts} attempts`);
+  return false;
+}
+
 // Function to start the Rust backend
 function startRustBackend() {
   try {
     // Determine the path to the Rust binary
     let rustBinaryPath: string;
+    let binaryExists = false;
+
+    // In production, use the binary from the app's resources
     if (app.isPackaged) {
-      // In production, use the binary from the app's resources
       rustBinaryPath = path.join(process.resourcesPath, 'rust_backend', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
-    } else {
-      // In development, use the binary from the rust_app/target directory
-      const devBinaryPath = path.join(process.cwd(), 'rust_app', 'target', 'debug', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
-      const prodBinaryPath = path.join(process.cwd(), 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
-      
-      // Check which binary exists
-      rustBinaryPath = fs.existsSync(prodBinaryPath) ? prodBinaryPath : devBinaryPath;
+      binaryExists = fs.existsSync(rustBinaryPath);
+      console.log(`Production Rust binary path: ${rustBinaryPath}, exists: ${binaryExists}`);
+    } 
+    
+    // In development, try multiple possible paths
+    if (!app.isPackaged || !binaryExists) {
+      // List of possible binary locations in development
+      const possiblePaths = [
+        // Debug build
+        path.join(process.cwd(), 'rust_app', 'target', 'debug', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
+        // Release build
+        path.join(process.cwd(), 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
+        // Relative paths from electron directory
+        path.join(__dirname, '..', 'rust_app', 'target', 'debug', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
+        path.join(__dirname, '..', 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge')
+      ];
+
+      // Log all paths we're checking
+      console.log('Checking for Rust binary at these locations:');
+      possiblePaths.forEach(p => console.log(` - ${p} (exists: ${fs.existsSync(p)})`));
+
+      // Find the first path that exists
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          rustBinaryPath = p;
+          binaryExists = true;
+          break;
+        }
+      }
+    }
+
+    // If binary still doesn't exist, log error and return
+    if (!binaryExists) {
+      console.error('ERROR: Rust binary not found at any expected location!');
+      console.error('Current working directory:', process.cwd());
+      console.error('Please build the Rust backend with: npm run build:rust');
+      return;
     }
 
     console.log(`Starting Rust backend from: ${rustBinaryPath}`);
 
-    // Check if the binary exists
-    if (!fs.existsSync(rustBinaryPath)) {
-      console.error(`Rust binary does not exist at path: ${rustBinaryPath}`);
-      console.error('Please build the Rust backend first with: npm run build:rust');
-      return;
-    }
-
-    // Start the Rust process
+    // Start the Rust process with explicit working directory and args
     rustBackendProcess = spawn(rustBinaryPath, [], {
       stdio: 'pipe', // Capture stdout and stderr
-      detached: false // Keep attached to the parent process
+      detached: false, // Keep attached to the parent process
+      cwd: path.dirname(rustBinaryPath), // Set working directory to binary location
+      env: { 
+        ...process.env,
+        // Add any environment variables needed by the Rust app
+        // For example: RUST_LOG: 'debug'
+        RUST_BACKTRACE: '1'
+      }
     });
+
+    console.log(`Rust process started with PID: ${rustBackendProcess.pid}`);
 
     // Log process output
     if (rustBackendProcess.stdout) {
       rustBackendProcess.stdout.on('data', (data) => {
-        console.log(`Rust backend stdout: ${data}`);
+        console.log(`Rust backend stdout: ${data.toString().trim()}`);
       });
     }
 
     if (rustBackendProcess.stderr) {
       rustBackendProcess.stderr.on('data', (data) => {
-        console.error(`Rust backend stderr: ${data}`);
+        console.error(`Rust backend stderr: ${data.toString().trim()}`);
       });
     }
 
@@ -534,7 +618,7 @@ app.on('before-quit', () => {
 });
 
 // When Electron is ready
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set application name for process manager
   app.setName('Speedforge');
   
@@ -543,6 +627,13 @@ app.whenReady().then(() => {
   
   // Start the Rust backend
   startRustBackend();
+  
+  // Wait for the WebSocket server to start before creating windows
+  const wsServerRunning = await waitForWebSocketServer(20); // Try 20 times (10 seconds)
+  if (!wsServerRunning) {
+    console.warn('WebSocket server didn\'t start, but continuing anyway...');
+    // You might want to show a warning dialog to the user here
+  }
   
   createWindows();
   setupIpcListeners();
