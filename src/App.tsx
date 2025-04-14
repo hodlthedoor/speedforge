@@ -29,6 +29,13 @@ function App() {
   // Track WebSocket connection status
   const [isConnected, setIsConnected] = useState<boolean>(false);
   
+  // Toggle click-through mode state
+  const [isClickThrough, setIsClickThrough] = useState(false);
+  const clickThroughRef = useRef(false);
+  
+  // Track control panel visibility
+  const [controlPanelHidden, setControlPanelHidden] = useState(false);
+  
   // Listen for WebSocket connection status changes
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -42,6 +49,29 @@ function App() {
     return () => {
       webSocketService.removeListeners('app');
     };
+  }, []);
+  
+  // Listen for initial state event from main process
+  useEffect(() => {
+    if (window.electronAPI?.on) {
+      console.log('Setting up listener for initial state from main process');
+      
+      // Add listener for initial state
+      const removeListener = window.electronAPI.on('app:initial-state', (state: any) => {
+        console.log('Received initial state from main process:', state);
+        if (state.clickThrough !== undefined) {
+          setIsClickThrough(state.clickThrough);
+        }
+        if (state.controlPanelHidden !== undefined) {
+          setControlPanelHidden(state.controlPanelHidden);
+        }
+      });
+      
+      // Clean up listener on unmount
+      return () => {
+        if (removeListener) removeListener();
+      };
+    }
   }, []);
   
   // Callback for when SimpleControlPanel adds a widget
@@ -78,9 +108,10 @@ function App() {
     setWidgets(prev => prev.filter(widget => widget.id !== id));
   }, []);
   
-  // Toggle click-through mode state
-  const [isClickThrough, setIsClickThrough] = useState(false);
-  const clickThroughRef = useRef(false);
+  // Toggle control panel visibility
+  const toggleControlPanel = useCallback(() => {
+    setControlPanelHidden(prev => !prev);
+  }, []);
   
   // Track window width for positioning
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -214,8 +245,8 @@ function App() {
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
       data-click-through={isClickThrough.toString()}
     >
-      {/* When click-through is enabled, hide control panel completely */}
-      {!isClickThrough ? (
+      {/* When click-through is enabled or control panel is hidden, don't show control panel */}
+      {!isClickThrough && !controlPanelHidden ? (
         <SimpleControlPanel 
           initialPosition={{ x: windowWidth - 420, y: 20 }}
           onClickThrough={setIsClickThrough}
@@ -295,6 +326,35 @@ function App() {
             <ClickThroughHint onDismiss={() => setShowHint(false)} />
           )}
         </>
+      )}
+      
+      {/* Button to toggle control panel when it's hidden */}
+      {!isClickThrough && controlPanelHidden && (
+        <div 
+          className="interactive"
+          onClick={toggleControlPanel}
+          style={{
+            position: 'fixed',
+            top: '10px',
+            right: '10px',
+            width: '24px',
+            height: '24px',
+            backgroundColor: 'rgba(50, 50, 255, 0.9)',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            zIndex: 10000,
+            boxShadow: '0 0 8px 2px rgba(50, 50, 255, 0.5)',
+            border: '2px solid rgba(255, 255, 255, 0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '14px'
+          }}
+        >
+          CP
+        </div>
       )}
     </div>
   );
