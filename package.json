@@ -8,8 +8,15 @@
     "dev": "vite",
     "electron:dev": "vite --mode=development",
     "build": "tsc -b && vite build && electron-builder",
+    "build:portable": "tsc -b && vite build && electron-builder --win portable",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build:rust": "cd rust_app && cargo build --release",
+    "build:all": "npm run build:rust && npm run build",
+    "build:portable:all": "npm run build:rust && npm run build:portable",
+    "rust:dev": "cd rust_app && cargo run",
+    "dev:all": "concurrently \"npm run rust:dev\" \"npm run electron:dev\"",
+    "start": "electron ."
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.3",
@@ -31,6 +38,7 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^8.2.2",
     "electron": "^35.1.4",
     "electron-builder": "^26.0.12",
     "eslint": "^9.21.0",
@@ -49,6 +57,17 @@
     "directories": {
       "output": "release"
     },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "rust_app/target/release/speedforge",
+        "to": "rust_backend",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
       "category": "public.app-category.utilities",
       "artifactName": "Speedforge-${version}-${arch}.${ext}",
@@ -59,9 +78,21 @@
       "darkModeSupport": true
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
       "executableName": "Speedforge",
-      "artifactName": "Speedforge-Setup-${version}.${ext}"
+      "artifactName": "Speedforge-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "SpeedforgePortable-${version}.exe"
     },
     "linux": {
       "target": [

@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn, ChildProcess } from 'child_process';
+import * as fs from 'fs';
 
 // Import our speech module
 import { initSpeechModule, cleanup as cleanupSpeech } from './speech/speechModule.mjs';
@@ -25,6 +27,99 @@ let stayOnTopInterval: NodeJS.Timeout | null = null;
 
 // Add display-related events to handle monitors being added/removed
 let autoCreateWindowsForNewDisplays = true;
+
+// Reference to the Rust backend process
+let rustBackendProcess: ChildProcess | null = null;
+
+// Function to start the Rust backend
+function startRustBackend() {
+  try {
+    // Determine the path to the Rust binary
+    let rustBinaryPath: string;
+    if (app.isPackaged) {
+      // In production, use the binary from the app's resources
+      rustBinaryPath = path.join(process.resourcesPath, 'rust_backend', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
+    } else {
+      // In development, use the binary from the rust_app/target directory
+      const devBinaryPath = path.join(process.cwd(), 'rust_app', 'target', 'debug', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
+      const prodBinaryPath = path.join(process.cwd(), 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
+      
+      // Check which binary exists
+      rustBinaryPath = fs.existsSync(prodBinaryPath) ? prodBinaryPath : devBinaryPath;
+    }
+
+    console.log(`Starting Rust backend from: ${rustBinaryPath}`);
+
+    // Check if the binary exists
+    if (!fs.existsSync(rustBinaryPath)) {
+      console.error(`Rust binary does not exist at path: ${rustBinaryPath}`);
+      console.error('Please build the Rust backend first with: npm run build:rust');
+      return;
+    }
+
+    // Start the Rust process
+    rustBackendProcess = spawn(rustBinaryPath, [], {
+      stdio: 'pipe', // Capture stdout and stderr
+      detached: false // Keep attached to the parent process
+    });
+
+    // Log process output
+    if (rustBackendProcess.stdout) {
+      rustBackendProcess.stdout.on('data', (data) => {
+        console.log(`Rust backend stdout: ${data}`);
+      });
+    }
+
+    if (rustBackendProcess.stderr) {
+      rustBackendProcess.stderr.on('data', (data) => {
+        console.error(`Rust backend stderr: ${data}`);
+      });
+    }
+
+    // Handle process exit
+    rustBackendProcess.on('exit', (code, signal) => {
+      console.log(`Rust backend exited with code ${code} and signal ${signal}`);
+      rustBackendProcess = null;
+    });
+
+    // Handle process error
+    rustBackendProcess.on('error', (err) => {
+      console.error('Failed to start Rust backend:', err);
+      rustBackendProcess = null;
+    });
+
+  } catch (error) {
+    console.error('Error starting Rust backend:', error);
+  }
+}
+
+// Function to stop the Rust backend
+function stopRustBackend() {
+  if (rustBackendProcess) {
+    console.log('Stopping Rust backend...');
+    
+    try {
+      // First try to kill it gracefully
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/pid', rustBackendProcess.pid.toString(), '/f', '/t']);
+      } else {
+        rustBackendProcess.kill('SIGTERM');
+        
+        // Give it some time to terminate gracefully
+        setTimeout(() => {
+          if (rustBackendProcess) {
+            // If still running, force kill
+            rustBackendProcess.kill('SIGKILL');
+          }
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error stopping Rust backend:', error);
+    }
+    
+    rustBackendProcess = null;
+  }
+}
 
 // Create a window for each display
 function createWindows() {
@@ -394,6 +489,11 @@ app.on('activate', () => {
 
 // Clean up before quitting
 app.on('before-quit', () => {
+  console.log('App is quitting, cleaning up resources...');
+  
+  // Stop the Rust backend
+  stopRustBackend();
+  
   console.log('Performing cleanup before quit');
   
   // Clear the stay-on-top interval
@@ -440,6 +540,9 @@ app.whenReady().then(() => {
   
   // Initialize the speech module
   initSpeechModule();
+  
+  // Start the Rust backend
+  startRustBackend();
   
   createWindows();
   setupIpcListeners();
