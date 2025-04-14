@@ -87,31 +87,33 @@ impl TelemetryWebSocketServer {
     }
     
     /// Broadcast telemetry data to all connected clients
-    pub fn broadcast_telemetry(&self, data: &TelemetryData) {
-        if let Ok(json_string) = serde_json::to_string(data) {
-            // Remove clients that fail to receive messages
-            let mut disconnected = Vec::new();
-            
-            if let Ok(mut clients) = self.clients.lock() {
-                for client in clients.iter() {
-                    if let Err(_) = client.send(json_string.clone()) {
-                        disconnected.push(client.clone());
-                    }
-                }
-                
-                // Remove disconnected clients
-                for client in disconnected.iter() {
-                    clients.remove(client);
-                }
-                
-                if !disconnected.is_empty() {
-                    let timestamp = get_timestamp();
-                    println!("\n[{}] ❌ Removed {} disconnected clients, {} remaining", 
-                        timestamp, disconnected.len(), clients.len());
-                    io::stdout().flush().unwrap();
+    pub fn broadcast_telemetry(&self, data: &TelemetryData) -> Result<(), Box<dyn std::error::Error>> {
+        let json_string = serde_json::to_string(data)?;
+        
+        // Remove clients that fail to receive messages
+        let mut disconnected = Vec::new();
+        
+        if let Ok(mut clients) = self.clients.lock() {
+            for client in clients.iter() {
+                if let Err(_) = client.send(json_string.clone()) {
+                    disconnected.push(client.clone());
                 }
             }
+            
+            // Remove disconnected clients
+            for client in disconnected.iter() {
+                clients.remove(client);
+            }
+            
+            if !disconnected.is_empty() {
+                let timestamp = get_timestamp();
+                println!("\n[{}] ❌ Removed {} disconnected clients, {} remaining", 
+                    timestamp, disconnected.len(), clients.len());
+                io::stdout().flush().unwrap();
+            }
         }
+        
+        Ok(())
     }
     
     /// Get the current number of connected clients

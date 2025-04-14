@@ -77,9 +77,12 @@ async fn main() {
                                 match blocking.sample(Duration::from_millis(100)) {
                                     Ok(sample) => {
                                         let telemetry_data = telemetry_fields::extract_telemetry(&sample);
-                                        if let Err(e) = ws_server_clone.broadcast_telemetry(&telemetry_data) {
-                                            println!("[{}] Error broadcasting telemetry: {}", get_timestamp(), e);
-                                            // Don't break here, just log the error and continue
+                                        match ws_server_clone.broadcast_telemetry(&telemetry_data) {
+                                            Ok(_) => {},
+                                            Err(e) => {
+                                                println!("[{}] Error broadcasting telemetry: {}", get_timestamp(), e);
+                                                // Don't break here, just log the error and continue
+                                            }
                                         }
                                     },
                                     Err(e) => {
