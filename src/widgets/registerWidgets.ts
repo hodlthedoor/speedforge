@@ -8,6 +8,7 @@ import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
 import SpotterWidget from '../components/SpotterWidget';
 import WeekendInfoWidget from '../components/WeekendInfoWidget';
 import SpeedWidget from '../components/SpeedWidget';
+import SessionInfoWidget from '../components/SessionInfoWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -92,6 +93,15 @@ WidgetRegistry.register('speed', {
   },
   description: 'Display current speed with customizable size',
   category: 'Driving Data'
+});
+
+// Register Session Info Widget
+WidgetRegistry.register('session-info', {
+  component: SessionInfoWidget,
+  defaultTitle: 'Session Info',
+  defaultOptions: {},
+  description: 'Display raw session information data from iRacing',
+  category: 'Advanced'
 });
 
 export default WidgetRegistry; 

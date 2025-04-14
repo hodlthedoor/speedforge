@@ -19,7 +19,12 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Add event listener to receive messages from main process
   on: (channel, callback) => {
-    const validChannels = ["main-process-message", "app:toggle-click-through"];
+    const validChannels = [
+      "main-process-message",
+      "app:toggle-click-through",
+      "app:initial-state",
+      "display:id"
+    ];
     if (validChannels.includes(channel)) {
       const subscription = (_event, data) => callback(data);
       import_electron.ipcRenderer.on(channel, subscription);
@@ -30,7 +35,12 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Remove all listeners for a channel
   removeAllListeners: (channel) => {
-    const validChannels = ["main-process-message", "app:toggle-click-through"];
+    const validChannels = [
+      "main-process-message",
+      "app:toggle-click-through",
+      "app:initial-state",
+      "display:id"
+    ];
     if (validChannels.includes(channel)) {
       import_electron.ipcRenderer.removeAllListeners(channel);
     }

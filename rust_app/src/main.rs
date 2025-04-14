@@ -174,7 +174,20 @@ async fn main() {
                                     Ok(sample) => {
                                         log_debug!("Received telemetry sample");
                                         
-                                        let telemetry_data = telemetry_fields::extract_telemetry(&sample);
+                                        // Extract basic telemetry data
+                                        let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
+                                        
+                                        // Get the session info string if available
+                                        if let Ok(session_info) = blocking.session_info() {
+                                            // Get the raw YAML string representation
+                                            let info_string = session_info.content().to_string();
+                                            log_debug!("Received session info ({} bytes)", info_string.len());
+                                            telemetry_data.session_info = info_string;
+                                        } else {
+                                            log_debug!("No session info available");
+                                            telemetry_data.session_info = String::from("");
+                                        }
+                                        
                                         // Convert TelemetryData to serde_json::Value
                                         let json_value = serde_json::to_value(&telemetry_data).unwrap_or_else(|e| {
                                             log_error!("Failed to convert telemetry data to JSON: {}", e);

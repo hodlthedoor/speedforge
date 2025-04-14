@@ -141,6 +141,9 @@ pub struct TelemetryData {
     pub active_flags: Vec<String>,
     pub warnings: Vec<String>,
     
+    // Session Info - Raw YAML string from iRacing
+    pub session_info: String,
+    
     // Raw values for any values that were captured
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub raw_values: HashMap<String, serde_json::Value>,

@@ -1,8 +1,8 @@
-import { ipcMain, BrowserWindow, app, globalShortcut, screen } from "electron";
+import { ipcMain, BrowserWindow, app, globalShortcut, screen, dialog } from "electron";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import require$$0 from "child_process";
-import "fs";
+import require$$0, { spawn } from "child_process";
+import * as fs from "fs";
 import "os";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -562,6 +562,230 @@ const windows = [];
 const displayWindowMap = /* @__PURE__ */ new Map();
 let stayOnTopInterval = null;
 let autoCreateWindowsForNewDisplays = true;
+let rustBackendProcess = null;
+function debugLog(...args) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  console.log(`[${timestamp}] DEBUG:`, ...args);
+}
+async function isWebSocketServerRunning(port) {
+  return new Promise((resolve) => {
+    import("net").then((net) => {
+      const client = new net.default.Socket();
+      client.setTimeout(1e3);
+      client.on("connect", () => {
+        client.destroy();
+        console.log(`WebSocket server is running on port ${port}`);
+        resolve(true);
+      });
+      client.on("timeout", () => {
+        client.destroy();
+        console.log(`Timeout connecting to WebSocket server on port ${port}`);
+        resolve(false);
+      });
+      client.on("error", (err) => {
+        client.destroy();
+        console.log(`WebSocket server is not running on port ${port}: ${err.message}`);
+        resolve(false);
+      });
+      client.connect(port, "localhost");
+    }).catch((err) => {
+      console.error("Error importing net module:", err);
+      resolve(false);
+    });
+  });
+}
+async function waitForWebSocketServer(maxAttempts = 10) {
+  console.log("Waiting for WebSocket server to start...");
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`Checking WebSocket server (attempt ${attempt}/${maxAttempts})...`);
+    if (await isWebSocketServerRunning(8080)) {
+      console.log("WebSocket server is running!");
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  console.error(`WebSocket server did not start after ${maxAttempts} attempts`);
+  return false;
+}
+function showErrorDialog(title, message, detail) {
+  if (app.isReady()) {
+    dialog.showErrorBox(title, `${message}
+
+${detail || ""}`);
+  } else {
+    app.on("ready", () => {
+      dialog.showErrorBox(title, `${message}
+
+${detail || ""}`);
+    });
+  }
+}
+async function startRustBackend(retryCount = 3) {
+  try {
+    debugLog("Starting Rust backend initialization");
+    let rustBinaryPath;
+    let binaryExists = false;
+    debugLog("Process environment:", {
+      cwd: process.cwd(),
+      resourcesPath: process.resourcesPath,
+      isPackaged: app.isPackaged,
+      platform: process.platform
+    });
+    if (app.isPackaged) {
+      rustBinaryPath = path.join(process.resourcesPath, "rust_backend", process.platform === "win32" ? "speedforge.exe" : "speedforge");
+      binaryExists = fs.existsSync(rustBinaryPath);
+      debugLog(`Production Rust binary path: ${rustBinaryPath}, exists: ${binaryExists}`);
+    }
+    if (!app.isPackaged || !binaryExists) {
+      const possiblePaths = [
+        // Debug build
+        path.join(process.cwd(), "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        // Release build
+        path.join(process.cwd(), "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        // Relative paths from electron directory
+        path.join(__dirname, "..", "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        path.join(__dirname, "..", "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        // Windows-specific paths that might be used
+        path.join("rust_app", "target", "debug", "speedforge.exe"),
+        path.join("rust_app", "target", "release", "speedforge.exe")
+      ];
+      debugLog("Checking for Rust binary at these locations:");
+      possiblePaths.forEach((p) => {
+        const exists = fs.existsSync(p);
+        debugLog(` - ${p} (exists: ${exists})`);
+        if (exists) {
+          try {
+            const stats = fs.statSync(p);
+            debugLog(`   - File stats: size=${stats.size}, mode=${stats.mode.toString(8)}, isExecutable=${stats.mode & 73}`);
+          } catch (err) {
+            debugLog(`   - Error getting file stats: ${err}`);
+          }
+        }
+      });
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          rustBinaryPath = p;
+          binaryExists = true;
+          debugLog(`Found Rust binary at: ${rustBinaryPath}`);
+          break;
+        }
+      }
+    }
+    if (!binaryExists) {
+      const errorMsg = "ERROR: Rust binary not found at any expected location!";
+      debugLog(errorMsg);
+      console.error(errorMsg);
+      console.error("Current working directory:", process.cwd());
+      showErrorDialog(
+        "Rust Backend Not Found",
+        "The application could not find the Rust backend executable.",
+        "The application will continue to run, but some features may not work correctly."
+      );
+      return false;
+    }
+    debugLog(`Starting Rust backend from: ${rustBinaryPath}`);
+    debugLog(`Working directory will be: ${path.dirname(rustBinaryPath)}`);
+    rustBackendProcess = spawn(rustBinaryPath, ["--verbose"], {
+      stdio: "pipe",
+      // Capture stdout and stderr
+      detached: false,
+      // Keep attached to the parent process
+      cwd: path.dirname(rustBinaryPath),
+      // Set working directory to binary location
+      env: {
+        ...process.env,
+        // Add any environment variables needed by the Rust app
+        RUST_LOG: "debug",
+        RUST_BACKTRACE: "1"
+      },
+      windowsHide: false
+      // Show console window on Windows for debugging
+    });
+    if (!rustBackendProcess || !rustBackendProcess.pid) {
+      throw new Error("Failed to start Rust process - no process handle or PID");
+    }
+    debugLog(`Rust process started with PID: ${rustBackendProcess.pid}`);
+    if (rustBackendProcess.stdout) {
+      rustBackendProcess.stdout.on("data", (data) => {
+        const output = data.toString().trim();
+        console.log(`Rust backend stdout: ${output}`);
+      });
+    } else {
+      debugLog("WARNING: Rust process stdout is null");
+    }
+    if (rustBackendProcess.stderr) {
+      rustBackendProcess.stderr.on("data", (data) => {
+        const output = data.toString().trim();
+        console.error(`Rust backend stderr: ${output}`);
+      });
+    } else {
+      debugLog("WARNING: Rust process stderr is null");
+    }
+    rustBackendProcess.on("exit", (code, signal) => {
+      debugLog(`Rust backend exited with code ${code} and signal ${signal}`);
+      rustBackendProcess = null;
+    });
+    rustBackendProcess.on("error", (err) => {
+      debugLog(`Failed to start Rust backend: ${err.message}`, err);
+      console.error("Failed to start Rust backend:", err);
+      rustBackendProcess = null;
+    });
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (rustBackendProcess && rustBackendProcess.exitCode === null) {
+          debugLog("Rust process is running successfully");
+          resolve(true);
+        } else {
+          debugLog("Rust process failed to start or exited immediately");
+          if (retryCount > 0) {
+            debugLog(`Retrying... (${retryCount} attempts left)`);
+            resolve(startRustBackend(retryCount - 1));
+          } else {
+            showErrorDialog(
+              "Rust Backend Failed",
+              "The Rust backend process failed to start after multiple attempts.",
+              "The application will continue to run, but some features may not work correctly."
+            );
+            resolve(false);
+          }
+        }
+      }, 1e3);
+    });
+  } catch (error) {
+    debugLog(`Error starting Rust backend: ${error}`);
+    console.error("Error starting Rust backend:", error);
+    if (retryCount > 0) {
+      debugLog(`Retrying... (${retryCount} attempts left)`);
+      return startRustBackend(retryCount - 1);
+    }
+    showErrorDialog(
+      "Rust Backend Error",
+      "There was an error starting the Rust backend.",
+      error instanceof Error ? error.message : String(error)
+    );
+    return false;
+  }
+}
+function stopRustBackend() {
+  if (rustBackendProcess) {
+    console.log("Stopping Rust backend...");
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", rustBackendProcess.pid.toString(), "/f", "/t"]);
+      } else {
+        rustBackendProcess.kill("SIGTERM");
+        setTimeout(() => {
+          if (rustBackendProcess) {
+            rustBackendProcess.kill("SIGKILL");
+          }
+        }, 1e3);
+      }
+    } catch (error) {
+      console.error("Error stopping Rust backend:", error);
+    }
+    rustBackendProcess = null;
+  }
+}
 function createWindows() {
   const displays = screen.getAllDisplays();
   console.log(`Found ${displays.length} displays`);
@@ -624,6 +848,10 @@ function createWindows() {
     win.webContents.on("did-finish-load", () => {
       console.log(`Window for display ${display.id} is ready`);
       win.webContents.send("display:id", display.id);
+      win.webContents.send("app:initial-state", {
+        clickThrough: true,
+        controlPanelHidden: true
+      });
       if (process.platform === "darwin") {
         win.setBounds({
           x: display.bounds.x,
@@ -810,6 +1038,8 @@ app.on("activate", () => {
   if (windows.length === 0) createWindows();
 });
 app.on("before-quit", () => {
+  console.log("App is quitting, cleaning up resources...");
+  stopRustBackend();
   console.log("Performing cleanup before quit");
   if (stayOnTopInterval) {
     clearInterval(stayOnTopInterval);
@@ -836,9 +1066,28 @@ app.on("before-quit", () => {
   }
   windows.length = 0;
 });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setName("Speedforge");
   initSpeechModule();
+  debugLog("Starting Rust backend process");
+  const rustStarted = await startRustBackend();
+  debugLog(`Rust backend started: ${rustStarted}`);
+  if (rustStarted) {
+    debugLog("Waiting for WebSocket server to become available");
+    const wsServerRunning = await waitForWebSocketServer(20);
+    if (!wsServerRunning) {
+      debugLog("WebSocket server didn't start, but continuing anyway...");
+      showErrorDialog(
+        "WebSocket Server Warning",
+        "The WebSocket server did not start properly.",
+        "The application will continue to run, but some features may not work correctly."
+      );
+    } else {
+      debugLog("WebSocket server is running properly");
+    }
+  } else {
+    debugLog("Skipping WebSocket server check since Rust backend failed to start");
+  }
   createWindows();
   setupIpcListeners();
   stayOnTopInterval = setInterval(() => {
@@ -909,6 +1158,13 @@ app.whenReady().then(() => {
     win.setTitle("Speedforge (click-through:true)");
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
     win.loadURL(mainUrl);
+    win.webContents.on("did-finish-load", () => {
+      win.webContents.send("display:id", display.id);
+      win.webContents.send("app:initial-state", {
+        clickThrough: true,
+        controlPanelHidden: true
+      });
+    });
     windows.push(win);
     displayWindowMap.set(display.id, win);
     win.displayId = display.id;
