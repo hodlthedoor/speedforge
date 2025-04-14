@@ -47,6 +47,7 @@ impl Hash for ClientSender {
 type Clients = Arc<Mutex<HashSet<ClientSender>>>;
 
 /// Represents a WebSocket server that broadcasts telemetry data
+#[derive(Clone)]
 pub struct TelemetryWebSocketServer {
     clients: Clients,
     address: SocketAddr,
