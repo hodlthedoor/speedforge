@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "SpeedForge iRacing Telemetry Monitor",
+  "author": {
+    "name": "Sam Ward",
+    "email": "info@speedforge.io"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -96,7 +101,7 @@
     },
     "portable": {
       "artifactName": "SpeedforgePortable-${version}.exe",
-      "requestExecutionLevel": "asInvoker"
+      "requestExecutionLevel": "user"
     },
     "linux": {
       "target": [
