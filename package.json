@@ -16,7 +16,8 @@
     "build:all": "npm run build:rust && npm run build",
     "build:portable:all": "npm run build:rust && npm run build:portable",
     "rust:dev": "cd rust_app && cargo run --verbose",
-    "dev:all": "npm run build:rust:debug && concurrently \"npm run rust:dev\" \"npm run electron:dev\"",
+    "dev:electron": "npm run electron:dev",
+    "dev:all": "npm run build:rust:debug && node scripts/run-dev.js",
     "start": "electron ."
   },
   "dependencies": {
@@ -60,13 +61,14 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "scripts/**/*"
     ],
     "extraResources": [
       {
-        "from": "rust_app/target/release/speedforge",
+        "from": "rust_app/target/release",
         "to": "rust_backend",
-        "filter": ["**/*"]
+        "filter": ["**/speedforge*", "**/*.dll", "**/*.so"]
       }
     ],
     "mac": {
@@ -93,7 +95,8 @@
       "artifactName": "Speedforge-${version}-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "SpeedforgePortable-${version}.exe"
+      "artifactName": "SpeedforgePortable-${version}.exe",
+      "requestExecutionLevel": "asInvoker"
     },
     "linux": {
       "target": [

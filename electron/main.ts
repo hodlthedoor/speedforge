@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } from 'electron';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
@@ -87,8 +87,19 @@ async function waitForWebSocketServer(maxAttempts = 10): Promise<boolean> {
   return false;
 }
 
-// Function to start the Rust backend
-function startRustBackend() {
+// Function to show an error dialog
+function showErrorDialog(title: string, message: string, detail?: string) {
+  if (app.isReady()) {
+    dialog.showErrorBox(title, `${message}\n\n${detail || ''}`);
+  } else {
+    app.on('ready', () => {
+      dialog.showErrorBox(title, `${message}\n\n${detail || ''}`);
+    });
+  }
+}
+
+// Function to start the Rust backend with retry functionality
+async function startRustBackend(retryCount = 3): Promise<boolean> {
   try {
     debugLog('Starting Rust backend initialization');
     // Determine the path to the Rust binary
@@ -151,12 +162,20 @@ function startRustBackend() {
       }
     }
 
-    // If binary still doesn't exist, log error and return
+    // If binary still doesn't exist, log error and show dialog
     if (!binaryExists) {
-      console.error('ERROR: Rust binary not found at any expected location!');
+      const errorMsg = 'ERROR: Rust binary not found at any expected location!';
+      debugLog(errorMsg);
+      console.error(errorMsg);
       console.error('Current working directory:', process.cwd());
-      console.error('Please build the Rust backend with: npm run build:rust');
-      return;
+      
+      showErrorDialog(
+        'Rust Backend Not Found', 
+        'The application could not find the Rust backend executable.',
+        'The application will continue to run, but some features may not work correctly.'
+      );
+      
+      return false;
     }
 
     debugLog(`Starting Rust backend from: ${rustBinaryPath}`);
@@ -175,6 +194,10 @@ function startRustBackend() {
       },
       windowsHide: false // Show console window on Windows for debugging
     });
+
+    if (!rustBackendProcess || !rustBackendProcess.pid) {
+      throw new Error('Failed to start Rust process - no process handle or PID');
+    }
 
     debugLog(`Rust process started with PID: ${rustBackendProcess.pid}`);
 
@@ -210,23 +233,49 @@ function startRustBackend() {
       rustBackendProcess = null;
     });
 
-    // Check if the process is still running after a short delay
-    setTimeout(() => {
-      if (rustBackendProcess) {
-        try {
-          const running = rustBackendProcess.pid && rustBackendProcess.exitCode === null;
-          debugLog(`Rust process status check: PID=${rustBackendProcess.pid}, running=${running}, exitCode=${rustBackendProcess.exitCode}`);
-        } catch (err) {
-          debugLog(`Error checking Rust process status: ${err}`);
+    // Check if process is still running after a short delay
+    return new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        if (rustBackendProcess && rustBackendProcess.exitCode === null) {
+          // Process is still running
+          debugLog('Rust process is running successfully');
+          resolve(true);
+        } else {
+          debugLog('Rust process failed to start or exited immediately');
+          
+          // Retry if we have attempts left
+          if (retryCount > 0) {
+            debugLog(`Retrying... (${retryCount} attempts left)`);
+            resolve(startRustBackend(retryCount - 1));
+          } else {
+            showErrorDialog(
+              'Rust Backend Failed', 
+              'The Rust backend process failed to start after multiple attempts.',
+              'The application will continue to run, but some features may not work correctly.'
+            );
+            resolve(false);
+          }
         }
-      } else {
-        debugLog('Rust process is no longer available');
-      }
-    }, 1000);
+      }, 1000);
+    });
 
   } catch (error) {
     debugLog(`Error starting Rust backend: ${error}`);
     console.error('Error starting Rust backend:', error);
+    
+    // Retry if we have attempts left
+    if (retryCount > 0) {
+      debugLog(`Retrying... (${retryCount} attempts left)`);
+      return startRustBackend(retryCount - 1);
+    }
+    
+    showErrorDialog(
+      'Rust Backend Error', 
+      'There was an error starting the Rust backend.',
+      error instanceof Error ? error.message : String(error)
+    );
+    
+    return false;
   }
 }
 
@@ -678,14 +727,28 @@ app.whenReady().then(async () => {
   // Initialize the speech module
   initSpeechModule();
   
-  // Start the Rust backend
-  startRustBackend();
+  // Start the Rust backend and wait for it to be ready
+  debugLog('Starting Rust backend process');
+  const rustStarted = await startRustBackend();
+  debugLog(`Rust backend started: ${rustStarted}`);
   
   // Wait for the WebSocket server to start before creating windows
-  const wsServerRunning = await waitForWebSocketServer(20); // Try 20 times (10 seconds)
-  if (!wsServerRunning) {
-    console.warn('WebSocket server didn\'t start, but continuing anyway...');
-    // You might want to show a warning dialog to the user here
+  if (rustStarted) {
+    debugLog('Waiting for WebSocket server to become available');
+    const wsServerRunning = await waitForWebSocketServer(20); // Try 20 times (10 seconds)
+    if (!wsServerRunning) {
+      debugLog('WebSocket server didn\'t start, but continuing anyway...');
+      // Show a warning dialog
+      showErrorDialog(
+        'WebSocket Server Warning',
+        'The WebSocket server did not start properly.',
+        'The application will continue to run, but some features may not work correctly.'
+      );
+    } else {
+      debugLog('WebSocket server is running properly');
+    }
+  } else {
+    debugLog('Skipping WebSocket server check since Rust backend failed to start');
   }
   
   createWindows();
