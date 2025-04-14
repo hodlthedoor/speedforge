@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use std::hash::{Hasher};
+use std::hash::Hasher;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{self, Write};
 use std::error::Error;
