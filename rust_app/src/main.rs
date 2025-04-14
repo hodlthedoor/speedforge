@@ -177,14 +177,39 @@ async fn main() {
                                         // Extract basic telemetry data
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
-                                        // Get the session info string if available
-                                        if let Ok(session_info) = blocking.session_info() {
-                                            // Get the raw YAML string representation
-                                            let info_string = session_info.content().to_string();
-                                            log_debug!("Received session info ({} bytes)", info_string.len());
-                                            telemetry_data.session_info = info_string;
-                                        } else {
-                                            log_debug!("No session info available");
+                                        // Try multiple approaches to get session info
+                                        let mut session_info_found = false;
+                                        
+                                        // Approach 1: Try session_string() method
+                                        if !session_info_found {
+                                            if let Ok(session_info) = blocking.session_string() {
+                                                log_debug!("Received session info via session_string() ({} bytes)", session_info.len());
+                                                telemetry_data.session_info = session_info;
+                                                session_info_found = true;
+                                            }
+                                        }
+                                        
+                                        // Approach 2: Try yaml() method
+                                        if !session_info_found {
+                                            if let Ok(yaml_info) = blocking.yaml() {
+                                                log_debug!("Received session info via yaml() ({} bytes)", yaml_info.len());
+                                                telemetry_data.session_info = yaml_info;
+                                                session_info_found = true;
+                                            }
+                                        }
+                                        
+                                        // Approach 3: Try get_session_info() method
+                                        if !session_info_found {
+                                            if let Ok(session_data) = blocking.get_session_info() {
+                                                log_debug!("Received session info via get_session_info()");
+                                                telemetry_data.session_info = session_data.to_string();
+                                                session_info_found = true;
+                                            }
+                                        }
+                                        
+                                        // If none of the methods worked
+                                        if !session_info_found {
+                                            log_debug!("No session info available - all methods failed");
                                             telemetry_data.session_info = String::from("");
                                         }
                                         
