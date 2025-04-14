@@ -9,37 +9,32 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{self, Write};
+use std::error::Error;
 
 /// A wrapper for UnboundedSender that implements Hash and Eq
 #[derive(Clone)]
-struct ClientSender {
-    id: usize,
-    sender: UnboundedSender<String>,
-}
+struct ClientSender(UnboundedSender<Message>);
 
 impl ClientSender {
-    fn new(sender: UnboundedSender<String>) -> Self {
-        // Use the pointer address as a unique ID
-        let id = &sender as *const _ as usize;
-        Self { id, sender }
-    }
-    
-    fn send(&self, msg: String) -> Result<(), mpsc::error::SendError<String>> {
-        self.sender.send(msg)
+    fn new(tx: UnboundedSender<Message>) -> Self {
+        ClientSender(tx)
     }
 }
 
 impl PartialEq for ClientSender {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        // Each sender has a unique address in memory that we can use for comparison
+        std::ptr::eq(&self.0, &other.0)
     }
 }
 
 impl Eq for ClientSender {}
 
-impl Hash for ClientSender {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
+impl std::hash::Hash for ClientSender {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash based on the memory address of the sender
+        let ptr = &self.0 as *const _ as usize;
+        ptr.hash(state);
     }
 }
 
@@ -49,67 +44,107 @@ type Clients = Arc<Mutex<HashSet<ClientSender>>>;
 /// Represents a WebSocket server that broadcasts telemetry data
 #[derive(Clone)]
 pub struct TelemetryWebSocketServer {
-    clients: Clients,
-    address: SocketAddr,
+    clients: Arc<Mutex<HashSet<ClientSender>>>,
+    address: String,
 }
 
 impl TelemetryWebSocketServer {
     /// Create a new WebSocket server
-    pub fn new(address: &str) -> Self {
-        let addr: SocketAddr = address.parse().expect("Failed to parse address");
-        let clients = Arc::new(Mutex::new(HashSet::new()));
-        
-        Self {
-            clients,
-            address: addr,
-        }
+    pub fn new(address: &str) -> Result<Self, Box<dyn Error>> {
+        println!("[{}] Creating WebSocket server on {}", get_timestamp(), address);
+        Ok(TelemetryWebSocketServer {
+            address: address.to_string(),
+            clients: Arc::new(Mutex::new(HashSet::new())),
+        })
     }
     
     /// Start the WebSocket server
-    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(&self.address).await?;
-        println!("WebSocket server listening on: {}", self.address);
-        
+    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+        let addr = self.address.parse()
+            .map_err(|e| {
+                eprintln!("[{}] Failed to parse address {}: {}", get_timestamp(), self.address, e);
+                e
+            })?;
+
+        // Clone clients for the task
         let clients = self.clients.clone();
+
+        println!("[{}] Starting WebSocket server on: {}", get_timestamp(), self.address);
         
-        // Accept incoming connections
+        // Spawn a task to listen for incoming WebSocket connections
         tokio::spawn(async move {
-            while let Ok((stream, addr)) = listener.accept().await {
-                let timestamp = get_timestamp();
-                println!("\n[{}] 🔌 New WebSocket connection attempt from: {}", timestamp, addr);
-                
-                let clients = clients.clone();
-                tokio::spawn(handle_connection(stream, addr, clients));
+            // Create the TCP listener
+            let listener = match tokio::net::TcpListener::bind(&addr).await {
+                Ok(listener) => {
+                    println!("[{}] WebSocket server listening on: {}", get_timestamp(), addr);
+                    listener
+                },
+                Err(e) => {
+                    eprintln!("[{}] Failed to bind WebSocket server to {}: {}", get_timestamp(), addr, e);
+                    return;
+                }
+            };
+
+            // Accept connections in a loop
+            loop {
+                match listener.accept().await {
+                    Ok((stream, addr)) => {
+                        let timestamp = get_timestamp();
+                        println!("\n[{}] 🔌 New WebSocket connection attempt from: {}", timestamp, addr);
+                        
+                        // Clone clients for this connection
+                        let clients = clients.clone();
+                        
+                        // Handle the connection in a separate task
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_connection(stream, addr, clients).await {
+                                eprintln!("[{}] Error handling WebSocket connection from {}: {}", 
+                                    get_timestamp(), addr, e);
+                            }
+                        });
+                    },
+                    Err(e) => {
+                        eprintln!("[{}] Error accepting connection: {}", get_timestamp(), e);
+                        // Short sleep to avoid spinning in case of persistent errors
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    }
+                }
             }
         });
-        
+
         Ok(())
     }
     
     /// Broadcast telemetry data to all connected clients
-    pub fn broadcast_telemetry(&self, data: &TelemetryData) -> Result<(), Box<dyn std::error::Error>> {
-        let json_string = serde_json::to_string(data)?;
+    pub fn broadcast_telemetry(&self, data: &serde_json::Value) -> Result<(), Box<dyn Error>> {
+        let clients = self.clients.lock().unwrap();
         
-        // Remove clients that fail to receive messages
-        let mut disconnected = Vec::new();
+        // Don't do anything if there are no clients
+        if clients.is_empty() {
+            return Ok(());
+        }
         
-        if let Ok(mut clients) = self.clients.lock() {
-            for client in clients.iter() {
-                if let Err(_) = client.send(json_string.clone()) {
-                    disconnected.push(client.clone());
-                }
+        // Convert telemetry data to JSON string
+        let json_str = serde_json::to_string(data)?;
+        let message = Message::Text(json_str);
+        
+        // Send to all clients
+        let mut dead_clients = Vec::new();
+        
+        for client in clients.iter() {
+            if let Err(e) = client.0.send(message.clone()) {
+                eprintln!("[{}] Failed to send to client: {}", get_timestamp(), e);
+                // Mark this client for removal
+                dead_clients.push(client.clone());
             }
-            
-            // Remove disconnected clients
-            for client in disconnected.iter() {
-                clients.remove(client);
-            }
-            
-            if !disconnected.is_empty() {
-                let timestamp = get_timestamp();
-                println!("\n[{}] ❌ Removed {} disconnected clients, {} remaining", 
-                    timestamp, disconnected.len(), clients.len());
-                io::stdout().flush().unwrap();
+        }
+        
+        // If we found any dead clients, remove them
+        if !dead_clients.is_empty() {
+            drop(clients); // Release the lock first
+            let mut clients = self.clients.lock().unwrap();
+            for dead_client in dead_clients {
+                clients.remove(&dead_client);
             }
         }
         
@@ -118,7 +153,11 @@ impl TelemetryWebSocketServer {
     
     /// Get the current number of connected clients
     pub fn client_count(&self) -> usize {
-        self.clients.lock().map(|c| c.len()).unwrap_or(0)
+        if let Ok(clients) = self.clients.lock() {
+            clients.len()
+        } else {
+            0
+        }
     }
 }
 
@@ -140,87 +179,91 @@ fn get_timestamp() -> String {
 }
 
 /// Handle an individual WebSocket connection
-async fn handle_connection(stream: TcpStream, addr: SocketAddr, clients: Clients) {
-    let ws_stream = match accept_async(stream).await {
-        Ok(ws) => ws,
+async fn handle_connection(
+    stream: TcpStream, 
+    addr: SocketAddr, 
+    clients: Arc<Mutex<HashSet<ClientSender>>>
+) -> Result<(), Box<dyn Error>> {
+    let timestamp = get_timestamp();
+    
+    // Perform WebSocket handshake
+    let mut ws_stream = match tokio_tungstenite::accept_async(stream).await {
+        Ok(ws_stream) => {
+            println!("[{}] 🤝 WebSocket handshake completed with {}", timestamp, addr);
+            ws_stream
+        },
         Err(e) => {
-            let timestamp = get_timestamp();
             println!("[{}] ❌ Error during WebSocket handshake with {}: {}", timestamp, addr, e);
-            io::stdout().flush().unwrap();
-            return;
+            return Err(Box::new(e));
         }
     };
     
-    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    // Create a channel for sending messages to this client
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let client_sender = ClientSender::new(tx);
     
-    // Add new client to the set
-    let client_sender = ClientSender::new(tx.clone());
-    let client_count = {
-        let mut clients_lock = clients.lock().unwrap();
-        clients_lock.insert(client_sender.clone());
-        clients_lock.len()
-    };
+    // Add the new client to our client set
+    {
+        println!("[{}] 👨‍👩‍👧‍👦 Adding client {} to client pool", timestamp, addr);
+        let mut clients = clients.lock().unwrap();
+        clients.insert(client_sender.clone());
+        println!("[{}] ℹ️ Now serving {} clients", timestamp, clients.len());
+    }
     
-    let timestamp = get_timestamp();
-    println!("\n[{}] ✅ Client connected: {} (Total clients: {})", timestamp, addr, client_count);
-    io::stdout().flush().unwrap();
+    // Split WebSocket stream into sender and receiver
+    let (ws_sender, ws_receiver) = ws_stream.split();
     
     // Task that forwards messages from the channel to the WebSocket
-    let forward_task = tokio::spawn(async move {
+    let mut send_task = tokio::spawn(async move {
+        let mut ws_sender = ws_sender;
         while let Some(msg) = rx.recv().await {
-            if let Err(e) = ws_sender.send(Message::Text(msg)).await {
-                println!("Error sending message to {}: {}", addr, e);
+            if let Err(e) = ws_sender.send(msg).await {
+                println!("[{}] 📤 Error sending message to {}: {}", get_timestamp(), addr, e);
                 break;
             }
         }
     });
     
     // Process incoming WebSocket messages
-    let receive_task = tokio::spawn(async move {
+    let mut recv_task = tokio::spawn(async move {
+        let mut ws_receiver = ws_receiver;
         while let Some(result) = ws_receiver.next().await {
             match result {
                 Ok(msg) => {
                     if msg.is_close() {
+                        println!("[{}] 👋 Received close message from {}", get_timestamp(), addr);
                         break;
                     }
                     
-                    // Optional: Handle client commands here if needed
-                    if let Ok(text) = msg.to_text() {
-                        let timestamp = get_timestamp();
-                        println!("[{}] 📩 Received message from {}: {}", timestamp, addr, text);
-                        io::stdout().flush().unwrap();
-                        
-                        // Example command handling
-                        if text == "ping" {
-                            let _ = tx.send("pong".to_string());
-                        }
+                    // Handle other message types as needed
+                    if msg.is_text() || msg.is_binary() {
+                        println!("[{}] 📥 Received message from {}", get_timestamp(), addr);
+                        // In the future we might process client messages here
                     }
-                }
+                },
                 Err(e) => {
-                    let timestamp = get_timestamp();
-                    println!("[{}] ❌ Error from {}: {}", timestamp, addr, e);
-                    io::stdout().flush().unwrap();
+                    println!("[{}] ❌ Error receiving message from {}: {}", get_timestamp(), addr, e);
                     break;
                 }
             }
         }
         
-        // Client disconnected or error occurred
-        let client_count = {
-            let mut clients_lock = clients.lock().unwrap();
-            clients_lock.remove(&client_sender);
-            clients_lock.len()
-        };
-        
-        let timestamp = get_timestamp();
-        println!("\n[{}] 🔌 Client disconnected: {} (Total clients: {})", timestamp, addr, client_count);
-        io::stdout().flush().unwrap();
+        println!("[{}] 🔌 Client {} disconnected", get_timestamp(), addr);
     });
     
-    // Wait for either task to complete
+    // Wait for either task to complete - this means the connection is closing
     tokio::select! {
-        _ = forward_task => {},
-        _ = receive_task => {},
+        _ = &mut send_task => {},
+        _ = &mut recv_task => {},
     }
+    
+    // Clean up the client when they disconnect
+    {
+        let mut clients = clients.lock().unwrap();
+        clients.remove(&client_sender);
+        println!("[{}] 👋 Removed client {}. Now serving {} clients", 
+                get_timestamp(), addr, clients.len());
+    }
+    
+    Ok(())
 } 

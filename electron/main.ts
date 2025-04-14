@@ -31,6 +31,12 @@ let autoCreateWindowsForNewDisplays = true;
 // Reference to the Rust backend process
 let rustBackendProcess: ChildProcess | null = null;
 
+// Add a debug log function with timestamps
+function debugLog(...args: any[]) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] DEBUG:`, ...args);
+}
+
 // Function to check if the WebSocket server is running
 async function isWebSocketServerRunning(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -84,15 +90,23 @@ async function waitForWebSocketServer(maxAttempts = 10): Promise<boolean> {
 // Function to start the Rust backend
 function startRustBackend() {
   try {
+    debugLog('Starting Rust backend initialization');
     // Determine the path to the Rust binary
     let rustBinaryPath: string;
     let binaryExists = false;
+
+    debugLog('Process environment:', {
+      cwd: process.cwd(),
+      resourcesPath: process.resourcesPath,
+      isPackaged: app.isPackaged,
+      platform: process.platform
+    });
 
     // In production, use the binary from the app's resources
     if (app.isPackaged) {
       rustBinaryPath = path.join(process.resourcesPath, 'rust_backend', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge');
       binaryExists = fs.existsSync(rustBinaryPath);
-      console.log(`Production Rust binary path: ${rustBinaryPath}, exists: ${binaryExists}`);
+      debugLog(`Production Rust binary path: ${rustBinaryPath}, exists: ${binaryExists}`);
     } 
     
     // In development, try multiple possible paths
@@ -105,18 +119,33 @@ function startRustBackend() {
         path.join(process.cwd(), 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
         // Relative paths from electron directory
         path.join(__dirname, '..', 'rust_app', 'target', 'debug', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
-        path.join(__dirname, '..', 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge')
+        path.join(__dirname, '..', 'rust_app', 'target', 'release', process.platform === 'win32' ? 'speedforge.exe' : 'speedforge'),
+        // Windows-specific paths that might be used
+        path.join('rust_app', 'target', 'debug', 'speedforge.exe'),
+        path.join('rust_app', 'target', 'release', 'speedforge.exe')
       ];
 
       // Log all paths we're checking
-      console.log('Checking for Rust binary at these locations:');
-      possiblePaths.forEach(p => console.log(` - ${p} (exists: ${fs.existsSync(p)})`));
+      debugLog('Checking for Rust binary at these locations:');
+      possiblePaths.forEach(p => {
+        const exists = fs.existsSync(p);
+        debugLog(` - ${p} (exists: ${exists})`);
+        if (exists) {
+          try {
+            const stats = fs.statSync(p);
+            debugLog(`   - File stats: size=${stats.size}, mode=${stats.mode.toString(8)}, isExecutable=${stats.mode & 0o111}`);
+          } catch (err) {
+            debugLog(`   - Error getting file stats: ${err}`);
+          }
+        }
+      });
 
       // Find the first path that exists
       for (const p of possiblePaths) {
         if (fs.existsSync(p)) {
           rustBinaryPath = p;
           binaryExists = true;
+          debugLog(`Found Rust binary at: ${rustBinaryPath}`);
           break;
         }
       }
@@ -130,49 +159,73 @@ function startRustBackend() {
       return;
     }
 
-    console.log(`Starting Rust backend from: ${rustBinaryPath}`);
+    debugLog(`Starting Rust backend from: ${rustBinaryPath}`);
+    debugLog(`Working directory will be: ${path.dirname(rustBinaryPath)}`);
 
     // Start the Rust process with explicit working directory and args
-    rustBackendProcess = spawn(rustBinaryPath, [], {
+    rustBackendProcess = spawn(rustBinaryPath, ['--verbose'], {
       stdio: 'pipe', // Capture stdout and stderr
       detached: false, // Keep attached to the parent process
       cwd: path.dirname(rustBinaryPath), // Set working directory to binary location
       env: { 
         ...process.env,
         // Add any environment variables needed by the Rust app
-        // For example: RUST_LOG: 'debug'
+        RUST_LOG: 'debug',
         RUST_BACKTRACE: '1'
-      }
+      },
+      windowsHide: false // Show console window on Windows for debugging
     });
 
-    console.log(`Rust process started with PID: ${rustBackendProcess.pid}`);
+    debugLog(`Rust process started with PID: ${rustBackendProcess.pid}`);
 
     // Log process output
     if (rustBackendProcess.stdout) {
       rustBackendProcess.stdout.on('data', (data) => {
-        console.log(`Rust backend stdout: ${data.toString().trim()}`);
+        const output = data.toString().trim();
+        console.log(`Rust backend stdout: ${output}`);
       });
+    } else {
+      debugLog('WARNING: Rust process stdout is null');
     }
 
     if (rustBackendProcess.stderr) {
       rustBackendProcess.stderr.on('data', (data) => {
-        console.error(`Rust backend stderr: ${data.toString().trim()}`);
+        const output = data.toString().trim();
+        console.error(`Rust backend stderr: ${output}`);
       });
+    } else {
+      debugLog('WARNING: Rust process stderr is null');
     }
 
     // Handle process exit
     rustBackendProcess.on('exit', (code, signal) => {
-      console.log(`Rust backend exited with code ${code} and signal ${signal}`);
+      debugLog(`Rust backend exited with code ${code} and signal ${signal}`);
       rustBackendProcess = null;
     });
 
     // Handle process error
     rustBackendProcess.on('error', (err) => {
+      debugLog(`Failed to start Rust backend: ${err.message}`, err);
       console.error('Failed to start Rust backend:', err);
       rustBackendProcess = null;
     });
 
+    // Check if the process is still running after a short delay
+    setTimeout(() => {
+      if (rustBackendProcess) {
+        try {
+          const running = rustBackendProcess.pid && rustBackendProcess.exitCode === null;
+          debugLog(`Rust process status check: PID=${rustBackendProcess.pid}, running=${running}, exitCode=${rustBackendProcess.exitCode}`);
+        } catch (err) {
+          debugLog(`Error checking Rust process status: ${err}`);
+        }
+      } else {
+        debugLog('Rust process is no longer available');
+      }
+    }, 1000);
+
   } catch (error) {
+    debugLog(`Error starting Rust backend: ${error}`);
     console.error('Error starting Rust backend:', error);
   }
 }
