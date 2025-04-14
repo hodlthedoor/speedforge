@@ -164,6 +164,18 @@ async fn main() {
                             connection_status = "connected";
                         }
                         
+                        // Get session info from the connection object
+                        let session_info_str = match conn.session_info() {
+                            Ok(session) => {
+                                log_debug!("Retrieved session info successfully");
+                                format!("{:#?}", session)
+                            },
+                            Err(e) => {
+                                log_error!("Failed to get session info: {:?}", e);
+                                String::from("")
+                            }
+                        };
+                        
                         // Create a blocking telemetry handle
                         if let Ok(blocking) = conn.blocking() {
                             // Start monitoring telemetry
@@ -178,9 +190,12 @@ async fn main() {
                                         // Extract basic telemetry data
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
-                                        // Don't try to get session info for now - we'll add it later when we find the correct method
-                                        // For session info widget to work, we'll just set a placeholder
-                                        telemetry_data.session_info = format!("\
+                                        // Use the session info we got from the connection
+                                        if !session_info_str.is_empty() {
+                                            telemetry_data.session_info = session_info_str.clone();
+                                        } else {
+                                            // Fallback to our placeholder if session_info wasn't available
+                                            telemetry_data.session_info = format!("\
 ---
 SessionInfo:
   Sessions:
@@ -232,16 +247,17 @@ SessionInfo:
     DriverCarSLShiftRPM: 0
     DriverCarSLLastRPM: 0
     DriverCarSLBlinkRPM: 0
-note: This is simulated session info. The actual session_info API is being implemented.",
-    session_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-    elapsed_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f32() % 3600.0,
-    track_temp = telemetry_data.track_temp_c,
-    air_temp = telemetry_data.air_temp_c,
-    wind_vel = telemetry_data.wind_vel_ms,
-    wind_dir = telemetry_data.wind_dir_rad * 180.0 / std::f32::consts::PI,
-    humidity = telemetry_data.humidity_pct,
-    fog = telemetry_data.fog_level_pct
-);
+note: This is simulated session info. The actual session_info was not available.",
+                                session_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                                elapsed_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f32() % 3600.0,
+                                track_temp = telemetry_data.track_temp_c,
+                                air_temp = telemetry_data.air_temp_c,
+                                wind_vel = telemetry_data.wind_vel_ms,
+                                wind_dir = telemetry_data.wind_dir_rad * 180.0 / std::f32::consts::PI,
+                                humidity = telemetry_data.humidity_pct,
+                                fog = telemetry_data.fog_level_pct
+                            );
+                                        }
                                         
                                         // Convert TelemetryData to serde_json::Value
                                         let json_value = serde_json::to_value(&telemetry_data).unwrap_or_else(|e| {
