@@ -404,6 +404,12 @@ function createWindows() {
       // Send display ID to the renderer process
       win.webContents.send('display:id', display.id);
       
+      // Send initial UI state to the renderer
+      win.webContents.send('app:initial-state', {
+        clickThrough: true,
+        controlPanelHidden: true
+      });
+      
       // For macOS, make sure we're the right size after loading
       if (process.platform === 'darwin') {
         win.setBounds({
@@ -850,6 +856,18 @@ app.whenReady().then(async () => {
     // Load the app
     const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
     win.loadURL(mainUrl);
+    
+    // Send initial UI state when the window is loaded
+    win.webContents.on('did-finish-load', () => {
+      // Send display ID to the renderer process
+      win.webContents.send('display:id', display.id);
+      
+      // Send initial UI state to the renderer
+      win.webContents.send('app:initial-state', {
+        clickThrough: true,
+        controlPanelHidden: true
+      });
+    });
     
     // Store the window reference
     windows.push(win);
