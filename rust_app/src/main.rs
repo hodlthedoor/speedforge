@@ -198,32 +198,22 @@ async fn main() {
                         }
                         
                         // Always log session info attempt in normal mode too
-                        log_info!("Attempting to get iRacing session info...");
+                        log_info!("Attempting to get raw iRacing session info...");
                         
-                        // Get session info from the connection object
-                        let session_info_str = match conn.session_info() {
-                            Ok(session) => {
-                                // Check if session info is actually populated
-                                let session_str = format!("{:#?}", session);
-                                if session_str.trim().is_empty() || session_str == "\"\"" {
-                                    log_error!("Session info is empty or invalid");
-                                    String::from("")
+                        // Access the raw session info string directly
+                        let raw_yaml = match conn.session_info_str() {
+                            Ok(raw_str) => {
+                                log_info!("Raw session info length: {} bytes", raw_str.len());
+                                if raw_str.len() > 500 {
+                                    log_info!("Raw session info preview (first 500 chars): {}", &raw_str[0..500]);
                                 } else {
-                                    // Always log this in normal mode too
-                                    log_info!("Retrieved session info successfully, length: {} bytes", session_str.len());
-                                    // Print the first 200 characters to help debugging
-                                    let preview = if session_str.len() > 200 {
-                                        format!("{}...", &session_str[0..200])
-                                    } else {
-                                        session_str.clone()
-                                    };
-                                    log_info!("Session info preview: {}", preview);
-                                    session_str
+                                    log_info!("Raw session info: {}", raw_str);
                                 }
+                                raw_str
                             },
                             Err(e) => {
-                                log_error!("Failed to get session info: {:?}", e);
-                                String::from("")
+                                log_error!("Failed to get raw session info: {:?}", e);
+                                String::new()
                             }
                         };
                         
@@ -245,8 +235,8 @@ async fn main() {
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
                                         // Use the session info we got from the connection
-                                        if !session_info_str.is_empty() {
-                                            telemetry_data.session_info = session_info_str.clone();
+                                        if !raw_yaml.is_empty() {
+                                            telemetry_data.session_info = raw_yaml.clone();
                                             
                                             // Periodically log that we're using real session data
                                             if should_log_telemetry_update() {
@@ -270,20 +260,23 @@ async fn main() {
                                             };
                                             
                                             if should_retry {
-                                                log_info!("Retrying to get session info...");
-                                                match conn.session_info() {
-                                                    Ok(session) => {
-                                                        let raw_str = format!("{:?}", session);
-                                                        log_info!("Raw session info result: {}", 
-                                                            if raw_str.len() > 200 { &raw_str[0..200] } else { &raw_str });
+                                                log_info!("Retrying to get raw session info...");
+                                                match conn.session_info_str() {
+                                                    Ok(raw_str) => {
+                                                        log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
+                                                        if raw_str.len() > 200 {
+                                                            log_info!("Retry: Raw session info preview: {}", &raw_str[0..200]);
+                                                        } else {
+                                                            log_info!("Retry: Raw session info: {}", raw_str);
+                                                        }
                                                     },
                                                     Err(e) => {
-                                                        log_error!("Retry: Failed to get session info: {:?}", e);
+                                                        log_error!("Retry: Failed to get raw session info: {:?}", e);
                                                     }
                                                 }
                                             }
                                             
-                                            // Use our fallback data as before
+                                            // Use fallback data since we don't have real session info
                                             telemetry_data.session_info = format!("\
 ---
 SessionInfo:
