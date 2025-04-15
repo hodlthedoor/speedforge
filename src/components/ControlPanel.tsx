@@ -488,6 +488,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setWidgetBackgroundTransparent(newTransparency);
   };
 
+  // Helper function to generate a consistent color hash from a string
+  const getColorFromString = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Generate colors in the blue-green spectrum for telemetry metrics
+    const h = Math.abs(hash) % 180 + 180; // 180-360 range (blue to green hues)
+    const s = 70 + (Math.abs(hash) % 20); // 70-90%
+    const l = 45 + (Math.abs(hash) % 15); // 45-60%
+    
+    return `hsl(${h}, ${s}%, ${l}%)`;
+  };
+
   return (
     <BaseDraggableComponent
       initialPosition={initialPosition}
@@ -544,8 +559,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             onClick={handleReconnect}
             disabled={reconnecting}
             style={{
-              fontSize: '12px',
-              padding: '6px 12px',
+              fontSize: '11px',
+              padding: '5px 10px',
               borderRadius: '6px',
               backgroundColor: reconnecting ? '#374151' : '#374151',
               color: reconnecting ? '#9ca3af' : '#e5e7eb',
@@ -560,17 +575,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* Content area */}
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Action Buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ 
+        padding: '20px', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '12px',
+        maxHeight: 'calc(100vh - 120px)',
+        overflowY: 'auto'
+      }}>
+        {/* Top Row: Hide Panel, Show All, and Quit buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '12px' }}>
           <button 
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '12px 16px',
+              padding: '10px 14px',
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 500,
               backgroundColor: clickThrough 
                 ? (hideButtonHover ? '#ca8a04' : '#eab308') 
@@ -588,7 +610,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             onMouseEnter={() => setHideButtonHover(true)}
             onMouseLeave={() => setHideButtonHover(false)}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               {clickThrough ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               ) : (
@@ -603,9 +625,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '12px 16px',
+              padding: '10px 14px',
               borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 500,
               backgroundColor: showAllButtonHover ? '#4338ca' : '#4f46e5',
               color: 'white',
@@ -621,168 +643,118 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             onMouseEnter={() => setShowAllButtonHover(true)}
             onMouseLeave={() => setShowAllButtonHover(false)}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Show All
           </button>
+          
+          {window.electronAPI && (
+            <button 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '10px 0',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 500,
+                backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: quitButtonHover 
+                  ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
+                  : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                transform: quitButtonHover ? 'translateY(-1px)' : 'none'
+              }}
+              onClick={quitApplication}
+              onMouseEnter={() => setQuitButtonHover(true)}
+              onMouseLeave={() => setQuitButtonHover(false)}
+              title="Quit Application"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* Widget Menu Toggle */}
-        <button 
-          style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '14px 16px',
+        {/* Widgets Library Section Header */}
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            backgroundColor: 'rgba(37, 99, 235, 0.15)',
             borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: 500,
-            backgroundColor: menuButtonHover ? '#1d4ed8' : '#2563eb',
-            color: 'white',
-            border: 'none',
+            border: showWidgetMenu ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid transparent',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
-            boxShadow: menuButtonHover 
-              ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
-              : '0 2px 4px rgba(0, 0, 0, 0.1)',
-            transform: menuButtonHover ? 'translateY(-1px)' : 'none'
+            marginTop: '8px'
           }}
           onClick={toggleWidgetMenu}
           onMouseEnter={() => setMenuButtonHover(true)}
           onMouseLeave={() => setMenuButtonHover(false)}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            {showWidgetMenu ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            )}
-          </svg>
-          {showWidgetMenu ? 'Hide Widget Menu' : 'Show Widget Menu'}
-        </button>
-
-        {/* Active Widgets Toggle */}
-        <button 
-          style={{
-            width: '100%',
-            display: 'flex',
+          <div style={{ 
+            display: 'flex', 
             alignItems: 'center',
-            justifyContent: 'center',
-            padding: '14px 16px',
-            borderRadius: '8px',
-            fontSize: '14px',
+            fontSize: '13px',
             fontWeight: 500,
-            backgroundColor: activeWidgetsButtonHover ? '#0d9488' : '#14b8a6',
-            color: 'white',
-            border: 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            boxShadow: activeWidgetsButtonHover 
-              ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(20, 184, 166, 0.3)' 
-              : '0 2px 4px rgba(0, 0, 0, 0.1)',
-            transform: activeWidgetsButtonHover ? 'translateY(-1px)' : 'none'
-          }}
-          onClick={toggleActiveWidgetsList}
-          onMouseEnter={() => setActiveWidgetsButtonHover(true)}
-          onMouseLeave={() => setActiveWidgetsButtonHover(false)}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          {showActiveWidgets ? 'Hide Active Widgets' : 'Show Active Widgets'}
-        </button>
-
-        {/* Quit Button */}
-        {window.electronAPI && (
-          <button 
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '14px 16px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
-              color: 'white',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: quitButtonHover 
-                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
-                : '0 2px 4px rgba(0, 0, 0, 0.1)',
-              transform: quitButtonHover ? 'translateY(-1px)' : 'none'
-            }}
-            onClick={quitApplication}
-            onMouseEnter={() => setQuitButtonHover(true)}
-            onMouseLeave={() => setQuitButtonHover(false)}
-          >
+            color: '#2563eb'
+          }}>
             <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Quit Application
-          </button>
-        )}
+            Widgets Library
+          </div>
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            style={{ 
+              width: '16px', 
+              height: '16px', 
+              color: '#3b82f6',
+              transform: showWidgetMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease' 
+            }} 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
 
-        {/* Widget Menu */}
+        {/* Widget Menu Content */}
         {showWidgetMenu && (
           <div style={{ 
-            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
-            marginTop: '16px',
-            paddingTop: '20px',
-            marginLeft: '-20px',
-            marginRight: '-20px',
-            paddingLeft: '20px',
-            paddingRight: '20px'
+            backgroundColor: 'rgba(30, 41, 59, 0.4)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginTop: '4px'
           }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#93c5fd', marginBottom: '16px' }}>Widgets Library</h3>
-            
-            {/* Telemetry Widgets */}
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
-                <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {availableMetrics.map(metric => (
-                  <div 
-                    key={metric.id} 
-                    style={{
-                      padding: '8px',
-                      backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                      borderRadius: '8px',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                  >
-                    <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Other Widget Types */}
-            {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-              <div key={category} style={{ marginBottom: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
-                  <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <div style={{ 
+              maxHeight: '300px',
+              overflowY: 'auto',
+              paddingRight: '10px',
+              marginRight: '-10px'
+            }}>
+              {/* Telemetry Widgets */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
+                  <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  {widgets.map(widget => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {availableMetrics.map(metric => (
                     <div 
-                      key={widget.type} 
+                      key={metric.id} 
                       style={{
                         padding: '8px',
                         backgroundColor: 'rgba(30, 41, 59, 0.8)',
@@ -791,186 +763,122 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
-                      onClick={() => addWidgetFromRegistry(widget.type)}
-                      title={widget.description}
+                      onClick={() => addTelemetryWidget(metric.id, metric.name)}
                     >
-                      <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+                      <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
                     </div>
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-        
-        {/* Selected Widget Panel */}
-        {selectedWidget && (
-          <div style={{ 
-            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
-            marginTop: '16px',
-            paddingTop: '20px',
-            marginLeft: '-20px',
-            marginRight: '-20px',
-            paddingLeft: '20px',
-            paddingRight: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#3b82f6' }}>{selectedWidget.title}</h3>
-              <button 
-                onClick={() => closeWidget(selectedWidget.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  border: 'none',
-                  backgroundColor: 'rgba(60, 60, 60, 0.4)',
-                  color: '#9ca3af',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div style={{ 
-              padding: '12px', 
-              backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-              borderRadius: '8px',
-              fontSize: '12px',
-              marginBottom: '16px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                <span style={{ color: '#9ca3af' }}>ID:</span>
-                <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                <span style={{ color: '#9ca3af' }}>Type:</span>
-                <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
-              </div>
-              {selectedWidget.options?.metric && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                  <span style={{ color: '#9ca3af' }}>Metric:</span>
-                  <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Dynamic Widget Controls from Registry */}
-            {getWidgetControls(selectedWidget).length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
-                  <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-                </div>
-                <div style={{ 
-                  padding: '12px', 
-                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                  borderRadius: '8px'
-                }}>
-                  {getWidgetControls(selectedWidget).map(control => 
-                    renderWidgetControl(control)
-                  )}
-                </div>
-              </div>
-            )}
-            
-            {/* Appearance Controls */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
-                <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-              </div>
-              <div style={{ 
-                padding: '12px', 
-                backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                borderRadius: '8px'
-              }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
-                    <span style={{ 
-                      fontSize: '10px', 
-                      padding: '2px 6px', 
-                      backgroundColor: 'rgba(30, 41, 59, 0.8)', 
-                      borderRadius: '9999px',
-                      color: '#d1d5db' 
-                    }}>
-                      {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
-                    </span>
+              
+              {/* Other Widget Types */}
+              {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                <div key={category} style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
+                    <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
-                  <input
-                    type="range"
-                    min="0.3"
-                    max="1"
-                    step="0.1"
-                    value={widgetOpacity[selectedWidget.id] ?? 1}
-                    onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                    style={{
-                      width: '100%',
-                      height: '6px',
-                      borderRadius: '9999px',
-                      backgroundColor: '#4b5563',
-                      appearance: 'none',
-                      outline: 'none',
-                      cursor: 'pointer'
-                    }}
-                  />
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {widgets.map(widget => (
+                      <div 
+                        key={widget.type} 
+                        style={{
+                          padding: '8px',
+                          backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                          borderRadius: '8px',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={() => addWidgetFromRegistry(widget.type)}
+                        title={widget.description}
+                      >
+                        <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
-                  <button
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
-                      color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
-                      border: 'none',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
-                  >
-                    {widgetBackgroundTransparent[selectedWidget.id] 
-                      ? '✓ Transparent' 
-                      : 'Make Transparent'}
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Active Widgets List */}
+        {/* Active Widgets Section Header */}
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            backgroundColor: 'rgba(20, 184, 166, 0.15)',
+            borderRadius: '8px',
+            border: showActiveWidgets ? '1px solid rgba(94, 234, 212, 0.5)' : '1px solid transparent',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            marginTop: '8px'
+          }}
+          onClick={toggleActiveWidgetsList}
+          onMouseEnter={() => setActiveWidgetsButtonHover(true)}
+          onMouseLeave={() => setActiveWidgetsButtonHover(false)}
+        >
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: '#14b8a6'
+          }}>
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            Active Widgets {enabledWidgets.length > 0 && `(${enabledWidgets.length})`}
+          </div>
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            style={{ 
+              width: '16px', 
+              height: '16px', 
+              color: '#14b8a6',
+              transform: showActiveWidgets ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease' 
+            }} 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        {/* Active Widgets Content */}
         {showActiveWidgets && enabledWidgets.length > 0 && (
           <div style={{ 
-            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
-            marginTop: '16px',
-            paddingTop: '20px',
-            marginLeft: '-20px',
-            marginRight: '-20px',
-            paddingLeft: '20px',
-            paddingRight: '20px'
+            backgroundColor: 'rgba(30, 41, 59, 0.4)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginTop: '4px'
           }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#14b8a6', marginBottom: '16px' }}>Active Widgets</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '8px',
+              maxHeight: '280px',
+              overflowY: 'auto',
+              paddingRight: '10px',
+              marginRight: '-10px'
+            }}>
               {enabledWidgets.map(widget => (
                 <div 
                   key={widget.id}
                   style={{
-                    padding: '12px',
+                    padding: '10px',
                     backgroundColor: selectedWidget?.id === widget.id 
                       ? 'rgba(20, 184, 166, 0.2)' 
                       : 'rgba(30, 41, 59, 0.8)',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -988,12 +896,49 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     fontWeight: 500, 
                     color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
                   }}>
-                    <span>{widget.title || `Widget ${widget.id.slice(0, 6)}`}</span>
+                    <span>
+                      {widget.title || `Widget ${widget.id.slice(0, 6)}`}
+                      {widget.type === 'telemetry' && widget.options?.metric && (
+                        <span style={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          fontSize: '10px', 
+                          marginTop: '2px',
+                          color: selectedWidget?.id === widget.id ? '#2dd4bf' : '#94a3b8'
+                        }}>
+                          <span style={{
+                            display: 'inline-block',
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: getColorFromString(widget.options.metric),
+                            marginRight: '5px'
+                          }} />
+                          {widget.options.name || widget.options.metric}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ 
                       fontSize: '10px', 
                       padding: '2px 6px', 
-                      backgroundColor: 'rgba(20, 184, 166, 0.2)',
-                      color: '#14b8a6',
+                      backgroundColor: widget.type === 'telemetry' 
+                        ? 'rgba(56, 189, 248, 0.2)' 
+                        : widget.type === 'track-map' 
+                          ? 'rgba(168, 85, 247, 0.2)'
+                          : widget.type === 'shift-indicator'
+                            ? 'rgba(249, 115, 22, 0.2)'
+                            : widget.type === 'pedal-trace'
+                              ? 'rgba(34, 197, 94, 0.2)'
+                              : 'rgba(20, 184, 166, 0.2)',
+                      color: widget.type === 'telemetry' 
+                        ? '#38bdf8' 
+                        : widget.type === 'track-map' 
+                          ? '#a855f7'
+                          : widget.type === 'shift-indicator'
+                            ? '#f97316'
+                            : widget.type === 'pedal-trace'
+                              ? '#22c55e'
+                              : '#14b8a6',
                       borderRadius: '4px'
                     }}>
                       {widget.type}
@@ -1007,13 +952,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
         {showActiveWidgets && enabledWidgets.length === 0 && (
           <div style={{ 
-            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
-            marginTop: '16px',
-            paddingTop: '20px',
-            marginLeft: '-20px',
-            marginRight: '-20px',
-            paddingLeft: '20px',
-            paddingRight: '20px'
+            backgroundColor: 'rgba(30, 41, 59, 0.4)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginTop: '4px'
           }}>
             <div style={{ 
               padding: '16px', 
@@ -1025,6 +967,182 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               No active widgets to display
             </div>
           </div>
+        )}
+
+        {/* Selected Widget Section */}
+        {selectedWidget && (
+          <>
+            <div 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                borderRadius: '8px',
+                border: '1px solid rgba(147, 197, 253, 0.5)',
+                marginTop: '8px'
+              }}
+            >
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: '#3b82f6',
+                flex: 1
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Selected: {selectedWidget.title}
+              </div>
+              
+              <button 
+                onClick={() => closeWidget(selectedWidget.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  border: 'none',
+                  backgroundColor: 'rgba(60, 60, 60, 0.4)',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  marginLeft: '8px'
+                }}
+              >
+                <svg style={{ width: '12px', height: '12px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div style={{ 
+              backgroundColor: 'rgba(30, 41, 59, 0.4)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginTop: '4px'
+            }}>
+              <div style={{
+                maxHeight: '400px',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                marginRight: '-10px'
+              }}>
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                    <span style={{ color: '#9ca3af' }}>ID:</span>
+                    <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                    <span style={{ color: '#9ca3af' }}>Type:</span>
+                    <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
+                  </div>
+                  {selectedWidget.options?.metric && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                      <span style={{ color: '#9ca3af' }}>Metric:</span>
+                      <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Dynamic Widget Controls from Registry */}
+                {getWidgetControls(selectedWidget).length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                      <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+                    </div>
+                    <div style={{ 
+                      padding: '12px', 
+                      backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                      borderRadius: '8px'
+                    }}>
+                      {getWidgetControls(selectedWidget).map(control => 
+                        renderWidgetControl(control)
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Appearance Controls */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
+                    <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+                  </div>
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
+                        <span style={{ 
+                          fontSize: '10px', 
+                          padding: '2px 6px', 
+                          backgroundColor: 'rgba(30, 41, 59, 0.8)', 
+                          borderRadius: '9999px',
+                          color: '#d1d5db' 
+                        }}>
+                          {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.3"
+                        max="1"
+                        step="0.1"
+                        value={widgetOpacity[selectedWidget.id] ?? 1}
+                        onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                        style={{
+                          width: '100%',
+                          height: '6px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#4b5563',
+                          appearance: 'none',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
+                      />
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
+                      <button
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
+                          color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
+                          border: 'none',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                      >
+                        {widgetBackgroundTransparent[selectedWidget.id] 
+                          ? '✓ Transparent' 
+                          : 'Make Transparent'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </BaseDraggableComponent>
