@@ -131,7 +131,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const { data: telemetryData } = useTelemetryData(id, { 
     metrics: ['throttle_pct', 'brake_pct'],
     throttleUpdates: true,
-    updateInterval: 50
+    updateInterval: 20
   });
 
   // Process telemetry data, maintaining full buffer but displaying based on historyLength
