@@ -142,6 +142,13 @@ async fn main() {
     // Print startup information
     print_startup_info();
     
+    // Check if we're running on Windows, as iRacing SDK only works on Windows
+    if !cfg!(target_os = "windows") {
+        log_error!("iRacing SDK only works on Windows OS");
+        log_info!("Running in simulation mode since this is not Windows");
+        log_info!("Real iRacing telemetry and session data will not be available");
+    }
+    
     // Initialize WebSocket server (default port 8080)
     let server_address = "0.0.0.0:8080";
     log_info!("Initializing WebSocket server on {}", server_address);
@@ -190,6 +197,9 @@ async fn main() {
                             connection_status = "connected";
                         }
                         
+                        // Always log session info attempt in normal mode too
+                        log_info!("Attempting to get iRacing session info...");
+                        
                         // Get session info from the connection object
                         let session_info_str = match conn.session_info() {
                             Ok(session) => {
@@ -199,7 +209,15 @@ async fn main() {
                                     log_error!("Session info is empty or invalid");
                                     String::from("")
                                 } else {
-                                    log_debug!("Retrieved session info successfully, length: {} bytes", session_str.len());
+                                    // Always log this in normal mode too
+                                    log_info!("Retrieved session info successfully, length: {} bytes", session_str.len());
+                                    // Print the first 200 characters to help debugging
+                                    let preview = if session_str.len() > 200 {
+                                        format!("{}...", &session_str[0..200])
+                                    } else {
+                                        session_str.clone()
+                                    };
+                                    log_info!("Session info preview: {}", preview);
                                     session_str
                                 }
                             },
@@ -220,7 +238,7 @@ async fn main() {
                                     Ok(sample) => {
                                         // Only log samples in verbose mode
                                         if is_verbose() {
-                                            log_debug!("Received telemetry sample");
+                                            // log_debug!("Received telemetry sample");
                                         }
                                         
                                         // Extract basic telemetry data
@@ -229,8 +247,43 @@ async fn main() {
                                         // Use the session info we got from the connection
                                         if !session_info_str.is_empty() {
                                             telemetry_data.session_info = session_info_str.clone();
+                                            
+                                            // Periodically log that we're using real session data
+                                            if should_log_telemetry_update() {
+                                                log_info!("Using real session info data in telemetry");
+                                            }
                                         } else {
-                                            // Fallback to our placeholder if session_info wasn't available
+                                            // Periodically try to get session info again if it failed before
+                                            static mut LAST_SESSION_RETRY: u64 = 0;
+                                            let now = SystemTime::now()
+                                                .duration_since(UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs();
+                                                
+                                            let should_retry = unsafe {
+                                                if now - LAST_SESSION_RETRY > 30 {
+                                                    LAST_SESSION_RETRY = now;
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            };
+                                            
+                                            if should_retry {
+                                                log_info!("Retrying to get session info...");
+                                                match conn.session_info() {
+                                                    Ok(session) => {
+                                                        let raw_str = format!("{:?}", session);
+                                                        log_info!("Raw session info result: {}", 
+                                                            if raw_str.len() > 200 { &raw_str[0..200] } else { &raw_str });
+                                                    },
+                                                    Err(e) => {
+                                                        log_error!("Retry: Failed to get session info: {:?}", e);
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Use our fallback data as before
                                             telemetry_data.session_info = format!("\
 ---
 SessionInfo:
