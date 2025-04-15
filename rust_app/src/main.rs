@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use chrono;
+use serde_yaml;
 
 // Global flag for verbose logging
 static mut VERBOSE_LOGGING: bool = false;
@@ -198,22 +199,119 @@ async fn main() {
                         }
                         
                         // Always log session info attempt in normal mode too
-                        log_info!("Attempting to get raw iRacing session info...");
+                        log_info!("Attempting to get iRacing session info...");
                         
-                        // Access the raw session info string directly
-                        let raw_yaml = match conn.session_info_str() {
+                        // First get the raw session info string
+                        let (session_info_str, raw_yaml) = match conn.session_info_str() {
                             Ok(raw_str) => {
-                                log_info!("Raw session info length: {} bytes", raw_str.len());
-                                if raw_str.len() > 500 {
-                                    log_info!("Raw session info preview (first 500 chars): {}", &raw_str[0..500]);
-                                } else {
-                                    log_info!("Raw session info: {}", raw_str);
-                                }
-                                raw_str
+                                log_info!("Raw session info retrieved, length: {} bytes", raw_str.len());
+                                
+                                // Try to parse the raw YAML but handle the ResultsPositions error
+                                let session_info = match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
+                                    Ok(yaml_value) => {
+                                        // Successfully parsed the YAML, now we can work with it
+                                        log_info!("Successfully parsed session info YAML");
+                                        
+                                        // Create a nicely formatted string with useful session data
+                                        let mut formatted_info = String::new();
+                                        
+                                        // Extract and build clean session info manually
+                                        if let Some(session_info) = yaml_value.get("SessionInfo") {
+                                            formatted_info.push_str("---\nSessionInfo:\n");
+                                            
+                                            // Extract WeekendInfo
+                                            if let Some(weekend_info) = session_info.get("WeekendInfo") {
+                                                formatted_info.push_str("  WeekendInfo:\n");
+                                                
+                                                // Extract track information
+                                                if let Some(track_name) = weekend_info.get("TrackName") {
+                                                    if let Some(name) = track_name.as_str() {
+                                                        formatted_info.push_str(&format!("    TrackName: {}\n", name));
+                                                    }
+                                                }
+                                                
+                                                if let Some(track_display) = weekend_info.get("TrackDisplayName") {
+                                                    if let Some(name) = track_display.as_str() {
+                                                        formatted_info.push_str(&format!("    TrackDisplayName: {}\n", name));
+                                                    }
+                                                }
+                                                
+                                                // Add more WeekendInfo fields as needed
+                                            }
+                                            
+                                            // Extract Sessions carefully (avoiding ResultsPositions)
+                                            if let Some(sessions) = session_info.get("Sessions") {
+                                                if let Some(sessions_array) = sessions.as_sequence() {
+                                                    formatted_info.push_str("  Sessions:\n");
+                                                    
+                                                    for (i, session) in sessions_array.iter().enumerate() {
+                                                        formatted_info.push_str(&format!("    - SessionNum: {}\n", i));
+                                                        
+                                                        // Extract session type and name
+                                                        if let Some(session_type) = session.get("SessionType") {
+                                                            if let Some(type_str) = session_type.as_str() {
+                                                                formatted_info.push_str(&format!("      SessionType: {}\n", type_str));
+                                                            }
+                                                        }
+                                                        
+                                                        if let Some(session_name) = session.get("SessionName") {
+                                                            if let Some(name) = session_name.as_str() {
+                                                                formatted_info.push_str(&format!("      SessionName: {}\n", name));
+                                                            }
+                                                        }
+                                                        
+                                                        // Explicitly note that ResultsPositions is skipped
+                                                        formatted_info.push_str("      ResultsPositions: []\n");
+                                                        formatted_info.push_str("      # Note: ResultsPositions data was skipped due to parsing issues\n");
+                                                        
+                                                        // Add more session fields as needed
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Extract DriverInfo if available
+                                            if let Some(driver_info) = session_info.get("DriverInfo") {
+                                                formatted_info.push_str("  DriverInfo:\n");
+                                                
+                                                // Extract driver details
+                                                if let Some(driver_car_idx) = driver_info.get("DriverCarIdx") {
+                                                    if let Some(idx) = driver_car_idx.as_i64() {
+                                                        formatted_info.push_str(&format!("    DriverCarIdx: {}\n", idx));
+                                                    }
+                                                }
+                                                
+                                                // Add more driver info fields as needed
+                                            }
+                                        }
+                                        
+                                        // If we didn't extract anything useful, use a placeholder
+                                        if formatted_info.is_empty() {
+                                            formatted_info = "---\nSessionInfo:\n  # Successfully parsed but no data was extracted\n".to_string();
+                                        }
+                                        
+                                        formatted_info
+                                    },
+                                    Err(e) => {
+                                        // Handle parsing error
+                                        let err_string = format!("{:?}", e);
+                                        log_error!("Failed to parse session info YAML: {}", e);
+                                        
+                                        if err_string.contains("ResultsPositions") {
+                                            log_info!("ResultsPositions parsing error detected, will use raw data instead");
+                                            
+                                            // Create a minimal YAML with placeholders for the problematic parts
+                                            "---\nSessionInfo:\n  # Note: Session info was partially parsed due to ResultsPositions error\n".to_string()
+                                        } else {
+                                            String::new()
+                                        }
+                                    }
+                                };
+                                
+                                (session_info, raw_str)
                             },
                             Err(e) => {
                                 log_error!("Failed to get raw session info: {:?}", e);
-                                String::new()
+                                (String::new(), String::new())
                             }
                         };
                         
@@ -228,19 +326,26 @@ async fn main() {
                                     Ok(sample) => {
                                         // Only log samples in verbose mode
                                         if is_verbose() {
-                                            // log_debug!("Received telemetry sample");
+                                            log_debug!("Received telemetry sample");
                                         }
                                         
                                         // Extract basic telemetry data
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
                                         // Use the session info we got from the connection
-                                        if !raw_yaml.is_empty() {
-                                            telemetry_data.session_info = raw_yaml.clone();
+                                        if !session_info_str.is_empty() {
+                                            telemetry_data.session_info = session_info_str.clone();
                                             
                                             // Periodically log that we're using real session data
                                             if should_log_telemetry_update() {
-                                                log_info!("Using real session info data in telemetry");
+                                                log_info!("Using parsed session info data in telemetry");
+                                            }
+                                        } else if !raw_yaml.is_empty() {
+                                            // We at least have raw YAML data
+                                            telemetry_data.session_info = raw_yaml.clone();
+                                            
+                                            if should_log_telemetry_update() {
+                                                log_info!("Using raw YAML session info in telemetry");
                                             }
                                         } else {
                                             // Periodically try to get session info again if it failed before
@@ -260,14 +365,22 @@ async fn main() {
                                             };
                                             
                                             if should_retry {
-                                                log_info!("Retrying to get raw session info...");
+                                                log_info!("Retrying to get session info...");
                                                 match conn.session_info_str() {
                                                     Ok(raw_str) => {
                                                         log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
-                                                        if raw_str.len() > 200 {
-                                                            log_info!("Retry: Raw session info preview: {}", &raw_str[0..200]);
-                                                        } else {
-                                                            log_info!("Retry: Raw session info: {}", raw_str);
+                                                        
+                                                        // Try quick parsing to check for the ResultsPositions issue
+                                                        match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
+                                                            Ok(_) => {
+                                                                log_info!("Retry: Successfully parsed YAML without errors");
+                                                            },
+                                                            Err(e) => {
+                                                                log_info!("Retry: YAML parsing error: {}", e);
+                                                                if format!("{:?}", e).contains("ResultsPositions") {
+                                                                    log_info!("ResultsPositions issue confirmed. This is expected with no active race session.");
+                                                                }
+                                                            }
                                                         }
                                                     },
                                                     Err(e) => {
@@ -415,3 +528,4 @@ note: This is simulated session info. The actual session_info was not available.
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
+
