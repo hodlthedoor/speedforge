@@ -202,8 +202,15 @@ async fn main() {
                         log_info!("Attempting to get iRacing session info...");
                         
                         // First get the raw session info string
-                        let (session_info_str, raw_yaml) = match conn.session_info_str() {
-                            Ok(raw_str) => {
+                        let (session_info_str, raw_yaml) = match conn.session_info() {
+                            Ok(session) => {
+                                // Convert to string first - try both Debug and Display formats
+                                let raw_str = format!("{}", session);
+                                let debug_str = format!("{:?}", session);
+                                
+                                // Choose the longer/more detailed representation
+                                let raw_str = if debug_str.len() > raw_str.len() { debug_str } else { raw_str };
+                                
                                 log_info!("Raw session info retrieved, length: {} bytes", raw_str.len());
                                 
                                 // Try to parse the raw YAML but handle the ResultsPositions error
@@ -366,9 +373,23 @@ async fn main() {
                                             
                                             if should_retry {
                                                 log_info!("Retrying to get session info...");
-                                                match conn.session_info_str() {
-                                                    Ok(raw_str) => {
+                                                match conn.session_info() {
+                                                    Ok(session) => {
+                                                        // Convert to string first - try both formats
+                                                        let raw_str = format!("{}", session);
+                                                        let debug_str = format!("{:?}", session);
+                                                        
+                                                        // Choose the longer/more detailed representation
+                                                        let raw_str = if debug_str.len() > raw_str.len() { debug_str } else { raw_str };
+                                                        
                                                         log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
+                                                        // Dump a preview of the data for debugging
+                                                        let preview = if raw_str.len() > 200 {
+                                                            &raw_str[0..200]
+                                                        } else {
+                                                            &raw_str
+                                                        };
+                                                        log_info!("Retry: Session info preview: {}", preview);
                                                         
                                                         // Try quick parsing to check for the ResultsPositions issue
                                                         match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
