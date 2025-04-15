@@ -101,6 +101,29 @@ fn print_startup_info() {
     }
 }
 
+// Add a throttled logging function to reduce output frequency
+fn should_log_telemetry_update() -> bool {
+    static mut LAST_TELEMETRY_LOG: u64 = 0;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    unsafe {
+        // Only log telemetry updates every 5 seconds in non-verbose mode
+        if now - LAST_TELEMETRY_LOG > 5 {
+            LAST_TELEMETRY_LOG = now;
+            return true;
+        }
+        // In verbose mode, we still throttle but less aggressively
+        if is_verbose() && now - LAST_TELEMETRY_LOG > 1 {
+            LAST_TELEMETRY_LOG = now;
+            return true;
+        }
+        false
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Process command line arguments
@@ -167,8 +190,15 @@ async fn main() {
                         // Get session info from the connection object
                         let session_info_str = match conn.session_info() {
                             Ok(session) => {
-                                log_debug!("Retrieved session info successfully");
-                                format!("{:#?}", session)
+                                // Check if session info is actually populated
+                                let session_str = format!("{:#?}", session);
+                                if session_str.trim().is_empty() || session_str == "\"\"" {
+                                    log_error!("Session info is empty or invalid");
+                                    String::from("")
+                                } else {
+                                    log_debug!("Retrieved session info successfully, length: {} bytes", session_str.len());
+                                    session_str
+                                }
                             },
                             Err(e) => {
                                 log_error!("Failed to get session info: {:?}", e);
@@ -267,7 +297,11 @@ note: This is simulated session info. The actual session_info was not available.
                                         
                                         match ws_server_clone.broadcast_telemetry(&json_value) {
                                             Ok(_) => {
-                                                log_debug!("Broadcast telemetry data to clients");
+                                                if should_log_telemetry_update() {
+                                                    log_info!("Broadcast telemetry data to {} clients", ws_server_clone.client_count());
+                                                } else if is_verbose() {
+                                                    log_debug!("Broadcast telemetry data to clients");
+                                                }
                                             },
                                             Err(e) => {
                                                 log_error!("Error broadcasting telemetry: {}", e);
@@ -291,6 +325,9 @@ note: This is simulated session info. The actual session_info was not available.
                             connection_status = "disconnected";
                         } else if is_verbose() {
                             log_debug!("Still waiting for iRacing connection: {}", e);
+                        } else if should_log_telemetry_update() {
+                            // Only log this message periodically when not in verbose mode
+                            log_info!("Waiting for iRacing connection...");
                         }
                     }
                 }
@@ -302,11 +339,11 @@ note: This is simulated session info. The actual session_info was not available.
         }
     });
     
-    // Start a background task to monitor WebSocket connections - this is safe as async
+    // Start a background task to monitor WebSocket connections
     let ws_server_for_monitoring = ws_server_arc.clone();
     tokio::spawn(async move {
         let mut last_report = SystemTime::now();
-        const REPORT_INTERVAL: u64 = 10000; // 10 seconds between reports
+        const REPORT_INTERVAL: u64 = 30000; // 30 seconds between reports
         
         loop {
             if last_report.elapsed().unwrap_or(Duration::from_secs(0)) >= Duration::from_millis(REPORT_INTERVAL) {

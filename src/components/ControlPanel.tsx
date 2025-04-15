@@ -445,6 +445,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Toggle showing active widgets list
   const toggleActiveWidgetsList = () => {
+    // If we're about to close the active widgets section and there's a selected widget, unselect it
+    if (showActiveWidgets && selectedWidget) {
+      setSelectedWidget(null);
+    }
+    
     setShowActiveWidgets(!showActiveWidgets);
   };
 
