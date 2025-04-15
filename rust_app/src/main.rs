@@ -156,6 +156,9 @@ async fn main() {
     
     log_debug!("WebSocket server created, starting...");
     
+    // Set WebSocket server to verbose mode if we're in verbose mode
+    ws_server.set_verbose_mode(is_verbose());
+    
     if let Err(e) = ws_server.start().await {
         log_error!("Failed to start WebSocket server: {}", e);
         return;
@@ -215,7 +218,10 @@ async fn main() {
                             loop {
                                 match blocking.sample(Duration::from_millis(100)) {
                                     Ok(sample) => {
-                                        log_debug!("Received telemetry sample");
+                                        // Only log samples in verbose mode
+                                        if is_verbose() {
+                                            log_debug!("Received telemetry sample");
+                                        }
                                         
                                         // Extract basic telemetry data
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
@@ -297,10 +303,9 @@ note: This is simulated session info. The actual session_info was not available.
                                         
                                         match ws_server_clone.broadcast_telemetry(&json_value) {
                                             Ok(_) => {
+                                                // Only log broadcasts in verbose mode or periodically
                                                 if should_log_telemetry_update() {
                                                     log_info!("Broadcast telemetry data to {} clients", ws_server_clone.client_count());
-                                                } else if is_verbose() {
-                                                    log_debug!("Broadcast telemetry data to clients");
                                                 }
                                             },
                                             Err(e) => {

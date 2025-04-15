@@ -11,6 +11,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{self, Write};
 use std::error::Error;
 
+// Remove incorrect import
+// extern crate crate as main_crate;
+// use main_crate::is_verbose;
+
+// Track verbose mode
+static mut WEBSOCKET_VERBOSE_MODE: bool = false;
+
+// Safe wrapper for verbose mode
+fn ws_is_verbose() -> bool {
+    unsafe { WEBSOCKET_VERBOSE_MODE }
+}
+
 /// A wrapper for UnboundedSender that implements Hash and Eq
 #[derive(Clone)]
 struct ClientSender(UnboundedSender<Message>);
@@ -58,6 +70,13 @@ impl TelemetryWebSocketServer {
         })
     }
     
+    /// Set verbose mode for WebSocket server
+    pub fn set_verbose_mode(&self, verbose: bool) {
+        unsafe {
+            WEBSOCKET_VERBOSE_MODE = verbose;
+        }
+    }
+    
     /// Start the WebSocket server
     pub async fn start(&self) -> Result<(), Box<dyn Error>> {
         // Parse the address string to a SocketAddr
@@ -90,8 +109,11 @@ impl TelemetryWebSocketServer {
             loop {
                 match listener.accept().await {
                     Ok((stream, addr)) => {
-                        let timestamp = get_timestamp();
-                        println!("\n[{}] 🔌 New WebSocket connection attempt from: {}", timestamp, addr);
+                        // Only log new connections if verbose
+                        if ws_is_verbose() {
+                            let timestamp = get_timestamp();
+                            println!("\n[{}] 🔌 New WebSocket connection attempt from: {}", timestamp, addr);
+                        }
                         
                         // Clone clients for this connection
                         let clients = clients.clone();
@@ -172,7 +194,7 @@ impl TelemetryWebSocketServer {
             let removed = before_count - after_count;
             
             // Only log if we actually removed clients
-            if removed > 0 {
+            if removed > 0 && ws_is_verbose() {
                 println!("[{}] Removed {} disconnected clients, now serving {} clients", 
                     get_timestamp(), removed, after_count);
             }
@@ -219,7 +241,10 @@ async fn handle_connection(
     // Perform WebSocket handshake
     let ws_stream = match tokio_tungstenite::accept_async(stream).await {
         Ok(ws_stream) => {
-            println!("[{}] 🤝 WebSocket handshake completed with {}", timestamp, addr);
+            // Only log handshake completion if verbose
+            if ws_is_verbose() {
+                println!("[{}] 🤝 WebSocket handshake completed with {}", timestamp, addr);
+            }
             ws_stream
         },
         Err(e) => {
@@ -234,7 +259,10 @@ async fn handle_connection(
     
     // Add the new client to our client set
     {
-        println!("[{}] 👨‍👩‍👧‍👦 Adding client {} to client pool", timestamp, addr);
+        // Only log client addition if verbose
+        if ws_is_verbose() {
+            println!("[{}] 👨‍👩‍👧‍👦 Adding client {} to client pool", timestamp, addr);
+        }
         let mut clients = clients.lock().unwrap();
         clients.insert(client_sender.clone());
         println!("[{}] ℹ️ Now serving {} clients", timestamp, clients.len());
@@ -261,12 +289,14 @@ async fn handle_connection(
             match result {
                 Ok(msg) => {
                     if msg.is_close() {
-                        println!("[{}] 👋 Received close message from {}", get_timestamp(), addr);
+                        if ws_is_verbose() {
+                            println!("[{}] 👋 Received close message from {}", get_timestamp(), addr);
+                        }
                         break;
                     }
                     
-                    // Handle other message types as needed
-                    if msg.is_text() || msg.is_binary() {
+                    // Handle other message types as needed, only log if verbose
+                    if ws_is_verbose() && (msg.is_text() || msg.is_binary()) {
                         println!("[{}] 📥 Received message from {}", get_timestamp(), addr);
                         // In the future we might process client messages here
                     }
@@ -278,7 +308,9 @@ async fn handle_connection(
             }
         }
         
-        println!("[{}] 🔌 Client {} disconnected", get_timestamp(), addr);
+        if ws_is_verbose() {
+            println!("[{}] 🔌 Client {} disconnected", get_timestamp(), addr);
+        }
     });
     
     // Wait for either task to complete - this means the connection is closing
@@ -291,8 +323,11 @@ async fn handle_connection(
     {
         let mut clients = clients.lock().unwrap();
         clients.remove(&client_sender);
-        println!("[{}] 👋 Removed client {}. Now serving {} clients", 
-                get_timestamp(), addr, clients.len());
+        // Only log client removal if verbose
+        if ws_is_verbose() {
+            println!("[{}] 👋 Removed client {}. Now serving {} clients", 
+                    get_timestamp(), addr, clients.len());
+        }
     }
     
     Ok(())
