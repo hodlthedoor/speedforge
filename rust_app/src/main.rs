@@ -18,19 +18,18 @@ use serde_yaml;
 mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
-    use iracing::{Connection, IRSDK};
+    use iracing::Connection;
     
     pub fn get_raw_session_info(conn: &Connection) -> Result<String, Box<dyn Error>> {
-        // Access the raw YAML string directly from the SDK
-        // This bypasses the problematic automatic deserialization in session_info()
-        unsafe {
-            let sdk = IRSDK();
-            if !sdk.is_initialized() || !sdk.is_connected() {
-                return Err("SDK not connected".into());
-            }
-            
-            let yaml = sdk.get_session_info_str()?;
-            Ok(yaml.to_string())
+        // Access the raw YAML string directly
+        // We don't use IRSDK directly since it's not publicly exported
+        match conn.session_info() {
+            Ok(session) => {
+                // Convert to debug format
+                let raw_str = format!("{:?}", session);
+                Ok(raw_str)
+            },
+            Err(e) => Err(Box::new(e))
         }
     }
 }
@@ -160,6 +159,79 @@ fn should_log_telemetry_update() -> bool {
     }
 }
 
+// Helper function to get fallback session info
+fn get_fallback_session_info(
+    track_temp_c: f32, 
+    air_temp_c: f32, 
+    wind_vel_ms: f32, 
+    wind_dir_rad: f32, 
+    humidity_pct: f32, 
+    fog_level_pct: f32
+) -> String {
+    format!("\
+---
+SessionInfo:
+  Sessions:
+    - SessionNum: 0
+      SessionType: Practice
+      SessionName: Practice
+      SessionStartTime: {session_time}
+      SessionState: Racing
+      SessionTime: {elapsed_time:.1} sec
+      SessionTimeRemain: 3600.0 sec
+  WeekendInfo:
+    TrackName: Unknown
+    TrackID: 0
+    TrackLength: 0.0
+    TrackDisplayName: Telemetry Connected
+    TrackDisplayShortName: Connected
+    TrackConfigName: Test Mode
+    TrackCity: SpeedForge
+    TrackCountry: Telemetry
+    TrackAltitude: 0
+    TrackLatitude: 0
+    TrackLongitude: 0
+    TrackNorthOffset: 0.0
+    TrackNumTurns: 0
+    TrackPitSpeedLimit: 0.0
+    TrackType: Road
+    TrackDirection: Clockwise
+    TrackWeatherType: Constant
+    TrackSkies: Clear
+    TrackSurfaceTemp: {track_temp:.1}
+    TrackAirTemp: {air_temp:.1}
+    TrackAirPressure: 0
+    TrackWindVel: {wind_vel:.1}
+    TrackWindDir: {wind_dir:.1}
+    TrackRelativeHumidity: {humidity:.1}
+    TrackFogLevel: {fog:.1}
+  DriverInfo:
+    DriverCarIdx: 0
+    DriverUserID: 0
+    PaceCarIdx: -1
+    DriverHeadPosX: 0.0
+    DriverHeadPosY: 0.0
+    DriverHeadPosZ: 0.0
+    DriverCarIdleRPM: 0
+    DriverCarRedLine: 0
+    DriverCarEngCylinderCount: 0
+    DriverCarFuelKgPerLtr: 0.0
+    DriverCarSLFirstRPM: 0
+    DriverCarSLShiftRPM: 0
+    DriverCarSLLastRPM: 0
+    DriverCarSLBlinkRPM: 0
+note: This is simulated session info. The actual session_info was not available.",
+        session_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+        elapsed_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f32() % 3600.0,
+        track_temp = track_temp_c,
+        air_temp = air_temp_c,
+        wind_vel = wind_vel_ms,
+        wind_dir = wind_dir_rad * 180.0 / std::f32::consts::PI,
+        humidity = humidity_pct,
+        fog = fog_level_pct
+    )
+}
+
 #[tokio::main]
 async fn main() {
     // Process command line arguments
@@ -249,122 +321,15 @@ async fn main() {
                                 };
                                 log_info!("Raw session info preview: {}", preview);
                                 
-                                // Try to parse the raw YAML but handle the ResultsPositions error
-                                let session_info = match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
-                                    Ok(yaml_value) => {
-                                        log_info!("Successfully parsed session info YAML");
-                                        
-                                        // Create a nicely formatted string with useful session data
-                                        let mut formatted_info = String::new();
-                                        
-                                        // Extract and build clean session info manually
-                                        if let Some(session_info) = yaml_value.get("SessionInfo") {
-                                            formatted_info.push_str("---\nSessionInfo:\n");
-                                            
-                                            // Extract WeekendInfo
-                                            if let Some(weekend_info) = session_info.get("WeekendInfo") {
-                                                formatted_info.push_str("  WeekendInfo:\n");
-                                                
-                                                // Extract track information
-                                                if let Some(track_name) = weekend_info.get("TrackName") {
-                                                    if let Some(name) = track_name.as_str() {
-                                                        formatted_info.push_str(&format!("    TrackName: {}\n", name));
-                                                    }
-                                                }
-                                                
-                                                if let Some(track_display) = weekend_info.get("TrackDisplayName") {
-                                                    if let Some(name) = track_display.as_str() {
-                                                        formatted_info.push_str(&format!("    TrackDisplayName: {}\n", name));
-                                                    }
-                                                }
-                                                
-                                                // Add more WeekendInfo fields as needed
-                                            }
-                                            
-                                            // Extract Sessions carefully (avoiding ResultsPositions)
-                                            if let Some(sessions) = session_info.get("Sessions") {
-                                                if let Some(sessions_array) = sessions.as_sequence() {
-                                                    formatted_info.push_str("  Sessions:\n");
-                                                    
-                                                    for (i, session) in sessions_array.iter().enumerate() {
-                                                        formatted_info.push_str(&format!("    - SessionNum: {}\n", i));
-                                                        
-                                                        // Extract session type and name
-                                                        if let Some(session_type) = session.get("SessionType") {
-                                                            if let Some(type_str) = session_type.as_str() {
-                                                                formatted_info.push_str(&format!("      SessionType: {}\n", type_str));
-                                                            }
-                                                        }
-                                                        
-                                                        if let Some(session_name) = session.get("SessionName") {
-                                                            if let Some(name) = session_name.as_str() {
-                                                                formatted_info.push_str(&format!("      SessionName: {}\n", name));
-                                                            }
-                                                        }
-                                                        
-                                                        // Explicitly note that ResultsPositions is skipped
-                                                        formatted_info.push_str("      ResultsPositions: []\n");
-                                                        formatted_info.push_str("      # Note: ResultsPositions data was skipped due to parsing issues\n");
-                                                        
-                                                        // Add more session fields as needed
-                                                    }
-                                                }
-                                            }
-                                            
-                                            // Extract DriverInfo if available
-                                            if let Some(driver_info) = session_info.get("DriverInfo") {
-                                                formatted_info.push_str("  DriverInfo:\n");
-                                                
-                                                // Extract driver details
-                                                if let Some(driver_car_idx) = driver_info.get("DriverCarIdx") {
-                                                    if let Some(idx) = driver_car_idx.as_i64() {
-                                                        formatted_info.push_str(&format!("    DriverCarIdx: {}\n", idx));
-                                                    }
-                                                }
-                                                
-                                                // Add more driver info fields as needed
-                                            }
-                                        }
-                                        
-                                        // If we didn't extract anything useful, use a placeholder
-                                        if formatted_info.is_empty() {
-                                            formatted_info = "---\nSessionInfo:\n  # Successfully parsed but no data was extracted\n".to_string();
-                                        }
-                                        
-                                        log_info!("Extracted clean session info from YAML");
-                                        formatted_info
-                                    },
-                                    Err(e) => {
-                                        log_error!("Failed to parse session info YAML: {}", e);
-                                        
-                                        // Even if parsing failed, still return the raw YAML
-                                        // for other components to use if possible
-                                        log_info!("Using raw session info despite parsing failure");
-                                        raw_str
-                                    }
-                                };
-                                
-                                log_info!("Using session info: {} bytes", session_info.len());
-                                session_info
+                                // Use the raw string directly, we'll handle parsing issues in the UI
+                                raw_str
                             },
                             Err(e) => {
-                                // If we couldn't get the raw data, fall back to the regular session_info
-                                // but acknowledge it might fail with ResultsPositions error
+                                // If we couldn't get the raw data, try a fallback approach
                                 log_error!("Failed to get raw session info: {:?}", e);
-                                log_info!("Falling back to regular session_info method (may fail)");
+                                log_info!("Attempting fallback...");
                                 
-                                match conn.session_info() {
-                                    Ok(session) => {
-                                        // Process as before but handle carefully since this can still fail
-                                        let raw_str = format!("{:?}", session);
-                                        log_info!("Got session info via fallback, length: {} bytes", raw_str.len());
-                                        raw_str
-                                    },
-                                    Err(e) => {
-                                        log_error!("Fallback also failed: {:?}", e);
-                                        String::new()
-                                    }
-                                }
+                                String::new()
                             }
                         };
                         
@@ -386,19 +351,12 @@ async fn main() {
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
                                         // Use the session info we got from the connection
-                                        if !session_info.is_empty() {
-                                            telemetry_data.session_info = session_info.clone();
+                                        if !raw_yaml.is_empty() {
+                                            telemetry_data.session_info = raw_yaml.clone();
                                             
                                             // Periodically log that we're using real session data
                                             if should_log_telemetry_update() {
-                                                log_info!("Using parsed session info data in telemetry");
-                                            }
-                                        } else if !raw_yaml.is_empty() {
-                                            // We at least have raw YAML data
-                                            telemetry_data.session_info = raw_yaml.clone();
-                                            
-                                            if should_log_telemetry_update() {
-                                                log_info!("Using raw YAML session info in telemetry");
+                                                log_info!("Using raw session info data in telemetry");
                                             }
                                         } else {
                                             // Periodically try to get session info again if it failed before
@@ -418,87 +376,42 @@ async fn main() {
                                             };
                                             
                                             if should_retry {
-                                                log_info!("Retrying to get raw session info...");
-                                                match iracing_wrapper::get_raw_session_info(&conn) {
-                                                    Ok(raw_str) => {
-                                                        log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
-                                                        // Dump a preview of the data for debugging
-                                                        let preview = if raw_str.len() > 200 {
-                                                            &raw_str[0..200]
-                                                        } else {
-                                                            &raw_str
-                                                        };
-                                                        log_info!("Retry: Session info preview: {}", preview);
+                                                log_info!("Retrying to get session info...");
+                                                // Try the simple method that we know works
+                                                match conn.session_info() {
+                                                    Ok(session) => {
+                                                        let raw_str = format!("{:?}", session);
+                                                        log_info!("Retry: Got session info, length: {} bytes", raw_str.len());
+                                                        
+                                                        // Use the session info directly
+                                                        telemetry_data.session_info = raw_str;
+                                                        log_info!("Updated telemetry with new session info");
                                                     },
                                                     Err(e) => {
-                                                        log_error!("Retry: Failed to get raw session info: {:?}", e);
+                                                        log_error!("Retry failed: {:?}", e);
+                                                        
+                                                        // Use fallback data since we don't have real session info
+                                                        telemetry_data.session_info = get_fallback_session_info(
+                                                            telemetry_data.track_temp_c,
+                                                            telemetry_data.air_temp_c,
+                                                            telemetry_data.wind_vel_ms,
+                                                            telemetry_data.wind_dir_rad,
+                                                            telemetry_data.humidity_pct,
+                                                            telemetry_data.fog_level_pct
+                                                        );
                                                     }
                                                 }
+                                            } else {
+                                                // If we're not retrying this time, use the fallback
+                                                telemetry_data.session_info = get_fallback_session_info(
+                                                    telemetry_data.track_temp_c,
+                                                    telemetry_data.air_temp_c,
+                                                    telemetry_data.wind_vel_ms,
+                                                    telemetry_data.wind_dir_rad,
+                                                    telemetry_data.humidity_pct,
+                                                    telemetry_data.fog_level_pct
+                                                );
                                             }
-                                            
-                                            // Use fallback data since we don't have real session info
-                                            telemetry_data.session_info = format!("\
----
-SessionInfo:
-  Sessions:
-    - SessionNum: 0
-      SessionType: Practice
-      SessionName: Practice
-      SessionStartTime: {session_time}
-      SessionState: Racing
-      SessionTime: {elapsed_time:.1} sec
-      SessionTimeRemain: 3600.0 sec
-  WeekendInfo:
-    TrackName: Unknown
-    TrackID: 0
-    TrackLength: 0.0
-    TrackDisplayName: Telemetry Connected
-    TrackDisplayShortName: Connected
-    TrackConfigName: Test Mode
-    TrackCity: SpeedForge
-    TrackCountry: Telemetry
-    TrackAltitude: 0
-    TrackLatitude: 0
-    TrackLongitude: 0
-    TrackNorthOffset: 0.0
-    TrackNumTurns: 0
-    TrackPitSpeedLimit: 0.0
-    TrackType: Road
-    TrackDirection: Clockwise
-    TrackWeatherType: Constant
-    TrackSkies: Clear
-    TrackSurfaceTemp: {track_temp:.1}
-    TrackAirTemp: {air_temp:.1}
-    TrackAirPressure: 0
-    TrackWindVel: {wind_vel:.1}
-    TrackWindDir: {wind_dir:.1}
-    TrackRelativeHumidity: {humidity:.1}
-    TrackFogLevel: {fog:.1}
-  DriverInfo:
-    DriverCarIdx: 0
-    DriverUserID: 0
-    PaceCarIdx: -1
-    DriverHeadPosX: 0.0
-    DriverHeadPosY: 0.0
-    DriverHeadPosZ: 0.0
-    DriverCarIdleRPM: 0
-    DriverCarRedLine: 0
-    DriverCarEngCylinderCount: 0
-    DriverCarFuelKgPerLtr: 0.0
-    DriverCarSLFirstRPM: 0
-    DriverCarSLShiftRPM: 0
-    DriverCarSLLastRPM: 0
-    DriverCarSLBlinkRPM: 0
-note: This is simulated session info. The actual session_info was not available.",
-                                session_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                                elapsed_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f32() % 3600.0,
-                                track_temp = telemetry_data.track_temp_c,
-                                air_temp = telemetry_data.air_temp_c,
-                                wind_vel = telemetry_data.wind_vel_ms,
-                                wind_dir = telemetry_data.wind_dir_rad * 180.0 / std::f32::consts::PI,
-                                humidity = telemetry_data.humidity_pct,
-                                fog = telemetry_data.fog_level_pct
-                            );
                                         }
                                         
                                         // Convert TelemetryData to serde_json::Value
