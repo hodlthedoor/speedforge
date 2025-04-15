@@ -169,7 +169,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     if (!svgRef.current || data.length === 0) return;
 
     const svg = d3.select(svgRef.current);
-    const width = 400;
+    const width = 480; // 20% longer than previous 400
     const height = 150;
     const margin = { top: 3, right: 0, bottom: 5, left: 0 };
 
@@ -209,7 +209,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', '#4CAF50')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 2.8) // 40% wider than previous 2
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', line);
@@ -218,7 +218,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', '#F44336')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 2.8) // 40% wider than previous 2
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
@@ -243,13 +243,10 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     <Widget id={id} title="Pedal Trace" onClose={onClose}>
       <svg
         ref={svgRef}
-        width={400}
+        width={480} // 20% longer than previous 400
         height={150}
         className="bg-transparent"
       />
-      <div className="mt-2 flex justify-end text-xs">
-        <span>Current: {historyLength}/{dataRef.current.length}</span>
-      </div>
     </Widget>
   );
 };
