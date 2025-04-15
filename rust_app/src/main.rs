@@ -29,7 +29,11 @@ mod iracing_wrapper {
                 let raw_str = format!("{:?}", session);
                 Ok(raw_str)
             },
-            Err(e) => Err(Box::new(e))
+            Err(e) => {
+                // Convert the error to a string to avoid trait issues
+                let error_str = format!("Session info error: {}", e);
+                Err(error_str.into())
+            }
         }
     }
 }
@@ -42,7 +46,9 @@ mod iracing_wrapper {
     
     pub fn get_raw_session_info(_conn: &Connection) -> Result<String, Box<dyn Error>> {
         // On non-Windows platforms, this is just a stub that returns an error
-        Err("iRacing SDK not available on non-Windows platforms".into())
+        let error_msg = "iRacing SDK not available on non-Windows platforms";
+        println!("[DEBUG] {} - Stub implementation called.", error_msg);
+        Err(error_msg.into())
     }
 }
 
