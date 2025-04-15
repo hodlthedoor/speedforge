@@ -258,23 +258,19 @@ body, html {
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
 }
 
-.panel-header {
+/* Panel header - used with control-panel */
+.panel-header, 
+.control-panel .drag-handle {
+  padding: 12px 16px;
+  background: linear-gradient(to right, rgba(30, 40, 70, 0.95), rgba(40, 60, 100, 0.9));
+  border-bottom: 1px solid rgba(100, 150, 255, 0.2);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eee;
-  background-color: #f8f9fa;
-  padding: 10px 15px;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-  margin: -20px -20px 15px -20px; /* Extend to the edges of the panel */
-  cursor: grab;
-}
-
-.panel-header:active {
-  cursor: grabbing;
+  cursor: move;
+  margin: -16px -16px 16px -16px; /* Negative margin to cancel out the padding */
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
 }
 
 .panel-header h2 {
@@ -390,28 +386,60 @@ body, html {
 
 /* Draggable component styles */
 .draggable-component {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  transition: box-shadow 0.2s ease;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(100, 130, 255, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  padding: 16px; /* Add default padding */
+  transform-origin: center top;
 }
 
 .draggable-component.dragging {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(100, 130, 255, 0.2), 0 0 15px rgba(70, 100, 210, 0.2);
   opacity: 0.95;
   z-index: 10000;
+  transform: scale(1.01);
+}
+
+/* The header is the only part that should have no padding */
+.draggable-component .drag-handle {
+  margin: -16px -16px 16px -16px; /* Negative margin to cancel out the padding */
+  cursor: grab;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Add subtle shimmer effect to headers */
+.draggable-component .drag-handle::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to bottom right, 
+    rgba(255, 255, 255, 0) 0%, 
+    rgba(255, 255, 255, 0.03) 40%, 
+    rgba(255, 255, 255, 0.04) 50%, 
+    rgba(255, 255, 255, 0.03) 60%, 
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+
+.draggable-component:hover .drag-handle::after {
+  transform: rotate(30deg) translate(10%, 10%);
+}
+
+.draggable-component .drag-handle:active {
+  cursor: grabbing;
 }
 
 /* Remove shadow when widget is transparent */
 .draggable-component.no-shadow {
   box-shadow: none;
-}
-
-.drag-handle {
-  cursor: grab;
-  user-select: none;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
 }
 
 /* Widget Component Styles */
@@ -603,17 +631,19 @@ body, html {
   font-size: 12px;
 }
 
-/* Control Panel Improvements */
+/* Control Panel Improvements - THESE STYLES ARE USED BY CURRENT CONTROL PANEL */
 .control-panel {
-  max-width: 300px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(100, 100, 255, 0.2);
-  background-color: rgba(30, 30, 30, 0.85);
-  border-radius: 8px;
+  /* Removed max-width constraint */
+  width: auto; 
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(100, 130, 255, 0.2);
+  border: 1px solid rgba(100, 130, 255, 0.2);
+  background-color: rgba(20, 25, 40, 0.9);
+  border-radius: 12px;
   color: #f0f0f0;
   z-index: 1000;
   overflow: hidden;
   backdrop-filter: blur(5px);
+  padding: 16px; /* Add default padding */
 }
 
 .panel-header {

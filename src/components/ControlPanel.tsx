@@ -1,0 +1,1034 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import BaseDraggableComponent from './BaseDraggableComponent';
+import { WebSocketService } from '../services/WebSocketService';
+import { useTelemetryData } from '../hooks/useTelemetryData';
+import WidgetRegistry from '../widgets/WidgetRegistry';
+import { availableMetrics } from './SimpleTelemetryWidget';
+
+interface ControlPanelProps {
+  initialPosition?: { x: number, y: number };
+  onClickThrough?: (enabled: boolean) => void;
+  onAddWidget?: (widget: any) => void;
+  activeWidgets?: any[];
+}
+
+const ControlPanel: React.FC<ControlPanelProps> = ({
+  initialPosition = { x: 20, y: 20 },
+  onClickThrough,
+  onAddWidget,
+  activeWidgets = []
+}) => {
+  // State
+  const [clickThrough, setClickThrough] = useState(false);
+  const [showWidgetMenu, setShowWidgetMenu] = useState(false);
+  const [selectedWidget, setSelectedWidget] = useState<any>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [showActiveWidgets, setShowActiveWidgets] = useState(false);
+  const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
+  const [widgetBackgroundTransparent, setWidgetBackgroundTransparent] = useState<Record<string, boolean>>({});
+  
+  // Hover states for buttons
+  const [hideButtonHover, setHideButtonHover] = useState(false);
+  const [showAllButtonHover, setShowAllButtonHover] = useState(false);
+  const [menuButtonHover, setMenuButtonHover] = useState(false);
+  const [quitButtonHover, setQuitButtonHover] = useState(false);
+  const [activeWidgetsButtonHover, setActiveWidgetsButtonHover] = useState(false);
+  
+  // Telemetry connection
+  const { isConnected } = useTelemetryData('control-panel', {
+    metrics: ['PlayerTrackSurface'],
+    throttleUpdates: true,
+    updateInterval: 1000
+  });
+
+  // Update widget state for any widget type
+  const updateWidgetState = useCallback((widgetId: string, updates: any) => {
+    // Get the widget
+    const widget = activeWidgets.find(w => w.id === widgetId);
+    if (!widget) {
+      console.error(`Cannot update widget state: widget with ID ${widgetId} not found`);
+      return;
+    }
+    
+    console.log(`updateWidgetState called for widget ${widgetId} with updates:`, updates);
+    
+    // Update widget state in the widget object itself
+    if (!widget.state) widget.state = {};
+    widget.state = { ...widget.state, ...updates };
+    
+    // For all widget types, dispatch a generic widget:state:update event
+    const updateEvent = new CustomEvent('widget:state:updated', { 
+      detail: { widgetId, state: updates }
+    });
+    window.dispatchEvent(updateEvent);
+    
+    // Force a re-render of controls by updating the selected widget
+    if (selectedWidget && selectedWidget.id === widgetId) {
+      setSelectedWidget({ ...widget });
+    }
+  }, [activeWidgets, selectedWidget]);
+
+  // Handle widget close function
+  const closeWidget = useCallback((id: string) => {
+    if (!onAddWidget || !activeWidgets) return;
+    
+    const widgetToUpdate = activeWidgets.find(w => w.id === id);
+    if (widgetToUpdate) {
+      onAddWidget({
+        ...widgetToUpdate,
+        enabled: false
+      });
+      
+      // Clear selection if this was the selected widget
+      if (selectedWidget?.id === id) {
+        setSelectedWidget(null);
+      }
+    }
+  }, [onAddWidget, selectedWidget, activeWidgets]);
+
+  // Handle reconnect to WebSocket
+  const handleReconnect = () => {
+    setReconnecting(true);
+    const webSocketService = WebSocketService.getInstance();
+    
+    if (webSocketService.reconnect) {
+      webSocketService.reconnect();
+      
+      setTimeout(() => {
+        setReconnecting(false);
+      }, 5000);
+    } else {
+      setReconnecting(false);
+    }
+  };
+
+  // Auto-reconnect when connection is lost
+  useEffect(() => {
+    if (!isConnected && !reconnecting) {
+      handleReconnect();
+    }
+  }, [isConnected, reconnecting]);
+
+  // Listen for widget click events
+  useEffect(() => {
+    const handleWidgetClick = (e: any) => {
+      if (e && e.detail && e.detail.widget) {
+        setSelectedWidget(e.detail.widget);
+      }
+    };
+
+    window.addEventListener('widget:click', handleWidgetClick);
+    
+    return () => {
+      window.removeEventListener('widget:click', handleWidgetClick);
+    };
+  }, []);
+
+  // Get widget categories
+  const widgetsByCategory = useCallback(() => {
+    const defs = WidgetRegistry.getAllDefinitions();
+    const categories: Record<string, any[]> = {};
+    
+    Object.entries(defs).forEach(([type, def]) => {
+      // Filter out telemetry widgets since they have their own section
+      if (type !== 'telemetry') {
+        const category = def.category || 'Other';
+        if (!categories[category]) {
+          categories[category] = [];
+        }
+        categories[category].push({ type, ...def });
+      }
+    });
+    
+    return categories;
+  }, []);
+
+  // Get controls for selected widget
+  const getWidgetControls = useCallback((widget: any) => {
+    if (!widget || !widget.type) return [];
+    
+    // Get widget state based on widget type
+    let widgetState: Record<string, any> = {};
+    
+    // For all widgets, include any state stored in the widget object
+    if (widget.state) {
+      widgetState = { ...widgetState, ...widget.state };
+    }
+    
+    console.log(`Getting controls for widget ${widget.id} (${widget.type}) with state:`, widgetState);
+      
+    // Get controls from registry
+    return WidgetRegistry.getWidgetControls(
+      widget.type,
+      widgetState,
+      (updates: any) => updateWidgetState(widget.id, updates)
+    );
+  }, [updateWidgetState]);
+
+  // Render a control based on its type
+  const renderWidgetControl = (control: any) => {
+    // Check if conditional function exists and evaluates to false
+    if (control.conditional && !control.conditional(selectedWidget)) {
+      return null;
+    }
+    
+    switch (control.type) {
+      case 'button':
+        return (
+          <button 
+            key={control.id}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              fontSize: '12px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginRight: '8px'
+            }}
+            onClick={() => control.onChange(control.value)}
+          >
+            {control.label}
+          </button>
+        );
+        
+      case 'select':
+        return (
+          <div key={control.id} style={{ marginTop: '12px' }}>
+            <label style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px', display: 'block' }}>{control.label}:</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {control.options.map((option: any) => (
+                <button 
+                  key={option.value}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: control.value === option.value ? '#3b82f6' : '#374151',
+                    color: control.value === option.value ? 'white' : '#d1d5db',
+                    border: 'none',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onClick={() => control.onChange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      
+      case 'slider':
+        return (
+          <div key={control.id} style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label style={{ fontSize: '12px', color: '#9ca3af' }}>{control.label}</label>
+              <span style={{ 
+                fontSize: '10px', 
+                padding: '2px 6px', 
+                backgroundColor: 'rgba(30, 41, 59, 0.8)', 
+                borderRadius: '9999px',
+                color: '#d1d5db' 
+              }}>
+                {control.value || 100}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
+              max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
+              step={1}
+              value={control.value || 100}
+              onChange={(e) => {
+                const numericValue = Number(e.target.value);
+                control.onChange(numericValue);
+              }}
+              style={{
+                width: '100%',
+                height: '6px',
+                borderRadius: '9999px',
+                backgroundColor: '#4b5563',
+                appearance: 'none',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            />
+            {control.options && control.options.length > 0 && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                fontSize: '10px', 
+                color: '#9ca3af',
+                marginTop: '4px'
+              }}>
+                {control.options.map((option: any) => (
+                  <span 
+                    key={option.value} 
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => control.onChange(Number(option.value))}
+                  >
+                    {option.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'toggle':
+        return (
+          <div key={control.id} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label style={{ fontSize: '12px', color: '#9ca3af' }}>{control.label}</label>
+            <div
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                width: '36px',
+                height: '20px',
+                borderRadius: '9999px',
+                cursor: 'pointer',
+                backgroundColor: control.value ? '#3b82f6' : '#4b5563',
+                transition: 'background-color 0.2s ease'
+              }}
+              onClick={() => control.onChange(!control.value)}
+            >
+              <span style={{ position: 'absolute', left: '2px' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: control.value ? '16px' : '2px',
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '9999px',
+                    backgroundColor: 'white',
+                    transition: 'left 0.2s ease'
+                  }}
+                />
+              </span>
+            </div>
+          </div>
+        );
+        
+      default:
+        return (
+          <div key={control.id} style={{ 
+            marginTop: '12px', 
+            fontSize: '10px', 
+            color: '#ef4444', 
+            padding: '8px', 
+            border: '1px solid rgba(239, 68, 68, 0.2)', 
+            borderRadius: '6px', 
+            backgroundColor: 'rgba(239, 68, 68, 0.1)' 
+          }}>
+            Unsupported control type: {control.type}
+          </div>
+        );
+    }
+  };
+
+  // Add telemetry widget
+  const addTelemetryWidget = useCallback((metric: string, name: string) => {
+    if (!onAddWidget) return;
+    
+    const widgetDef = WidgetRegistry.get('telemetry');
+    if (!widgetDef) return;
+    
+    const id = uuidv4();
+    const widget = {
+      id,
+      type: 'telemetry',
+      title: widgetDef.defaultTitle,
+      options: { 
+        ...widgetDef.defaultOptions,
+        metric,
+        name
+      },
+      enabled: true
+    };
+    
+    onAddWidget(widget);
+  }, [onAddWidget]);
+
+  // Add any widget type from registry
+  const addWidgetFromRegistry = useCallback((type: string, customOptions?: any) => {
+    if (!onAddWidget) return;
+    
+    const widgetDef = WidgetRegistry.get(type);
+    if (!widgetDef) return;
+    
+    const id = uuidv4();
+    const widget = {
+      id,
+      type,
+      title: widgetDef.defaultTitle,
+      options: { 
+        ...widgetDef.defaultOptions,
+        ...customOptions 
+      },
+      enabled: true
+    };
+    
+    onAddWidget(widget);
+  }, [onAddWidget]);
+
+  // Toggle click-through mode
+  const toggleClickThrough = () => {
+    const newValue = !clickThrough;
+    setClickThrough(newValue);
+    
+    if (onClickThrough) {
+      onClickThrough(newValue);
+    }
+    
+    if (window.electronAPI) {
+      window.electronAPI.app.toggleClickThrough(newValue);
+    }
+  };
+
+  // Handle opacity change
+  const handleOpacityChange = (widgetId: string, value: number) => {
+    setWidgetOpacity(prev => ({
+      ...prev,
+      [widgetId]: value
+    }));
+    
+    // Dispatch event to update widget opacity
+    const event = new CustomEvent('widget:opacity', { 
+      detail: { widgetId, opacity: value }
+    });
+    window.dispatchEvent(event);
+  };
+
+  // Handle background transparency toggle
+  const handleBackgroundTransparencyToggle = (widgetId: string) => {
+    const newValue = !(widgetBackgroundTransparent[widgetId] || false);
+    
+    setWidgetBackgroundTransparent(prev => ({
+      ...prev,
+      [widgetId]: newValue
+    }));
+    
+    // Dispatch event to update widget background transparency
+    const event = new CustomEvent('widget:background-transparent', { 
+      detail: { widgetId, transparent: newValue }
+    });
+    window.dispatchEvent(event);
+  };
+
+  // Quit application
+  const quitApplication = () => {
+    if (window.electronAPI) {
+      window.electronAPI.app.quit();
+    }
+  };
+
+  // Toggle widget menu
+  const toggleWidgetMenu = () => {
+    setShowWidgetMenu(!showWidgetMenu);
+  };
+
+  // Function to select a widget and highlight it
+  const selectWidget = (widget: any) => {
+    setSelectedWidget(widget);
+    
+    // Dispatch event to highlight the selected widget
+    const event = new CustomEvent('widget:highlight', { 
+      detail: { widgetId: widget.id }
+    });
+    window.dispatchEvent(event);
+  };
+
+  // Toggle showing active widgets list
+  const toggleActiveWidgetsList = () => {
+    setShowActiveWidgets(!showActiveWidgets);
+  };
+
+  // Get enabled widgets from the activeWidgets prop
+  const enabledWidgets = Array.isArray(activeWidgets) 
+    ? activeWidgets.filter(w => w && w.enabled !== false)
+    : [];
+
+  // Function to show all widgets (reset opacity and transparency)
+  const handleShowAllWidgets = () => {
+    // Only proceed if there are active widgets
+    if (!activeWidgets?.length) return;
+    
+    // Create a new opacity object with 1 (100%) for all widgets
+    const newOpacity: Record<string, number> = {};
+    // Create a new transparency object with false for all widgets
+    const newTransparency: Record<string, boolean> = {};
+    
+    // Set values for all active widgets
+    activeWidgets.forEach(widget => {
+      if (widget.enabled) {
+        newOpacity[widget.id] = 1;
+        newTransparency[widget.id] = false;
+        
+        // Update widget opacity via event
+        const opacityEvent = new CustomEvent('widget:opacity', { 
+          detail: { widgetId: widget.id, opacity: 1 }
+        });
+        window.dispatchEvent(opacityEvent);
+        
+        // Update widget transparency via event
+        const transparencyEvent = new CustomEvent('widget:background-transparent', { 
+          detail: { widgetId: widget.id, transparent: false }
+        });
+        window.dispatchEvent(transparencyEvent);
+      }
+    });
+    
+    // Update state
+    setWidgetOpacity(newOpacity);
+    setWidgetBackgroundTransparent(newTransparency);
+  };
+
+  return (
+    <BaseDraggableComponent
+      initialPosition={initialPosition}
+      style={{
+        width: '400px',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(100, 130, 255, 0.2)',
+        border: '1px solid rgba(100, 130, 255, 0.2)',
+        backgroundColor: 'rgba(20, 25, 40, 0.9)',
+        borderRadius: '12px',
+        color: '#f0f0f0',
+        zIndex: 1000,
+        backdropFilter: 'blur(5px)',
+        transition: 'all 0.2s ease',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Header */}
+      <div 
+        className="drag-handle"
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'linear-gradient(to right, rgba(20, 25, 40, 0.95), rgba(40, 60, 90, 0.9))',
+          borderBottom: '1px solid rgba(100, 150, 255, 0.2)',
+          padding: '12px 16px',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px'
+        }}
+      >
+        <h2 style={{ fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px', display: 'flex', alignItems: 'center' }}>
+          <span style={{ color: '#3b82f6', marginRight: '8px', fontSize: '18px' }}>•</span>
+          Control Panel
+        </h2>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div 
+            style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              backgroundColor: isConnected ? '#22c55e' : '#ef4444',
+              boxShadow: isConnected ? '0 0 8px rgba(34, 197, 94, 0.5)' : '0 0 8px rgba(239, 68, 68, 0.5)',
+              animation: isConnected ? 'pulse 2s infinite' : 'none',
+              transition: 'background-color 0.3s'
+            }}
+            title={`${isConnected ? 'Connected' : 'Disconnected'}`}
+          />
+          
+          <button 
+            onClick={handleReconnect}
+            disabled={reconnecting}
+            style={{
+              fontSize: '12px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              backgroundColor: reconnecting ? '#374151' : '#374151',
+              color: reconnecting ? '#9ca3af' : '#e5e7eb',
+              border: 'none',
+              cursor: reconnecting ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {reconnecting ? 'Connecting...' : 'Reconnect'}
+          </button>
+        </div>
+      </div>
+
+      {/* Content area */}
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Action Buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <button 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              backgroundColor: clickThrough 
+                ? (hideButtonHover ? '#ca8a04' : '#eab308') 
+                : (hideButtonHover ? '#1d4ed8' : '#2563eb'),
+              color: clickThrough ? '#111827' : 'white',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: hideButtonHover 
+                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
+                : '0 2px 4px rgba(0, 0, 0, 0.1)',
+              transform: hideButtonHover ? 'translateY(-1px)' : 'none'
+            }}
+            onClick={toggleClickThrough}
+            onMouseEnter={() => setHideButtonHover(true)}
+            onMouseLeave={() => setHideButtonHover(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {clickThrough ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              )}
+            </svg>
+            {clickThrough ? 'Show Panel' : 'Hide Panel'}
+          </button>
+          
+          <button 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              backgroundColor: showAllButtonHover ? '#4338ca' : '#4f46e5',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: showAllButtonHover 
+                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
+                : '0 2px 4px rgba(0, 0, 0, 0.1)',
+              transform: showAllButtonHover ? 'translateY(-1px)' : 'none'
+            }}
+            onClick={handleShowAllWidgets}
+            onMouseEnter={() => setShowAllButtonHover(true)}
+            onMouseLeave={() => setShowAllButtonHover(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Show All
+          </button>
+        </div>
+
+        {/* Widget Menu Toggle */}
+        <button 
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '14px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 500,
+            backgroundColor: menuButtonHover ? '#1d4ed8' : '#2563eb',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: menuButtonHover 
+              ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
+              : '0 2px 4px rgba(0, 0, 0, 0.1)',
+            transform: menuButtonHover ? 'translateY(-1px)' : 'none'
+          }}
+          onClick={toggleWidgetMenu}
+          onMouseEnter={() => setMenuButtonHover(true)}
+          onMouseLeave={() => setMenuButtonHover(false)}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {showWidgetMenu ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            )}
+          </svg>
+          {showWidgetMenu ? 'Hide Widget Menu' : 'Show Widget Menu'}
+        </button>
+
+        {/* Active Widgets Toggle */}
+        <button 
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '14px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 500,
+            backgroundColor: activeWidgetsButtonHover ? '#0d9488' : '#14b8a6',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: activeWidgetsButtonHover 
+              ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(20, 184, 166, 0.3)' 
+              : '0 2px 4px rgba(0, 0, 0, 0.1)',
+            transform: activeWidgetsButtonHover ? 'translateY(-1px)' : 'none'
+          }}
+          onClick={toggleActiveWidgetsList}
+          onMouseEnter={() => setActiveWidgetsButtonHover(true)}
+          onMouseLeave={() => setActiveWidgetsButtonHover(false)}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          {showActiveWidgets ? 'Hide Active Widgets' : 'Show Active Widgets'}
+        </button>
+
+        {/* Quit Button */}
+        {window.electronAPI && (
+          <button 
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '14px 16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: quitButtonHover 
+                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
+                : '0 2px 4px rgba(0, 0, 0, 0.1)',
+              transform: quitButtonHover ? 'translateY(-1px)' : 'none'
+            }}
+            onClick={quitApplication}
+            onMouseEnter={() => setQuitButtonHover(true)}
+            onMouseLeave={() => setQuitButtonHover(false)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Quit Application
+          </button>
+        )}
+
+        {/* Widget Menu */}
+        {showWidgetMenu && (
+          <div style={{ 
+            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
+            marginTop: '16px',
+            paddingTop: '20px',
+            marginLeft: '-20px',
+            marginRight: '-20px',
+            paddingLeft: '20px',
+            paddingRight: '20px'
+          }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#93c5fd', marginBottom: '16px' }}>Widgets Library</h3>
+            
+            {/* Telemetry Widgets */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
+                <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {availableMetrics.map(metric => (
+                  <div 
+                    key={metric.id} 
+                    style={{
+                      padding: '8px',
+                      backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                  >
+                    <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Other Widget Types */}
+            {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+              <div key={category} style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
+                  <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {widgets.map(widget => (
+                    <div 
+                      key={widget.type} 
+                      style={{
+                        padding: '8px',
+                        backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onClick={() => addWidgetFromRegistry(widget.type)}
+                      title={widget.description}
+                    >
+                      <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Selected Widget Panel */}
+        {selectedWidget && (
+          <div style={{ 
+            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
+            marginTop: '16px',
+            paddingTop: '20px',
+            marginLeft: '-20px',
+            marginRight: '-20px',
+            paddingLeft: '20px',
+            paddingRight: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#3b82f6' }}>{selectedWidget.title}</h3>
+              <button 
+                onClick={() => closeWidget(selectedWidget.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  border: 'none',
+                  backgroundColor: 'rgba(60, 60, 60, 0.4)',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+              borderRadius: '8px',
+              fontSize: '12px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                <span style={{ color: '#9ca3af' }}>ID:</span>
+                <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                <span style={{ color: '#9ca3af' }}>Type:</span>
+                <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
+              </div>
+              {selectedWidget.options?.metric && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                  <span style={{ color: '#9ca3af' }}>Metric:</span>
+                  <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Dynamic Widget Controls from Registry */}
+            {getWidgetControls(selectedWidget).length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                  <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+                </div>
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                  borderRadius: '8px'
+                }}>
+                  {getWidgetControls(selectedWidget).map(control => 
+                    renderWidgetControl(control)
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Appearance Controls */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
+                <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+              </div>
+              <div style={{ 
+                padding: '12px', 
+                backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                borderRadius: '8px'
+              }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      padding: '2px 6px', 
+                      backgroundColor: 'rgba(30, 41, 59, 0.8)', 
+                      borderRadius: '9999px',
+                      color: '#d1d5db' 
+                    }}>
+                      {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="1"
+                    step="0.1"
+                    value={widgetOpacity[selectedWidget.id] ?? 1}
+                    onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: '6px',
+                      borderRadius: '9999px',
+                      backgroundColor: '#4b5563',
+                      appearance: 'none',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
+                  <button
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
+                      color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
+                      border: 'none',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                  >
+                    {widgetBackgroundTransparent[selectedWidget.id] 
+                      ? '✓ Transparent' 
+                      : 'Make Transparent'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Widgets List */}
+        {showActiveWidgets && enabledWidgets.length > 0 && (
+          <div style={{ 
+            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
+            marginTop: '16px',
+            paddingTop: '20px',
+            marginLeft: '-20px',
+            marginRight: '-20px',
+            paddingLeft: '20px',
+            paddingRight: '20px'
+          }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 500, color: '#14b8a6', marginBottom: '16px' }}>Active Widgets</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {enabledWidgets.map(widget => (
+                <div 
+                  key={widget.id}
+                  style={{
+                    padding: '12px',
+                    backgroundColor: selectedWidget?.id === widget.id 
+                      ? 'rgba(20, 184, 166, 0.2)' 
+                      : 'rgba(30, 41, 59, 0.8)',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: selectedWidget?.id === widget.id 
+                      ? '1px solid rgba(20, 184, 166, 0.5)' 
+                      : '1px solid transparent'
+                  }}
+                  onClick={() => selectWidget(widget)}
+                >
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    fontSize: '12px',
+                    fontWeight: 500, 
+                    color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
+                  }}>
+                    <span>{widget.title || `Widget ${widget.id.slice(0, 6)}`}</span>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      padding: '2px 6px', 
+                      backgroundColor: 'rgba(20, 184, 166, 0.2)',
+                      color: '#14b8a6',
+                      borderRadius: '4px'
+                    }}>
+                      {widget.type}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {showActiveWidgets && enabledWidgets.length === 0 && (
+          <div style={{ 
+            borderTop: '1px solid rgba(100, 150, 255, 0.2)',
+            marginTop: '16px',
+            paddingTop: '20px',
+            marginLeft: '-20px',
+            marginRight: '-20px',
+            paddingLeft: '20px',
+            paddingRight: '20px'
+          }}>
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+              borderRadius: '8px',
+              textAlign: 'center',
+              color: '#94a3b8'
+            }}>
+              No active widgets to display
+            </div>
+          </div>
+        )}
+      </div>
+    </BaseDraggableComponent>
+  );
+};
+
+export default ControlPanel; 

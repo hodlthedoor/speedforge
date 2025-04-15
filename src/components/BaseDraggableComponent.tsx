@@ -78,18 +78,22 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
     };
   }, [isDragging]);
 
+  // Combine style props with our required positioning
+  const combinedStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `${position.x}px`,
+    top: `${position.y}px`,
+    cursor: isDragging ? 'grabbing' : 'default',
+    userSelect: 'none',
+    // No default padding or border here - let the caller specify these
+    ...style
+  };
+
   return (
     <div
       ref={containerRef}
-      className={`draggable-component ${isDragging ? 'dragging' : ''} ${className}`}
-      style={{
-        position: 'absolute',
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        cursor: isDragging ? 'grabbing' : 'default',
-        userSelect: 'none',
-        ...style
-      }}
+      className={`${isDragging ? 'dragging' : ''} ${className}`}
+      style={combinedStyle}
       onMouseDown={handleMouseDown}
     >
       {children}

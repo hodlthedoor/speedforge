@@ -779,7 +779,7 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
   return (
     <BaseDraggableComponent 
       initialPosition={initialPosition}
-      className={`w-[400px] max-h-[80vh] flex flex-col shadow-xl border border-blue-300/10 bg-gray-900/90 rounded-lg text-gray-100 z-[1000] backdrop-blur-md ${clickThrough ? 'click-through opacity-90 hover:opacity-100' : ''} transition-all duration-200`}
+      className={`w-[400px] max-h-[80vh] p-4 flex flex-col shadow-xl border border-blue-300/10 bg-gray-900/90 rounded-lg text-gray-100 z-[1000] backdrop-blur-md ${clickThrough ? 'click-through opacity-90 hover:opacity-100' : ''} transition-all duration-200`}
     >
       {/* Header */}
       <div className="w-full flex items-center justify-between bg-gradient-to-r from-gray-900/90 to-gray-800/90 border-b border-gray-700 px-6 py-4 drag-handle shadow-sm">
@@ -1003,11 +1003,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                       </svg>
                     </summary>
                     <div className="p-4 bg-gray-800/60">
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-4 debug-border debug-padding">
                         {availableMetrics.map(metric => (
                           <button 
                             key={metric.id}
-                            className="px-3 py-2 text-xs font-medium bg-gray-700/80 hover:bg-blue-600/80 text-white rounded-lg transition-all flex items-center justify-center"
+                            style={{
+                              padding: '12px 16px',
+                              margin: '8px',
+                              backgroundColor: 'rgba(55, 65, 81, 0.8)',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              color: 'white',
+                              width: 'calc(100% - 16px)',
+                              border: 'none',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                            }}
                             onClick={() => addTelemetryWidget(metric.id, metric.name)}
                           >
                             {metric.name}
@@ -1036,11 +1047,22 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
                             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>
                             {category}
                           </h4>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-4 debug-border debug-padding">
                             {widgets.map(widget => (
                               <button 
                                 key={widget.type}
-                                className="px-3 py-2 text-xs font-medium bg-gray-700/80 hover:bg-indigo-600/80 text-white rounded-lg transition-all"
+                                style={{
+                                  padding: '12px 16px',
+                                  margin: '8px',
+                                  backgroundColor: 'rgba(55, 65, 81, 0.8)',
+                                  borderRadius: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: '500',
+                                  color: 'white',
+                                  width: 'calc(100% - 16px)',
+                                  border: 'none',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                }}
                                 onClick={() => addWidgetFromRegistry(widget.type)}
                                 title={widget.description}
                               >

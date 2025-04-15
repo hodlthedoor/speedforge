@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import SimpleControlPanel from './components/SimpleControlPanel';
+import ControlPanel from './components/ControlPanel';
 import ClickThroughHint from './components/ClickThroughHint';
 import { WebSocketService } from './services/WebSocketService';
 import { SimpleTelemetryWidget } from './components/SimpleTelemetryWidget';
@@ -247,7 +247,7 @@ function App() {
     >
       {/* When click-through is enabled or control panel is hidden, don't show control panel */}
       {!isClickThrough && !controlPanelHidden ? (
-        <SimpleControlPanel 
+        <ControlPanel 
           initialPosition={{ x: windowWidth - 420, y: 20 }}
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}

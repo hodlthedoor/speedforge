@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { WebSocketService } from '../services/WebSocketService';
+import React from 'react';
 import { CarLeftRight } from '../types/telemetry';
 import Widget from './Widget';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface CarLeftIndicatorWidgetProps {
   id: string;
@@ -16,24 +16,13 @@ const CarLeftIndicatorWidget: React.FC<CarLeftIndicatorWidgetProps> = ({
   onClose,
   title = 'Car Left'
 }) => {
-  const [carStatus, setCarStatus] = useState<CarLeftRight>(CarLeftRight.Off);
-
-  useEffect(() => {
-    // Get WebSocket service
-    const wsService = WebSocketService.getInstance();
-
-    // Add data listener to update the component when telemetry data is received
-    wsService.addDataListener(id, (data) => {
-      if (data && data.car_left_right) {
-        setCarStatus(data.car_left_right);
-      }
-    });
-
-    // Clean up on unmount
-    return () => {
-      wsService.removeListeners(id);
-    };
-  }, [id]);
+  // Use the telemetry hook instead of direct WebSocket connection
+  const { data, isConnected } = useTelemetryData(id, {
+    metrics: ['car_left_right'],
+    throttleUpdates: false
+  });
+  
+  const carStatus = data?.car_left_right || CarLeftRight.Off;
 
   // Determine CSS classes based on car status
   const getIndicatorClasses = () => {
