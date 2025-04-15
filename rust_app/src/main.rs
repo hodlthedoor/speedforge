@@ -20,7 +20,7 @@ mod iracing_wrapper {
     use std::error::Error;
     use iracing::Connection;
     
-    pub fn get_raw_session_info(conn: &Connection) -> Result<String, Box<dyn Error>> {
+    pub fn get_raw_session_info(conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // Access the raw YAML string directly
         // We don't use IRSDK directly since it's not publicly exported
         match conn.session_info() {
@@ -44,7 +44,7 @@ mod iracing_wrapper {
     use std::error::Error;
     use iracing::Connection;
     
-    pub fn get_raw_session_info(_conn: &Connection) -> Result<String, Box<dyn Error>> {
+    pub fn get_raw_session_info(_conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // On non-Windows platforms, this is just a stub that returns an error
         let error_msg = "iRacing SDK not available on non-Windows platforms";
         println!("[DEBUG] {} - Stub implementation called.", error_msg);
@@ -315,7 +315,7 @@ async fn main() {
                         log_info!("Attempting to get raw iRacing session info directly...");
                         
                         // First get the raw session info string directly, bypassing the problematic deserialization
-                        let raw_yaml = match iracing_wrapper::get_raw_session_info(&conn) {
+                        let raw_yaml = match iracing_wrapper::get_raw_session_info(&mut conn) {
                             Ok(raw_str) => {
                                 log_info!("Successfully retrieved raw session info, length: {} bytes", raw_str.len());
                                 
@@ -382,19 +382,24 @@ async fn main() {
                                             };
                                             
                                             if should_retry {
-                                                log_info!("Retrying to get session info...");
-                                                // Try the simple method that we know works
-                                                match conn.session_info() {
-                                                    Ok(session) => {
-                                                        let raw_str = format!("{:?}", session);
-                                                        log_info!("Retry: Got session info, length: {} bytes", raw_str.len());
+                                                log_info!("Retrying to get raw session info...");
+                                                match iracing_wrapper::get_raw_session_info(&mut conn) {
+                                                    Ok(raw_str) => {
+                                                        log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
+                                                        // Dump a preview of the data for debugging
+                                                        let preview = if raw_str.len() > 200 {
+                                                            &raw_str[0..200]
+                                                        } else {
+                                                            &raw_str
+                                                        };
+                                                        log_info!("Retry: Session info preview: {}", preview);
                                                         
-                                                        // Use the session info directly
+                                                        // Update the telemetry data with the new session info
                                                         telemetry_data.session_info = raw_str;
                                                         log_info!("Updated telemetry with new session info");
                                                     },
                                                     Err(e) => {
-                                                        log_error!("Retry failed: {:?}", e);
+                                                        log_error!("Retry: Failed to get raw session info: {:?}", e);
                                                         
                                                         // Use fallback data since we don't have real session info
                                                         telemetry_data.session_info = get_fallback_session_info(
