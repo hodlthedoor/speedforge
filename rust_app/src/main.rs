@@ -12,6 +12,41 @@ use serde_json::Value;
 use chrono;
 use serde_yaml;
 
+// Create a direct wrapper for lower-level iRacing SDK access 
+// This is a workaround to bypass the ResultsPositions deserialization issue
+#[cfg(target_os = "windows")]
+mod iracing_wrapper {
+    use std::result::Result;
+    use std::error::Error;
+    use iracing::{Connection, IRSDK};
+    
+    pub fn get_raw_session_info(conn: &Connection) -> Result<String, Box<dyn Error>> {
+        // Access the raw YAML string directly from the SDK
+        // This bypasses the problematic automatic deserialization in session_info()
+        unsafe {
+            let sdk = IRSDK();
+            if !sdk.is_initialized() || !sdk.is_connected() {
+                return Err("SDK not connected".into());
+            }
+            
+            let yaml = sdk.get_session_info_str()?;
+            Ok(yaml.to_string())
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod iracing_wrapper {
+    use std::result::Result;
+    use std::error::Error;
+    use iracing::Connection;
+    
+    pub fn get_raw_session_info(_conn: &Connection) -> Result<String, Box<dyn Error>> {
+        // On non-Windows platforms, this is just a stub that returns an error
+        Err("iRacing SDK not available on non-Windows platforms".into())
+    }
+}
+
 // Global flag for verbose logging
 static mut VERBOSE_LOGGING: bool = false;
 
@@ -199,20 +234,24 @@ async fn main() {
                         }
                         
                         // Always log session info attempt in normal mode too
-                        log_info!("Attempting to get iRacing session info...");
+                        log_info!("Attempting to get raw iRacing session info directly...");
                         
-                        // First get the raw session info string
-                        let (session_info_str, raw_yaml) = match conn.session_info() {
-                            Ok(session) => {
-                                // Only use Debug format since SessionDetails doesn't implement Display
-                                let raw_str = format!("{:?}", session);
+                        // First get the raw session info string directly, bypassing the problematic deserialization
+                        let raw_yaml = match iracing_wrapper::get_raw_session_info(&conn) {
+                            Ok(raw_str) => {
+                                log_info!("Successfully retrieved raw session info, length: {} bytes", raw_str.len());
                                 
-                                log_info!("Raw session info retrieved, length: {} bytes", raw_str.len());
+                                // Print a preview of the raw data
+                                let preview = if raw_str.len() > 200 {
+                                    &raw_str[0..200]
+                                } else {
+                                    &raw_str
+                                };
+                                log_info!("Raw session info preview: {}", preview);
                                 
                                 // Try to parse the raw YAML but handle the ResultsPositions error
                                 let session_info = match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
                                     Ok(yaml_value) => {
-                                        // Successfully parsed the YAML, now we can work with it
                                         log_info!("Successfully parsed session info YAML");
                                         
                                         // Create a nicely formatted string with useful session data
@@ -292,29 +331,40 @@ async fn main() {
                                             formatted_info = "---\nSessionInfo:\n  # Successfully parsed but no data was extracted\n".to_string();
                                         }
                                         
+                                        log_info!("Extracted clean session info from YAML");
                                         formatted_info
                                     },
                                     Err(e) => {
-                                        // Handle parsing error
-                                        let err_string = format!("{:?}", e);
                                         log_error!("Failed to parse session info YAML: {}", e);
                                         
-                                        if err_string.contains("ResultsPositions") {
-                                            log_info!("ResultsPositions parsing error detected, will use raw data instead");
-                                            
-                                            // Create a minimal YAML with placeholders for the problematic parts
-                                            "---\nSessionInfo:\n  # Note: Session info was partially parsed due to ResultsPositions error\n".to_string()
-                                        } else {
-                                            String::new()
-                                        }
+                                        // Even if parsing failed, still return the raw YAML
+                                        // for other components to use if possible
+                                        log_info!("Using raw session info despite parsing failure");
+                                        raw_str
                                     }
                                 };
                                 
-                                (session_info, raw_str)
+                                log_info!("Using session info: {} bytes", session_info.len());
+                                session_info
                             },
                             Err(e) => {
+                                // If we couldn't get the raw data, fall back to the regular session_info
+                                // but acknowledge it might fail with ResultsPositions error
                                 log_error!("Failed to get raw session info: {:?}", e);
-                                (String::new(), String::new())
+                                log_info!("Falling back to regular session_info method (may fail)");
+                                
+                                match conn.session_info() {
+                                    Ok(session) => {
+                                        // Process as before but handle carefully since this can still fail
+                                        let raw_str = format!("{:?}", session);
+                                        log_info!("Got session info via fallback, length: {} bytes", raw_str.len());
+                                        raw_str
+                                    },
+                                    Err(e) => {
+                                        log_error!("Fallback also failed: {:?}", e);
+                                        String::new()
+                                    }
+                                }
                             }
                         };
                         
@@ -336,8 +386,8 @@ async fn main() {
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
                                         
                                         // Use the session info we got from the connection
-                                        if !session_info_str.is_empty() {
-                                            telemetry_data.session_info = session_info_str.clone();
+                                        if !session_info.is_empty() {
+                                            telemetry_data.session_info = session_info.clone();
                                             
                                             // Periodically log that we're using real session data
                                             if should_log_telemetry_update() {
@@ -368,12 +418,9 @@ async fn main() {
                                             };
                                             
                                             if should_retry {
-                                                log_info!("Retrying to get session info...");
-                                                match conn.session_info() {
-                                                    Ok(session) => {
-                                                        // Only use Debug format
-                                                        let raw_str = format!("{:?}", session);
-                                                        
+                                                log_info!("Retrying to get raw session info...");
+                                                match iracing_wrapper::get_raw_session_info(&conn) {
+                                                    Ok(raw_str) => {
                                                         log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
                                                         // Dump a preview of the data for debugging
                                                         let preview = if raw_str.len() > 200 {
@@ -382,19 +429,6 @@ async fn main() {
                                                             &raw_str
                                                         };
                                                         log_info!("Retry: Session info preview: {}", preview);
-                                                        
-                                                        // Try quick parsing to check for the ResultsPositions issue
-                                                        match serde_yaml::from_str::<serde_yaml::Value>(&raw_str) {
-                                                            Ok(_) => {
-                                                                log_info!("Retry: Successfully parsed YAML without errors");
-                                                            },
-                                                            Err(e) => {
-                                                                log_info!("Retry: YAML parsing error: {}", e);
-                                                                if format!("{:?}", e).contains("ResultsPositions") {
-                                                                    log_info!("ResultsPositions issue confirmed. This is expected with no active race session.");
-                                                                }
-                                                            }
-                                                        }
                                                     },
                                                     Err(e) => {
                                                         log_error!("Retry: Failed to get raw session info: {:?}", e);
