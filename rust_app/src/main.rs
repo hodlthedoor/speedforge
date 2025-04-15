@@ -204,12 +204,8 @@ async fn main() {
                         // First get the raw session info string
                         let (session_info_str, raw_yaml) = match conn.session_info() {
                             Ok(session) => {
-                                // Convert to string first - try both Debug and Display formats
-                                let raw_str = format!("{}", session);
-                                let debug_str = format!("{:?}", session);
-                                
-                                // Choose the longer/more detailed representation
-                                let raw_str = if debug_str.len() > raw_str.len() { debug_str } else { raw_str };
+                                // Only use Debug format since SessionDetails doesn't implement Display
+                                let raw_str = format!("{:?}", session);
                                 
                                 log_info!("Raw session info retrieved, length: {} bytes", raw_str.len());
                                 
@@ -375,12 +371,8 @@ async fn main() {
                                                 log_info!("Retrying to get session info...");
                                                 match conn.session_info() {
                                                     Ok(session) => {
-                                                        // Convert to string first - try both formats
-                                                        let raw_str = format!("{}", session);
-                                                        let debug_str = format!("{:?}", session);
-                                                        
-                                                        // Choose the longer/more detailed representation
-                                                        let raw_str = if debug_str.len() > raw_str.len() { debug_str } else { raw_str };
+                                                        // Only use Debug format
+                                                        let raw_str = format!("{:?}", session);
                                                         
                                                         log_info!("Retry: Raw session info length: {} bytes", raw_str.len());
                                                         // Dump a preview of the data for debugging

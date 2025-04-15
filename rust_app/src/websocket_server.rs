@@ -159,7 +159,7 @@ impl TelemetryWebSocketServer {
         {
             let clients = self.clients.lock().unwrap();
             for client in clients.iter() {
-                if let Err(e) = client.0.send(message.clone()) {
+                if let Err(_e) = client.0.send(message.clone()) {
                     // Add this client to the removal list
                     dead_clients.push(client.clone());
                     
