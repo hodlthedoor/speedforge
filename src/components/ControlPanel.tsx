@@ -1136,38 +1136,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 >
                   Save Config
                 </button>
-                <button
-                  onClick={(e) => {
-                    console.log('Debug button clicked');
-                    e.preventDefault();
-                    if (window.electronAPI) {
-                      // Use type assertion to access debug API if it exists
-                      const api = window.electronAPI as any;
-                      if (api.debug && typeof api.debug.listConfigFiles === 'function') {
-                        api.debug.listConfigFiles().then((result: any) => {
-                          console.log('Config files:', result);
-                        }).catch((err: any) => {
-                          console.error('Error listing config files:', err);
-                        });
-                      } else {
-                        console.error('Debug API not available');
-                      }
-                    } else {
-                      console.error('Electron API not available');
-                    }
-                  }}
-                  style={{ 
-                    backgroundColor: 'rgba(220, 38, 38, 0.15)',
-                    color: '#ef4444',
-                    border: '1px solid rgba(220, 38, 38, 0.3)',
-                    borderRadius: '4px',
-                    padding: '6px 10px',
-                    fontSize: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Debug
-                </button>
               </div>
               
               {savedPanels.length > 0 ? (

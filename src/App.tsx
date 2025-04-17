@@ -204,15 +204,21 @@ function App() {
     };
   }, []);
   
-  // Track if hint has been shown
+  // Track if hint has been shown during this session
   const [showHint, setShowHint] = useState(true);  // Start with hint visible
+  const [hintShownThisSession, setHintShownThisSession] = useState(false);
   
-  // Reset hint visibility when click-through is enabled
+  // Only show hint the first time click-through is enabled in a session
   useEffect(() => {
     if (isClickThrough) {
-      setShowHint(true);
+      if (!hintShownThisSession) {
+        setShowHint(true);
+        setHintShownThisSession(true);
+      } else {
+        setShowHint(false);
+      }
     }
-  }, [isClickThrough]);
+  }, [isClickThrough, hintShownThisSession]);
   
   // Add event listener for track map control updates
   useEffect(() => {
