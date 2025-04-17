@@ -669,6 +669,103 @@ function setupIpcListeners() {
       return { success: false, error: String(error) };
     }
   });
+
+  // Configuration handlers
+  ipcMain.handle('config:save', async (event, type: string, name: string, data: any) => {
+    try {
+      const userDataPath = app.getPath('userData');
+      const configDir = path.join(userDataPath, 'configs', type);
+      
+      // Ensure directory exists
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      
+      const configPath = path.join(configDir, `${name}.json`);
+      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+      return true;
+    } catch (error) {
+      console.error('Error saving config:', error);
+      return false;
+    }
+  });
+
+  ipcMain.handle('config:load', async (event, type: string, name: string) => {
+    try {
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'configs', type, `${name}.json`);
+      
+      if (!fs.existsSync(configPath)) {
+        return null;
+      }
+      
+      const data = fs.readFileSync(configPath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error loading config:', error);
+      return null;
+    }
+  });
+
+  ipcMain.handle('config:list', async (event, type: string) => {
+    try {
+      const userDataPath = app.getPath('userData');
+      const configDir = path.join(userDataPath, 'configs', type);
+      
+      if (!fs.existsSync(configDir)) {
+        return [];
+      }
+      
+      const files = fs.readdirSync(configDir)
+        .filter(file => file.endsWith('.json'))
+        .map(file => file.replace('.json', ''));
+      
+      return files;
+    } catch (error) {
+      console.error('Error listing configs:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('app:getUserDataPath', async () => {
+    try {
+      const userDataPath = app.getPath('userData');
+      return userDataPath;
+    } catch (error) {
+      console.error('Error getting user data path:', error);
+      return '';
+    }
+  });
+}
+
+// Clean up all IPC handlers
+function cleanupIpcHandlers() {
+  console.log('Cleaning up IPC handlers...');
+  
+  // Clean up app handlers
+  ipcMain.removeHandler('app:quit');
+  ipcMain.removeHandler('app:toggleClickThrough');
+  ipcMain.removeHandler('app:toggleAutoNewWindows');
+  ipcMain.removeHandler('app:closeWindowForDisplay');
+  ipcMain.removeHandler('app:getDisplays');
+  ipcMain.removeHandler('app:getCurrentDisplayId');
+  ipcMain.removeHandler('app:getUserDataPath');
+  
+  // Clean up widget handlers
+  ipcMain.removeHandler('widget:create');
+  ipcMain.removeHandler('widget:close');
+  ipcMain.removeHandler('widget:getAll');
+  ipcMain.removeHandler('widget:setPosition');
+  ipcMain.removeHandler('widget:setSize');
+  ipcMain.removeHandler('widget:setAlwaysOnTop');
+  ipcMain.removeHandler('widget:setOpacity');
+  ipcMain.removeHandler('widget:setVisible');
+  ipcMain.removeHandler('widget:updateParams');
+  
+  // Clean up configuration handlers
+  ipcMain.removeHandler('config:save');
+  ipcMain.removeHandler('config:load');
+  ipcMain.removeHandler('config:list');
 }
 
 // Clean up when all windows are closed
@@ -709,6 +806,10 @@ app.on('before-quit', () => {
   ipcMain.removeHandler('app:closeWindowForDisplay');
   ipcMain.removeHandler('app:getDisplays');
   ipcMain.removeHandler('app:getCurrentDisplayId');
+  ipcMain.removeHandler('config:save');
+  ipcMain.removeHandler('config:load');
+  ipcMain.removeHandler('config:list');
+  ipcMain.removeHandler('app:getUserDataPath');
   
   // Clean up speech module
   cleanupSpeech();

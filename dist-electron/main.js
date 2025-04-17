@@ -451,32 +451,50 @@ function processTextForNaturalSpeech(text) {
   return processedText;
 }
 function initSpeechModule() {
-  console.log("Initializing native speech module...");
-  refreshVoiceCache();
-  ipcMain.handle("speech:getVoices", getVoices);
-  ipcMain.handle("speech:speak", (event, text, voice, rate, volume) => speak(text, voice, rate, volume));
-  ipcMain.handle("speech:stop", (event, id) => stop(id));
-  console.log("Speech module initialized");
+  try {
+    console.log("Initializing native speech module...");
+    refreshVoiceCache().catch((err) => {
+      console.error("Error refreshing voice cache:", err);
+    });
+    ipcMain.handle("speech:getVoices", getVoices);
+    ipcMain.handle("speech:speak", (event, text, voice, rate, volume) => speak(text, voice, rate, volume));
+    ipcMain.handle("speech:stop", (event, id) => stop(id));
+    console.log("Speech module initialized");
+  } catch (error) {
+    console.error("Error initializing speech module:", error);
+  }
 }
 async function refreshVoiceCache() {
   return new Promise((resolve) => {
-    say.getInstalledVoices((err, voices) => {
-      if (err) {
-        console.error("Error getting installed voices:", err);
+    try {
+      if (!process.platform || !["darwin", "win32", "linux"].includes(process.platform)) {
+        console.error(`Unsupported platform: ${process.platform}`);
         voiceCache = [];
         resolve([]);
         return;
       }
-      if (Array.isArray(voices)) {
-        console.log(`Found ${voices.length} voices`);
-        voiceCache = voices;
-      } else {
-        console.log("No voices found or voices are not in expected format");
-        console.log("Voices:", voices);
-        voiceCache = [];
-      }
-      resolve(voiceCache);
-    });
+      say.getInstalledVoices((err, voices) => {
+        if (err) {
+          console.error("Error getting installed voices:", err);
+          voiceCache = [];
+          resolve([]);
+          return;
+        }
+        if (Array.isArray(voices)) {
+          console.log(`Found ${voices.length} voices`);
+          voiceCache = voices;
+        } else {
+          console.log("No voices found or voices are not in expected format");
+          console.log("Voices:", voices);
+          voiceCache = [];
+        }
+        resolve(voiceCache);
+      });
+    } catch (error) {
+      console.error("Exception in refreshVoiceCache:", error);
+      voiceCache = [];
+      resolve([]);
+    }
   });
 }
 async function getVoices() {
@@ -1029,6 +1047,58 @@ function setupIpcListeners() {
       return { success: false, error: String(error) };
     }
   });
+  ipcMain.handle("config:save", async (event, type, name, data) => {
+    try {
+      const userDataPath = app.getPath("userData");
+      const configDir = path.join(userDataPath, "configs", type);
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      const configPath = path.join(configDir, `${name}.json`);
+      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+      return true;
+    } catch (error) {
+      console.error("Error saving config:", error);
+      return false;
+    }
+  });
+  ipcMain.handle("config:load", async (event, type, name) => {
+    try {
+      const userDataPath = app.getPath("userData");
+      const configPath = path.join(userDataPath, "configs", type, `${name}.json`);
+      if (!fs.existsSync(configPath)) {
+        return null;
+      }
+      const data = fs.readFileSync(configPath, "utf8");
+      return JSON.parse(data);
+    } catch (error) {
+      console.error("Error loading config:", error);
+      return null;
+    }
+  });
+  ipcMain.handle("config:list", async (event, type) => {
+    try {
+      const userDataPath = app.getPath("userData");
+      const configDir = path.join(userDataPath, "configs", type);
+      if (!fs.existsSync(configDir)) {
+        return [];
+      }
+      const files = fs.readdirSync(configDir).filter((file) => file.endsWith(".json")).map((file) => file.replace(".json", ""));
+      return files;
+    } catch (error) {
+      console.error("Error listing configs:", error);
+      return [];
+    }
+  });
+  ipcMain.handle("app:getUserDataPath", async () => {
+    try {
+      const userDataPath = app.getPath("userData");
+      return userDataPath;
+    } catch (error) {
+      console.error("Error getting user data path:", error);
+      return "";
+    }
+  });
 }
 app.on("window-all-closed", () => {
   globalShortcut.unregisterAll();
@@ -1052,6 +1122,10 @@ app.on("before-quit", () => {
   ipcMain.removeHandler("app:closeWindowForDisplay");
   ipcMain.removeHandler("app:getDisplays");
   ipcMain.removeHandler("app:getCurrentDisplayId");
+  ipcMain.removeHandler("config:save");
+  ipcMain.removeHandler("config:load");
+  ipcMain.removeHandler("config:list");
+  ipcMain.removeHandler("app:getUserDataPath");
   cleanup();
   for (const win of windows) {
     try {

@@ -3,8 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { WebSocketService } from '../services/WebSocketService';
 import { useTelemetryData } from '../hooks/useTelemetryData';
-import WidgetRegistry from '../widgets/WidgetRegistry';
+import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
 import { availableMetrics } from './SimpleTelemetryWidget';
+import ConfigService from '../services/ConfigService';
 
 interface ControlPanelProps {
   initialPosition?: { x: number, y: number };
@@ -27,6 +28,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [showActiveWidgets, setShowActiveWidgets] = useState(false);
   const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
   const [widgetBackgroundTransparent, setWidgetBackgroundTransparent] = useState<Record<string, boolean>>({});
+  
+  // Configuration state
+  const [panelName, setPanelName] = useState<string>('Default');
+  const [savedPanels, setSavedPanels] = useState<string[]>([]);
+  const [currentDisplayId, setCurrentDisplayId] = useState<number | null>(null);
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
   
   // Hover states for buttons
   const [hideButtonHover, setHideButtonHover] = useState(false);
@@ -125,6 +132,143 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     };
   }, []);
 
+  // Initialize configuration and get display ID
+  useEffect(() => {
+    console.log('ControlPanel: Initializing configuration and getting display ID');
+    
+    // Get current display ID
+    if (window.electronAPI && window.electronAPI.app) {
+      // Use type assertion to handle the API method
+      console.log('ControlPanel: electronAPI available, getting display ID');
+      const appApi = window.electronAPI.app as any;
+      if (appApi.getCurrentDisplayId) {
+        appApi.getCurrentDisplayId().then((response: any) => {
+          console.log('ControlPanel: getCurrentDisplayId response:', response);
+          if (response.success && response.displayId) {
+            setCurrentDisplayId(response.displayId);
+            
+            // Load list of saved panels for this display
+            console.log('ControlPanel: Loading saved panel configs for display:', response.displayId);
+            const configService = ConfigService.getInstance();
+            configService.listPanelConfigs().then(configs => {
+              console.log('ControlPanel: Saved panel configs:', configs);
+              setSavedPanels(configs);
+            }).catch(err => {
+              console.error('ControlPanel: Error listing panel configs:', err);
+            });
+          }
+        }).catch(err => {
+          console.error('ControlPanel: Error getting current display ID:', err);
+        });
+      } else {
+        console.warn('ControlPanel: getCurrentDisplayId method not available');
+      }
+    } else {
+      console.warn('ControlPanel: electronAPI or app not available');
+    }
+
+    // Listen for display ID changes
+    if (window.electronAPI?.on) {
+      console.log('ControlPanel: Setting up display:id event listener');
+      const removeListener = window.electronAPI.on('display:id', (displayId: number) => {
+        console.log('ControlPanel: Received display:id event with ID:', displayId);
+        setCurrentDisplayId(displayId);
+        
+        // Reload panel list for the new display
+        const configService = ConfigService.getInstance();
+        configService.listPanelConfigs().then(configs => {
+          console.log('ControlPanel: Updated saved panel configs:', configs);
+          setSavedPanels(configs);
+        }).catch(err => {
+          console.error('ControlPanel: Error listing updated panel configs:', err);
+        });
+      });
+      
+      return () => {
+        if (removeListener) removeListener();
+      };
+    } else {
+      console.warn('ControlPanel: on method not available for event listening');
+    }
+  }, []);
+
+  // Auto-load default panel configuration on startup
+  useEffect(() => {
+    // Only try to auto-load if we have current display ID and active widgets is empty
+    if (currentDisplayId !== null && activeWidgets.length === 0) {
+      // Try to load the default config for this display
+      const configService = ConfigService.getInstance();
+      configService.loadPanelConfig('Default').then(config => {
+        if (config && config.widgets && config.widgets.length > 0) {
+          // Apply config widgets
+          config.widgets.forEach(widgetConfig => {
+            if (widgetConfig.enabled) {
+              const newWidget = {
+                id: widgetConfig.id,
+                type: widgetConfig.type,
+                title: widgetConfig.title,
+                options: widgetConfig.options,
+                state: widgetConfig.state,
+                enabled: true
+              };
+              
+              if (onAddWidget) {
+                onAddWidget(newWidget);
+              }
+              
+              // Set widget position, opacity, etc.
+              if (widgetConfig.position) {
+                const posEvent = new CustomEvent('widget:position', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    position: widgetConfig.position 
+                  }
+                });
+                window.dispatchEvent(posEvent);
+              }
+              
+              // Apply other widget properties
+              if (widgetConfig.opacity !== undefined) {
+                const opacityEvent = new CustomEvent('widget:opacity', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    opacity: widgetConfig.opacity 
+                  }
+                });
+                window.dispatchEvent(opacityEvent);
+                
+                // Update local state
+                setWidgetOpacity(prev => ({
+                  ...prev,
+                  [widgetConfig.id]: widgetConfig.opacity
+                }));
+              }
+              
+              // Set background transparency if specified
+              if (widgetConfig.isBackgroundTransparent !== undefined) {
+                const bgEvent = new CustomEvent('widget:background-transparent', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    transparent: widgetConfig.isBackgroundTransparent 
+                  }
+                });
+                window.dispatchEvent(bgEvent);
+                
+                // Update local state
+                setWidgetBackgroundTransparent(prev => ({
+                  ...prev,
+                  [widgetConfig.id]: widgetConfig.isBackgroundTransparent
+                }));
+              }
+            }
+          });
+          
+          setPanelName('Default');
+        }
+      });
+    }
+  }, [currentDisplayId, activeWidgets, onAddWidget]);
+
   // Get widget categories
   const widgetsByCategory = useCallback(() => {
     const defs = WidgetRegistry.getAllDefinitions();
@@ -165,6 +309,106 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       (updates: any) => updateWidgetState(widget.id, updates)
     );
   }, [updateWidgetState]);
+
+  // Save the current panel configuration
+  const handleSavePanel = useCallback(() => {
+    const configService = ConfigService.getInstance();
+    configService.savePanelConfig(panelName, activeWidgets)
+      .then(success => {
+        if (success) {
+          // Update the list of saved panels
+          configService.listPanelConfigs().then(configs => {
+            setSavedPanels(configs);
+          });
+        }
+      });
+  }, [activeWidgets, panelName]);
+
+  // Load a panel configuration
+  const handleLoadPanel = useCallback((name: string) => {
+    const configService = ConfigService.getInstance();
+    configService.loadPanelConfig(name)
+      .then(config => {
+        if (config && config.widgets) {
+          // Clear existing widgets for this panel
+          activeWidgets.forEach(widget => {
+            closeWidget(widget.id);
+          });
+          
+          // Add widgets from config
+          config.widgets.forEach(widgetConfig => {
+            if (widgetConfig.enabled) {
+              // Add widget using onAddWidget
+              const newWidget = {
+                id: widgetConfig.id,
+                type: widgetConfig.type,
+                title: widgetConfig.title,
+                options: widgetConfig.options,
+                state: widgetConfig.state,
+                enabled: true
+              };
+              
+              if (onAddWidget) {
+                onAddWidget(newWidget);
+              }
+              
+              // Set widget position using its position info
+              if (widgetConfig.position) {
+                // Dispatch a position update event
+                const posEvent = new CustomEvent('widget:position', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    position: widgetConfig.position 
+                  }
+                });
+                window.dispatchEvent(posEvent);
+              }
+              
+              // Set opacity if specified
+              if (widgetConfig.opacity !== undefined) {
+                const opacityEvent = new CustomEvent('widget:opacity', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    opacity: widgetConfig.opacity 
+                  }
+                });
+                window.dispatchEvent(opacityEvent);
+                
+                // Update local state
+                setWidgetOpacity(prev => ({
+                  ...prev,
+                  [widgetConfig.id]: widgetConfig.opacity
+                }));
+              }
+              
+              // Set background transparency if specified
+              if (widgetConfig.isBackgroundTransparent !== undefined) {
+                const bgEvent = new CustomEvent('widget:background-transparent', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    transparent: widgetConfig.isBackgroundTransparent 
+                  }
+                });
+                window.dispatchEvent(bgEvent);
+                
+                // Update local state
+                setWidgetBackgroundTransparent(prev => ({
+                  ...prev,
+                  [widgetConfig.id]: widgetConfig.isBackgroundTransparent
+                }));
+              }
+            }
+          });
+          
+          setPanelName(name);
+        }
+      });
+  }, [activeWidgets, closeWidget, onAddWidget]);
+
+  // Toggle configuration panel visibility
+  const toggleConfigPanel = useCallback(() => {
+    setShowConfigPanel(prev => !prev);
+  }, []);
 
   // Render a control based on its type
   const renderWidgetControl = (control: any) => {
@@ -509,287 +753,440 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   };
 
   return (
-    <BaseDraggableComponent
-      initialPosition={initialPosition}
-      style={{
-        width: '400px',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(100, 130, 255, 0.2)',
-        border: '1px solid rgba(100, 130, 255, 0.2)',
-        backgroundColor: 'rgba(20, 25, 40, 0.9)',
-        borderRadius: '12px',
-        color: '#f0f0f0',
-        zIndex: 1000,
-        backdropFilter: 'blur(5px)',
-        transition: 'all 0.2s ease',
-        overflow: 'hidden'
-      }}
-    >
-      {/* Header */}
+    <>
+      {/* Debug indicator */}
       <div 
-        className="drag-handle"
         style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'linear-gradient(to right, rgba(20, 25, 40, 0.95), rgba(40, 60, 90, 0.9))',
-          borderBottom: '1px solid rgba(100, 150, 255, 0.2)',
-          padding: '12px 16px',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px'
+          position: 'fixed',
+          top: '10px',
+          left: '10px', 
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '5px',
+          borderRadius: '5px',
+          zIndex: 9999,
+          fontSize: '12px',
+          pointerEvents: 'none'
         }}
       >
-        <h2 style={{ fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ color: '#3b82f6', marginRight: '8px', fontSize: '18px' }}>•</span>
-          Control Panel
-        </h2>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div 
-            style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              backgroundColor: isConnected ? '#22c55e' : '#ef4444',
-              boxShadow: isConnected ? '0 0 8px rgba(34, 197, 94, 0.5)' : '0 0 8px rgba(239, 68, 68, 0.5)',
-              animation: isConnected ? 'pulse 2s infinite' : 'none',
-              transition: 'background-color 0.3s'
-            }}
-            title={`${isConnected ? 'Connected' : 'Disconnected'}`}
-          />
-          
-          <button 
-            onClick={handleReconnect}
-            disabled={reconnecting}
-            style={{
-              fontSize: '11px',
-              padding: '5px 10px',
-              borderRadius: '6px',
-              backgroundColor: reconnecting ? '#374151' : '#374151',
-              color: reconnecting ? '#9ca3af' : '#e5e7eb',
-              border: 'none',
-              cursor: reconnecting ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            {reconnecting ? 'Connecting...' : 'Reconnect'}
-          </button>
-        </div>
+        Control Panel: {isConnected ? 'Connected' : 'Disconnected'}
       </div>
+      
+      {/* Main control panel */}
+      <BaseDraggableComponent
+        initialPosition={initialPosition}
+        style={{ 
+          width: '400px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(100, 130, 255, 0.2)',
+          border: '1px solid rgba(100, 130, 255, 0.2)',
+          backgroundColor: 'rgba(20, 25, 40, 0.9)',
+          borderRadius: '12px',
+          color: '#f0f0f0',
+          zIndex: 1000,
+          backdropFilter: 'blur(5px)',
+          transition: 'all 0.2s ease',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Header */}
+        <div 
+          className="drag-handle"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(to right, rgba(20, 25, 40, 0.95), rgba(40, 60, 90, 0.9))',
+            borderBottom: '1px solid rgba(100, 150, 255, 0.2)',
+            padding: '12px 16px',
+            borderTopLeftRadius: '12px',
+            borderTopRightRadius: '12px'
+          }}
+        >
+          <h2 style={{ fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px', display: 'flex', alignItems: 'center' }}>
+            <span style={{ color: '#3b82f6', marginRight: '8px', fontSize: '18px' }}>•</span>
+            Control Panel
+          </h2>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+              style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: isConnected ? '#22c55e' : '#ef4444',
+                boxShadow: isConnected ? '0 0 8px rgba(34, 197, 94, 0.5)' : '0 0 8px rgba(239, 68, 68, 0.5)',
+                animation: isConnected ? 'pulse 2s infinite' : 'none',
+                transition: 'background-color 0.3s'
+              }}
+              title={`${isConnected ? 'Connected' : 'Disconnected'}`}
+            />
+            
+            <button 
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              style={{
+                fontSize: '11px',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                backgroundColor: reconnecting ? '#374151' : '#374151',
+                color: reconnecting ? '#9ca3af' : '#e5e7eb',
+                border: 'none',
+                cursor: reconnecting ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {reconnecting ? 'Connecting...' : 'Reconnect'}
+            </button>
+          </div>
+        </div>
 
-      {/* Content area */}
-      <div style={{ 
-        padding: '20px', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: '12px',
-        maxHeight: 'calc(100vh - 120px)',
-        overflowY: 'auto'
-      }}>
-        {/* Top Row: Hide Panel, Show All, and Quit buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '12px' }}>
-          <button 
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 500,
-              backgroundColor: clickThrough 
-                ? (hideButtonHover ? '#ca8a04' : '#eab308') 
-                : (hideButtonHover ? '#1d4ed8' : '#2563eb'),
-              color: clickThrough ? '#111827' : 'white',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: hideButtonHover 
-                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
-                : '0 2px 4px rgba(0, 0, 0, 0.1)',
-              transform: hideButtonHover ? 'translateY(-1px)' : 'none'
-            }}
-            onClick={toggleClickThrough}
-            onMouseEnter={() => setHideButtonHover(true)}
-            onMouseLeave={() => setHideButtonHover(false)}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {clickThrough ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-              )}
-            </svg>
-            {clickThrough ? 'Show Panel' : 'Hide Panel'}
-          </button>
-          
-          <button 
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 500,
-              backgroundColor: showAllButtonHover ? '#4338ca' : '#4f46e5',
-              color: 'white',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: showAllButtonHover 
-                ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
-                : '0 2px 4px rgba(0, 0, 0, 0.1)',
-              transform: showAllButtonHover ? 'translateY(-1px)' : 'none'
-            }}
-            onClick={handleShowAllWidgets}
-            onMouseEnter={() => setShowAllButtonHover(true)}
-            onMouseLeave={() => setShowAllButtonHover(false)}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Show All
-          </button>
-          
-          {window.electronAPI && (
+        {/* Content area */}
+        <div style={{ 
+          padding: '20px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '12px',
+          maxHeight: 'calc(100vh - 120px)',
+          overflowY: 'auto'
+        }}>
+          {/* Top Row: Hide Panel, Show All, and Quit buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '12px' }}>
             <button 
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '10px 0',
+                padding: '10px 14px',
                 borderRadius: '8px',
                 fontSize: '13px',
                 fontWeight: 500,
-                backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
+                backgroundColor: clickThrough 
+                  ? (hideButtonHover ? '#ca8a04' : '#eab308') 
+                  : (hideButtonHover ? '#1d4ed8' : '#2563eb'),
+                color: clickThrough ? '#111827' : 'white',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: hideButtonHover 
+                  ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
+                  : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                transform: hideButtonHover ? 'translateY(-1px)' : 'none'
+              }}
+              onClick={toggleClickThrough}
+              onMouseEnter={() => setHideButtonHover(true)}
+              onMouseLeave={() => setHideButtonHover(false)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {clickThrough ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                )}
+              </svg>
+              {clickThrough ? 'Show Panel' : 'Hide Panel'}
+            </button>
+            
+            <button 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 500,
+                backgroundColor: showAllButtonHover ? '#4338ca' : '#4f46e5',
                 color: 'white',
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                boxShadow: quitButtonHover 
-                  ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
+                boxShadow: showAllButtonHover 
+                  ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(100, 130, 255, 0.2)' 
                   : '0 2px 4px rgba(0, 0, 0, 0.1)',
-                transform: quitButtonHover ? 'translateY(-1px)' : 'none'
+                transform: showAllButtonHover ? 'translateY(-1px)' : 'none'
               }}
-              onClick={quitApplication}
-              onMouseEnter={() => setQuitButtonHover(true)}
-              onMouseLeave={() => setQuitButtonHover(false)}
-              title="Quit Application"
+              onClick={handleShowAllWidgets}
+              onMouseEnter={() => setShowAllButtonHover(true)}
+              onMouseLeave={() => setShowAllButtonHover(false)}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', marginRight: '6px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
+              Show All
             </button>
-          )}
-        </div>
-
-        {/* Widgets Library Section Header */}
-        <div 
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '10px 14px',
-            backgroundColor: 'rgba(37, 99, 235, 0.15)',
-            borderRadius: '8px',
-            border: showWidgetMenu ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid transparent',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            marginTop: '8px'
-          }}
-          onClick={toggleWidgetMenu}
-          onMouseEnter={() => setMenuButtonHover(true)}
-          onMouseLeave={() => setMenuButtonHover(false)}
-        >
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            fontSize: '13px',
-            fontWeight: 500,
-            color: '#2563eb'
-          }}>
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Widgets Library
+            
+            {window.electronAPI && (
+              <button 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '10px 0',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: quitButtonHover 
+                    ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
+                    : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  transform: quitButtonHover ? 'translateY(-1px)' : 'none'
+                }}
+                onClick={quitApplication}
+                onMouseEnter={() => setQuitButtonHover(true)}
+                onMouseLeave={() => setQuitButtonHover(false)}
+                title="Quit Application"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            style={{ 
-              width: '16px', 
-              height: '16px', 
-              color: '#3b82f6',
-              transform: showWidgetMenu ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease' 
-            }} 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
 
-        {/* Widget Menu Content */}
-        {showWidgetMenu && (
-          <div style={{ 
-            backgroundColor: 'rgba(30, 41, 59, 0.4)',
-            borderRadius: '8px',
-            padding: '16px',
-            marginTop: '4px'
-          }}>
-            <div style={{ 
-              maxHeight: '300px',
-              overflowY: 'auto',
-              paddingRight: '10px',
-              marginRight: '-10px'
-            }}>
-              {/* Telemetry Widgets */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
-                  <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          {/* Reconnect Button - shown when disconnected */}
+          {!isConnected && (
+            <div 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                padding: '8px 12px', 
+                marginTop: '8px', 
+                backgroundColor: 'rgba(239, 68, 68, 0.15)', 
+                color: '#ef4444', 
+                borderRadius: '8px',
+                position: 'relative',
+                cursor: 'pointer'
+              }}
+              onClick={handleReconnect}
+            >
+              {reconnecting ? (
+                <>
+                  <svg className="animate-spin" style={{ width: '16px', height: '16px', marginRight: '8px' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  {availableMetrics.map(metric => (
-                    <div 
-                      key={metric.id} 
-                      style={{
-                        padding: '8px',
-                        backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                        borderRadius: '8px',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  Reconnecting...
+                </>
+              ) : (
+                <>
+                  <svg style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Reconnect to WebSocket
+                </>
+              )}
+            </div>
+          )}
+          
+          {/* Configuration Button */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              backgroundColor: showConfigPanel ? 'rgba(6, 182, 212, 0.2)' : 'rgba(6, 182, 212, 0.1)',
+              borderRadius: '8px',
+              border: showConfigPanel ? '1px solid rgba(6, 182, 212, 0.5)' : '1px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginTop: '8px'
+            }}
+            onClick={toggleConfigPanel}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#06b6d4'
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+              </svg>
+              Panel Configurations {currentDisplayId !== null ? `(Display ${currentDisplayId})` : ''}
+            </div>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                color: '#06b6d4',
+                transform: showConfigPanel ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease' 
+              }} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          
+          {/* Configuration Panel */}
+          {showConfigPanel && (
+            <div style={{ 
+              backgroundColor: 'rgba(30, 41, 59, 0.4)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginTop: '4px'
+            }}>
+              <div style={{ display: 'flex', marginBottom: '10px', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={panelName}
+                  onChange={(e) => setPanelName(e.target.value)}
+                  style={{ 
+                    flex: 1,
+                    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                    color: 'white',
+                    border: '1px solid rgba(75, 85, 99, 0.4)',
+                    borderRadius: '4px',
+                    padding: '6px 10px',
+                    fontSize: '12px'
+                  }}
+                  placeholder="Configuration name"
+                />
+                <button
+                  onClick={handleSavePanel}
+                  style={{ 
+                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                    color: '#06b6d4',
+                    border: '1px solid rgba(6, 182, 212, 0.3)',
+                    borderRadius: '4px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Save Config
+                </button>
+              </div>
+              
+              {savedPanels.length > 0 ? (
+                <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                  {savedPanels.map(name => (
+                    <div
+                      key={name}
+                      onClick={() => handleLoadPanel(name)}
+                      style={{ 
+                        padding: '8px 10px',
+                        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                        color: 'white',
+                        borderRadius: '4px',
+                        marginBottom: '4px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease'
+                        fontSize: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
                       }}
-                      onClick={() => addTelemetryWidget(metric.id, metric.name)}
                     >
-                      <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
+                      <span>{name}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
                     </div>
                   ))}
                 </div>
-              </div>
-              
-              {/* Other Widget Types */}
-              {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                <div key={category} style={{ marginBottom: '20px' }}>
+              ) : (
+                <div style={{ 
+                  padding: '10px', 
+                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  color: '#9ca3af',
+                  textAlign: 'center'
+                }}>
+                  No saved configurations for this display
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Widgets Library Section Header */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              backgroundColor: 'rgba(37, 99, 235, 0.15)',
+              borderRadius: '8px',
+              border: showWidgetMenu ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginTop: '8px'
+            }}
+            onClick={toggleWidgetMenu}
+            onMouseEnter={() => setMenuButtonHover(true)}
+            onMouseLeave={() => setMenuButtonHover(false)}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#2563eb'
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Widgets Library
+            </div>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              style={{ 
+                width: '16px', 
+                height: '16px', 
+                color: '#3b82f6',
+                transform: showWidgetMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease' 
+              }} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {/* Widget Menu Content */}
+          {showWidgetMenu && (
+            <div style={{ 
+              backgroundColor: 'rgba(30, 41, 59, 0.4)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginTop: '4px'
+            }}>
+              <div style={{ 
+                maxHeight: '300px',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                marginRight: '-10px'
+              }}>
+                {/* Telemetry Widgets */}
+                <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
-                    <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
+                    <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </div>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    {widgets.map(widget => (
+                    {availableMetrics.map(metric => (
                       <div 
-                        key={widget.type} 
+                        key={metric.id} 
                         style={{
                           padding: '8px',
                           backgroundColor: 'rgba(30, 41, 59, 0.8)',
@@ -798,274 +1195,322 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                           cursor: 'pointer',
                           transition: 'all 0.2s ease'
                         }}
-                        onClick={() => addWidgetFromRegistry(widget.type)}
-                        title={widget.description}
+                        onClick={() => addTelemetryWidget(metric.id, metric.name)}
                       >
-                        <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+                        <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
                       </div>
                     ))}
                   </div>
                 </div>
-              ))}
+                
+                {/* Other Widget Types */}
+                {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
+                  <div key={category} style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
+                      <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {widgets.map(widget => (
+                        <div 
+                          key={widget.type} 
+                          style={{
+                            padding: '8px',
+                            backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => addWidgetFromRegistry(widget.type)}
+                          title={widget.description}
+                        >
+                          <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Active Widgets Section Header */}
-        <div 
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '10px 14px',
-            backgroundColor: 'rgba(20, 184, 166, 0.15)',
-            borderRadius: '8px',
-            border: showActiveWidgets ? '1px solid rgba(94, 234, 212, 0.5)' : '1px solid transparent',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            marginTop: '8px'
-          }}
-          onClick={toggleActiveWidgetsList}
-          onMouseEnter={() => setActiveWidgetsButtonHover(true)}
-          onMouseLeave={() => setActiveWidgetsButtonHover(false)}
-        >
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            fontSize: '13px',
-            fontWeight: 500,
-            color: '#14b8a6'
-          }}>
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-            Active Widgets {enabledWidgets.length > 0 && `(${enabledWidgets.length})`}
-          </div>
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
+          {/* Active Widgets Section Header */}
+          <div 
             style={{ 
-              width: '16px', 
-              height: '16px', 
-              color: '#14b8a6',
-              transform: showActiveWidgets ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease' 
-            }} 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              backgroundColor: 'rgba(20, 184, 166, 0.15)',
+              borderRadius: '8px',
+              border: showActiveWidgets ? '1px solid rgba(94, 234, 212, 0.5)' : '1px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginTop: '8px'
+            }}
+            onClick={toggleActiveWidgetsList}
+            onMouseEnter={() => setActiveWidgetsButtonHover(true)}
+            onMouseLeave={() => setActiveWidgetsButtonHover(false)}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-
-        {/* Active Widgets Content */}
-        {showActiveWidgets && enabledWidgets.length > 0 && (
-          <div style={{ 
-            backgroundColor: 'rgba(30, 41, 59, 0.4)',
-            borderRadius: '8px',
-            padding: '16px',
-            marginTop: '4px'
-          }}>
             <div style={{ 
               display: 'flex', 
-              flexDirection: 'column', 
-              gap: '8px',
-              maxHeight: '280px',
-              overflowY: 'auto',
-              paddingRight: '10px',
-              marginRight: '-10px'
+              alignItems: 'center',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#14b8a6'
             }}>
-              {enabledWidgets.map(widget => (
-                <div 
-                  key={widget.id}
-                  style={{
-                    padding: '10px',
-                    backgroundColor: selectedWidget?.id === widget.id 
-                      ? 'rgba(20, 184, 166, 0.2)' 
-                      : 'rgba(30, 41, 59, 0.8)',
-                    borderRadius: '6px',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    border: selectedWidget?.id === widget.id 
-                      ? '1px solid rgba(20, 184, 166, 0.5)' 
-                      : '1px solid transparent'
-                  }}
-                  onClick={() => selectWidget(widget)}
-                >
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    fontSize: '12px',
-                    fontWeight: 500, 
-                    color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
-                  }}>
-                    <span>
-                      {widget.title || `Widget ${widget.id.slice(0, 6)}`}
-                      {widget.type === 'telemetry' && widget.options?.metric && (
-                        <span style={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          fontSize: '10px', 
-                          marginTop: '2px',
-                          color: selectedWidget?.id === widget.id ? '#2dd4bf' : '#94a3b8'
-                        }}>
-                          <span style={{
-                            display: 'inline-block',
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            backgroundColor: getColorFromString(widget.options.metric),
-                            marginRight: '5px'
-                          }} />
-                          {widget.options.name || widget.options.metric}
-                        </span>
-                      )}
-                    </span>
-                    <span style={{ 
-                      fontSize: '10px', 
-                      padding: '2px 6px', 
-                      backgroundColor: widget.type === 'telemetry' 
-                        ? 'rgba(56, 189, 248, 0.2)' 
-                        : widget.type === 'track-map' 
-                          ? 'rgba(168, 85, 247, 0.2)'
-                          : widget.type === 'shift-indicator'
-                            ? 'rgba(249, 115, 22, 0.2)'
-                            : widget.type === 'pedal-trace'
-                              ? 'rgba(34, 197, 94, 0.2)'
-                              : 'rgba(20, 184, 166, 0.2)',
-                      color: widget.type === 'telemetry' 
-                        ? '#38bdf8' 
-                        : widget.type === 'track-map' 
-                          ? '#a855f7'
-                          : widget.type === 'shift-indicator'
-                            ? '#f97316'
-                            : widget.type === 'pedal-trace'
-                              ? '#22c55e'
-                              : '#14b8a6',
-                      borderRadius: '4px'
-                    }}>
-                      {widget.type}
-                    </span>
-                  </div>
-                </div>
-              ))}
+              <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              Active Widgets {enabledWidgets.length > 0 && `(${enabledWidgets.length})`}
             </div>
-          </div>
-        )}
-        
-        {showActiveWidgets && enabledWidgets.length === 0 && (
-          <div style={{ 
-            backgroundColor: 'rgba(30, 41, 59, 0.4)',
-            borderRadius: '8px',
-            padding: '16px',
-            marginTop: '4px'
-          }}>
-            <div style={{ 
-              padding: '16px', 
-              backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-              borderRadius: '8px',
-              textAlign: 'center',
-              color: '#94a3b8'
-            }}>
-              No active widgets to display
-            </div>
-          </div>
-        )}
-
-        {/* Selected Widget Section */}
-        {selectedWidget && (
-          <>
-            <div 
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
               style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                borderRadius: '8px',
-                border: '1px solid rgba(147, 197, 253, 0.5)',
-                marginTop: '8px'
-              }}
+                width: '16px', 
+                height: '16px', 
+                color: '#14b8a6',
+                transform: showActiveWidgets ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease' 
+              }} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
             >
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: '#3b82f6',
-                flex: 1
-              }}>
-                <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Selected: {selectedWidget.title}
-              </div>
-              
-              <button 
-                onClick={() => closeWidget(selectedWidget.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  border: 'none',
-                  backgroundColor: 'rgba(60, 60, 60, 0.4)',
-                  color: '#9ca3af',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  marginLeft: '8px'
-                }}
-              >
-                <svg style={{ width: '12px', height: '12px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
 
+          {/* Active Widgets Content */}
+          {showActiveWidgets && enabledWidgets.length > 0 && (
             <div style={{ 
               backgroundColor: 'rgba(30, 41, 59, 0.4)',
               borderRadius: '8px',
               padding: '16px',
               marginTop: '4px'
             }}>
-              <div style={{
-                maxHeight: '400px',
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '8px',
+                maxHeight: '280px',
                 overflowY: 'auto',
                 paddingRight: '10px',
                 marginRight: '-10px'
               }}>
-                <div style={{ 
-                  padding: '12px', 
-                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  marginBottom: '16px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                    <span style={{ color: '#9ca3af' }}>ID:</span>
-                    <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                    <span style={{ color: '#9ca3af' }}>Type:</span>
-                    <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
-                  </div>
-                  {selectedWidget.options?.metric && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                      <span style={{ color: '#9ca3af' }}>Metric:</span>
-                      <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
+                {enabledWidgets.map(widget => (
+                  <div 
+                    key={widget.id}
+                    style={{
+                      padding: '10px',
+                      backgroundColor: selectedWidget?.id === widget.id 
+                        ? 'rgba(20, 184, 166, 0.2)' 
+                        : 'rgba(30, 41, 59, 0.8)',
+                      borderRadius: '6px',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      border: selectedWidget?.id === widget.id 
+                        ? '1px solid rgba(20, 184, 166, 0.5)' 
+                        : '1px solid transparent'
+                    }}
+                    onClick={() => selectWidget(widget)}
+                  >
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      fontSize: '12px',
+                      fontWeight: 500, 
+                      color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
+                    }}>
+                      <span>
+                        {widget.title || `Widget ${widget.id.slice(0, 6)}`}
+                        {widget.type === 'telemetry' && widget.options?.metric && (
+                          <span style={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            fontSize: '10px', 
+                            marginTop: '2px',
+                            color: selectedWidget?.id === widget.id ? '#2dd4bf' : '#94a3b8'
+                          }}>
+                            <span style={{
+                              display: 'inline-block',
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: getColorFromString(widget.options.metric),
+                              marginRight: '5px'
+                            }} />
+                            {widget.options.name || widget.options.metric}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ 
+                        fontSize: '10px', 
+                        padding: '2px 6px', 
+                        backgroundColor: widget.type === 'telemetry' 
+                          ? 'rgba(56, 189, 248, 0.2)' 
+                          : widget.type === 'track-map' 
+                            ? 'rgba(168, 85, 247, 0.2)'
+                            : widget.type === 'shift-indicator'
+                              ? 'rgba(249, 115, 22, 0.2)'
+                              : widget.type === 'pedal-trace'
+                                ? 'rgba(34, 197, 94, 0.2)'
+                                : 'rgba(20, 184, 166, 0.2)',
+                        color: widget.type === 'telemetry' 
+                          ? '#38bdf8' 
+                          : widget.type === 'track-map' 
+                            ? '#a855f7'
+                            : widget.type === 'shift-indicator'
+                              ? '#f97316'
+                              : widget.type === 'pedal-trace'
+                                ? '#22c55e'
+                                : '#14b8a6',
+                        borderRadius: '4px'
+                      }}>
+                        {widget.type}
+                      </span>
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {showActiveWidgets && enabledWidgets.length === 0 && (
+            <div style={{ 
+              backgroundColor: 'rgba(30, 41, 59, 0.4)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginTop: '4px'
+            }}>
+              <div style={{ 
+                padding: '16px', 
+                backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                borderRadius: '8px',
+                textAlign: 'center',
+                color: '#94a3b8'
+              }}>
+                No active widgets to display
+              </div>
+            </div>
+          )}
+
+          {/* Selected Widget Section */}
+          {selectedWidget && (
+            <>
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(147, 197, 253, 0.5)',
+                  marginTop: '8px'
+                }}
+              >
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: '#3b82f6',
+                  flex: 1
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Selected: {selectedWidget.title}
                 </div>
                 
-                {/* Dynamic Widget Controls from Registry */}
-                {getWidgetControls(selectedWidget).length > 0 && (
+                <button 
+                  onClick={() => closeWidget(selectedWidget.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    backgroundColor: 'rgba(60, 60, 60, 0.4)',
+                    color: '#9ca3af',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    marginLeft: '8px'
+                  }}
+                >
+                  <svg style={{ width: '12px', height: '12px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div style={{ 
+                backgroundColor: 'rgba(30, 41, 59, 0.4)',
+                borderRadius: '8px',
+                padding: '16px',
+                marginTop: '4px'
+              }}>
+                <div style={{
+                  maxHeight: '400px',
+                  overflowY: 'auto',
+                  paddingRight: '10px',
+                  marginRight: '-10px'
+                }}>
+                  <div style={{ 
+                    padding: '12px', 
+                    backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                      <span style={{ color: '#9ca3af' }}>ID:</span>
+                      <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                      <span style={{ color: '#9ca3af' }}>Type:</span>
+                      <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
+                    </div>
+                    {selectedWidget.options?.metric && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                        <span style={{ color: '#9ca3af' }}>Metric:</span>
+                        <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Dynamic Widget Controls from Registry */}
+                  {getWidgetControls(selectedWidget).length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                        <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+                      </div>
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                        borderRadius: '8px'
+                      }}>
+                        {getWidgetControls(selectedWidget).map(control => 
+                          renderWidgetControl(control)
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Appearance Controls */}
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
                       <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
                     </div>
                     <div style={{ 
@@ -1073,84 +1518,67 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                       backgroundColor: 'rgba(30, 41, 59, 0.6)', 
                       borderRadius: '8px'
                     }}>
-                      {getWidgetControls(selectedWidget).map(control => 
-                        renderWidgetControl(control)
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Appearance Controls */}
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
-                    <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-                  </div>
-                  <div style={{ 
-                    padding: '12px', 
-                    backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                    borderRadius: '8px'
-                  }}>
-                    <div style={{ marginBottom: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
-                        <span style={{ 
-                          fontSize: '10px', 
-                          padding: '2px 6px', 
-                          backgroundColor: 'rgba(30, 41, 59, 0.8)', 
-                          borderRadius: '9999px',
-                          color: '#d1d5db' 
-                        }}>
-                          {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
-                        </span>
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            backgroundColor: 'rgba(30, 41, 59, 0.8)', 
+                            borderRadius: '9999px',
+                            color: '#d1d5db' 
+                          }}>
+                            {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.3"
+                          max="1"
+                          step="0.1"
+                          value={widgetOpacity[selectedWidget.id] ?? 1}
+                          onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                          style={{
+                            width: '100%',
+                            height: '6px',
+                            borderRadius: '9999px',
+                            backgroundColor: '#4b5563',
+                            appearance: 'none',
+                            outline: 'none',
+                            cursor: 'pointer'
+                          }}
+                        />
                       </div>
-                      <input
-                        type="range"
-                        min="0.3"
-                        max="1"
-                        step="0.1"
-                        value={widgetOpacity[selectedWidget.id] ?? 1}
-                        onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                        style={{
-                          width: '100%',
-                          height: '6px',
-                          borderRadius: '9999px',
-                          backgroundColor: '#4b5563',
-                          appearance: 'none',
-                          outline: 'none',
-                          cursor: 'pointer'
-                        }}
-                      />
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
-                      <button
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
-                          color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
-                          border: 'none',
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
-                      >
-                        {widgetBackgroundTransparent[selectedWidget.id] 
-                          ? '✓ Transparent' 
-                          : 'Make Transparent'}
-                      </button>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
+                        <button
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
+                            color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
+                            border: 'none',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                        >
+                          {widgetBackgroundTransparent[selectedWidget.id] 
+                            ? '✓ Transparent' 
+                            : 'Make Transparent'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
-      </div>
-    </BaseDraggableComponent>
+            </>
+          )}
+        </div>
+      </BaseDraggableComponent>
+    </>
   );
 };
 

@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'app:closeWindowForDisplay',
       'app:getDisplays',
       'app:getCurrentDisplayId',
+      'app:getUserDataPath',
+      'config:save',
+      'config:load',
+      'config:list',
       'telemetry:getData',
       'telemetry:getConnectionStatus',
       'widget:registerForUpdates',
@@ -44,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const validReceiveChannels = [
       'main-process-message',
       'app:toggle-click-through',
+      'app:initial-state',
       'display:id',
       'telemetry:update',
       'telemetry:connectionChange',
@@ -86,6 +91,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeWindowForDisplay: (displayId) => ipcRenderer.invoke('app:closeWindowForDisplay', displayId),
     getDisplays: () => ipcRenderer.invoke('app:getDisplays'),
     getCurrentDisplayId: () => ipcRenderer.invoke('app:getCurrentDisplayId'),
+    getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
+  },
+  // Configuration API
+  config: {
+    saveConfig: (type, name, data) => {
+      return ipcRenderer.invoke('config:save', type, name, data);
+    },
+    loadConfig: (type, name) => {
+      return ipcRenderer.invoke('config:load', type, name);
+    },
+    listConfigs: (type) => {
+      return ipcRenderer.invoke('config:list', type);
+    }
   },
   // Widget management API
   widgets: {

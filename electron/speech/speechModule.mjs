@@ -104,41 +104,62 @@ function processTextForNaturalSpeech(text) {
 
 // Initialize speech module
 function initSpeechModule() {
-  console.log('Initializing native speech module...');
-  
-  // Get available voices asynchronously
-  refreshVoiceCache();
-  
-  // Register IPC handlers for speech functions
-  ipcMain.handle('speech:getVoices', getVoices);
-  ipcMain.handle('speech:speak', (event, text, voice, rate, volume) => speak(text, voice, rate, volume));
-  ipcMain.handle('speech:stop', (event, id) => stop(id));
-  
-  console.log('Speech module initialized');
+  try {
+    console.log('Initializing native speech module...');
+    
+    // Get available voices asynchronously
+    refreshVoiceCache().catch(err => {
+      console.error('Error refreshing voice cache:', err);
+    });
+    
+    // Register IPC handlers for speech functions
+    ipcMain.handle('speech:getVoices', getVoices);
+    ipcMain.handle('speech:speak', (event, text, voice, rate, volume) => speak(text, voice, rate, volume));
+    ipcMain.handle('speech:stop', (event, id) => stop(id));
+    
+    console.log('Speech module initialized');
+  } catch (error) {
+    console.error('Error initializing speech module:', error);
+    // Continue with the app, as speech is not critical
+  }
 }
 
 // Refresh the voice cache
 async function refreshVoiceCache() {
   return new Promise((resolve) => {
-    say.getInstalledVoices((err, voices) => {
-      if (err) {
-        console.error('Error getting installed voices:', err);
+    try {
+      // Check if the platform is supported before calling getInstalledVoices
+      if (!process.platform || !['darwin', 'win32', 'linux'].includes(process.platform)) {
+        console.error(`Unsupported platform: ${process.platform}`);
         voiceCache = [];
         resolve([]);
         return;
       }
       
-      if (Array.isArray(voices)) {
-        console.log(`Found ${voices.length} voices`);
-        voiceCache = voices;
-      } else {
-        console.log('No voices found or voices are not in expected format');
-        console.log('Voices:', voices);
-        voiceCache = [];
-      }
-      
-      resolve(voiceCache);
-    });
+      say.getInstalledVoices((err, voices) => {
+        if (err) {
+          console.error('Error getting installed voices:', err);
+          voiceCache = [];
+          resolve([]);
+          return;
+        }
+        
+        if (Array.isArray(voices)) {
+          console.log(`Found ${voices.length} voices`);
+          voiceCache = voices;
+        } else {
+          console.log('No voices found or voices are not in expected format');
+          console.log('Voices:', voices);
+          voiceCache = [];
+        }
+        
+        resolve(voiceCache);
+      });
+    } catch (error) {
+      console.error('Exception in refreshVoiceCache:', error);
+      voiceCache = [];
+      resolve([]);
+    }
   });
 }
 
