@@ -25,6 +25,10 @@ export const Widget: React.FC<WidgetProps> = ({
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
+  const [position, setPosition] = useState(initialPosition || {
+    x: 200 + Math.random() * 300,
+    y: 200 + Math.random() * 200
+  });
   
   // Listen for highlight events
   useEffect(() => {
@@ -45,6 +49,19 @@ export const Widget: React.FC<WidgetProps> = ({
     
     window.addEventListener('widget:highlight', handleHighlight as EventListener);
     return () => window.removeEventListener('widget:highlight', handleHighlight as EventListener);
+  }, [id]);
+
+  // Listen for position update events
+  useEffect(() => {
+    const handlePositionUpdate = (e: CustomEvent) => {
+      if (e.detail && e.detail.widgetId === id && e.detail.position) {
+        console.log(`Widget component received position update for ${id}:`, e.detail.position);
+        setPosition(e.detail.position);
+      }
+    };
+    
+    window.addEventListener('widget:position', handlePositionUpdate as EventListener);
+    return () => window.removeEventListener('widget:position', handlePositionUpdate as EventListener);
   }, [id]);
 
   // Listen for transparency changes
@@ -78,12 +95,6 @@ export const Widget: React.FC<WidgetProps> = ({
     };
   }, [id]);
 
-  // Generate a random position if none provided
-  const defaultPosition = initialPosition || {
-    x: 200 + Math.random() * 300,
-    y: 200 + Math.random() * 200
-  };
-
   const handleClose = () => {
     if (onClose) {
       onClose();
@@ -98,10 +109,16 @@ export const Widget: React.FC<WidgetProps> = ({
     window.dispatchEvent(event);
   };
 
+  // Handle position changes from the BaseDraggableComponent
+  const handlePositionChange = (newPosition: { x: number, y: number }) => {
+    setPosition(newPosition);
+  };
+
   return (
     <BaseDraggableComponent 
-      initialPosition={defaultPosition} 
+      initialPosition={position} 
       className={`z-10 ${isBackgroundTransparent ? 'no-shadow' : ''}`}
+      onPositionChange={handlePositionChange}
     >
       <BaseWidget
         id={id}

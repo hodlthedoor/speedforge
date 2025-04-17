@@ -47,7 +47,16 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Invoke a function in the main process
   invoke: async (channel, data) => {
-    const validChannels = ["app:quit", "app:toggleClickThrough"];
+    const validChannels = [
+      "app:quit",
+      "app:toggleClickThrough",
+      "app:getCurrentDisplayId",
+      "app:getUserDataPath",
+      "config:save",
+      "config:load",
+      "config:list",
+      "debug:listConfigFiles"
+    ];
     if (validChannels.includes(channel)) {
       return await import_electron.ipcRenderer.invoke(channel, data);
     }
@@ -70,6 +79,51 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
         console.error("Preload: Error in toggleClickThrough:", error);
         throw error;
       }
+    },
+    // Get current display ID
+    getCurrentDisplayId: async () => {
+      return await import_electron.ipcRenderer.invoke("app:getCurrentDisplayId");
+    },
+    // Get user data path
+    getUserDataPath: async () => {
+      return await import_electron.ipcRenderer.invoke("app:getUserDataPath");
+    }
+  },
+  // Configuration API
+  config: {
+    // Save a configuration
+    saveConfig: async (type, name, data) => {
+      try {
+        return await import_electron.ipcRenderer.invoke("config:save", type, name, data);
+      } catch (error) {
+        console.error("Error saving config:", error);
+        return false;
+      }
+    },
+    // Load a configuration
+    loadConfig: async (type, name) => {
+      try {
+        return await import_electron.ipcRenderer.invoke("config:load", type, name);
+      } catch (error) {
+        console.error("Error loading config:", error);
+        return null;
+      }
+    },
+    // List available configurations
+    listConfigs: async (type) => {
+      try {
+        return await import_electron.ipcRenderer.invoke("config:list", type);
+      } catch (error) {
+        console.error("Error listing configs:", error);
+        return [];
+      }
+    }
+  },
+  // Debug API
+  debug: {
+    // List all config files
+    listConfigFiles: async () => {
+      return await import_electron.ipcRenderer.invoke("debug:listConfigFiles");
     }
   }
 });

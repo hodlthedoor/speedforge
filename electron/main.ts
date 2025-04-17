@@ -33,8 +33,21 @@ let rustBackendProcess: ChildProcess | null = null;
 
 // Add a debug log function with timestamps
 function debugLog(...args: any[]) {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] DEBUG:`, ...args);
+  try {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] DEBUG:`, ...args);
+  } catch (error) {
+    // If console.log fails, try using stderr directly
+    try {
+      const timestamp = new Date().toISOString();
+      const message = `[${timestamp}] DEBUG: ${args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ')}\n`;
+      process.stderr.write(message);
+    } catch (stderr_error) {
+      // At this point we can't do much more
+    }
+  }
 }
 
 // Function to check if the WebSocket server is running
@@ -399,29 +412,34 @@ function createWindows() {
     
     // Log when window is ready
     win.webContents.on('did-finish-load', () => {
-      console.log(`Window for display ${display.id} is ready`);
-      
-      // Send display ID to the renderer process
-      win.webContents.send('display:id', display.id);
-      
-      // Send initial UI state to the renderer
-      win.webContents.send('app:initial-state', {
-        clickThrough: true,
-        controlPanelHidden: true
-      });
-      
-      // For macOS, make sure we're the right size after loading
-      if (process.platform === 'darwin') {
-        win.setBounds({
-          x: display.bounds.x,
-          y: display.bounds.y,
-          width: display.bounds.width,
-          height: display.bounds.height
-        });
+      try {
+        // Check if the window is still valid
+        if (win.isDestroyed()) {
+          console.warn('Window was destroyed before we could send display:id');
+          return;
+        }
         
-        // Force an opacity update to ensure transparency
-        win.setOpacity(0.99);
-        setTimeout(() => win.setOpacity(1.0), 100);
+        // Send display ID to the renderer process
+        win.webContents.send('display:id', display.id);
+        
+        // Check again if the window is still valid
+        if (win.isDestroyed()) {
+          console.warn('Window was destroyed before we could send app:initial-state');
+          return;
+        }
+        
+        // Send initial UI state to the renderer
+        win.webContents.send('app:initial-state', {
+          clickThrough: true,
+          controlPanelHidden: true
+        });
+      } catch (error) {
+        // Log error using the safer debugLog function
+        try {
+          debugLog('Error in did-finish-load handler:', error);
+        } catch (loggingError) {
+          process.stderr.write(`Error in did-finish-load handler: ${error}\n`);
+        }
       }
     });
     
@@ -499,6 +517,57 @@ function closeWindowForDisplay(displayId: number): boolean {
   }
   
   return false;
+}
+
+// Send message to renderer safely with error handling
+function safelySendToRenderer(win: BrowserWindow, channel: string, data: any) {
+  try {
+    if (!win || win.isDestroyed() || !win.webContents) {
+      debugLog(`Cannot send ${channel} - window is invalid`);
+      return false;
+    }
+    
+    win.webContents.send(channel, data);
+    return true;
+  } catch (error) {
+    try {
+      debugLog(`Error sending ${channel} to renderer:`, error);
+    } catch (loggingError) {
+      process.stderr.write(`Error sending ${channel} to renderer: ${error}\n`);
+    }
+    return false;
+  }
+}
+
+// Toggle click-through for all windows safely
+function toggleClickThroughForAllWindows(newState: boolean) {
+  try {
+    // Track success status
+    let allSucceeded = true;
+    
+    for (const win of windows) {
+      try {
+        if (win.isDestroyed()) continue;
+        
+        // Update window title with state for tracking
+        win.setTitle(`Speedforge (click-through:${newState})`);
+        
+        // Send message to renderer
+        const sendSuccess = safelySendToRenderer(win, 'app:toggle-click-through', newState);
+        if (!sendSuccess) {
+          allSucceeded = false;
+        }
+      } catch (windowError) {
+        debugLog(`Error toggling click-through for window:`, windowError);
+        allSucceeded = false;
+      }
+    }
+    
+    return allSucceeded;
+  } catch (error) {
+    debugLog('Error in toggleClickThroughForAllWindows:', error);
+    return false;
+  }
 }
 
 // Setup basic IPC listeners
@@ -673,6 +742,8 @@ function setupIpcListeners() {
   // Configuration handlers
   ipcMain.handle('config:save', async (event, type: string, name: string, data: any) => {
     try {
+      debugLog(`Saving config: type=${type}, name=${name}, size=${JSON.stringify(data).length}`);
+      
       const userDataPath = app.getPath('userData');
       const configDir = path.join(userDataPath, 'configs', type);
       
@@ -683,36 +754,46 @@ function setupIpcListeners() {
       
       const configPath = path.join(configDir, `${name}.json`);
       fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+      
+      debugLog(`Config saved successfully to ${configPath}`);
       return true;
     } catch (error) {
-      console.error('Error saving config:', error);
+      debugLog('Error saving config:', error);
       return false;
     }
   });
 
   ipcMain.handle('config:load', async (event, type: string, name: string) => {
     try {
+      debugLog(`Loading config: type=${type}, name=${name}`);
+      
       const userDataPath = app.getPath('userData');
       const configPath = path.join(userDataPath, 'configs', type, `${name}.json`);
       
       if (!fs.existsSync(configPath)) {
+        debugLog(`Config file does not exist: ${configPath}`);
         return null;
       }
       
       const data = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(data);
+      const result = JSON.parse(data);
+      debugLog(`Config loaded successfully from ${configPath}`);
+      return result;
     } catch (error) {
-      console.error('Error loading config:', error);
+      debugLog('Error loading config:', error);
       return null;
     }
   });
 
   ipcMain.handle('config:list', async (event, type: string) => {
     try {
+      debugLog(`Listing configs for type: ${type}`);
+      
       const userDataPath = app.getPath('userData');
       const configDir = path.join(userDataPath, 'configs', type);
       
       if (!fs.existsSync(configDir)) {
+        debugLog(`Config directory does not exist: ${configDir}`);
         return [];
       }
       
@@ -720,9 +801,10 @@ function setupIpcListeners() {
         .filter(file => file.endsWith('.json'))
         .map(file => file.replace('.json', ''));
       
+      debugLog(`Found ${files.length} config files: ${files.join(', ')}`);
       return files;
     } catch (error) {
-      console.error('Error listing configs:', error);
+      debugLog('Error listing configs:', error);
       return [];
     }
   });
@@ -929,138 +1011,177 @@ app.whenReady().then(async () => {
   
   // Register global shortcut for Ctrl+Space to toggle click-through
   globalShortcut.register('CommandOrControl+Space', () => {
-    console.log('Global Ctrl+Space shortcut triggered');
-    
-    // Toggle click-through for all windows
-    for (const win of windows) {
-      // Get current click-through state from window
-      const isCurrentlyClickThrough = win.getTitle().includes('click-through:true');
+    try {
+      debugLog('Global Ctrl+Space shortcut triggered');
+      
+      // Get current click-through state from the first window (if any)
+      let isCurrentlyClickThrough = true;
+      if (windows.length > 0 && !windows[0].isDestroyed()) {
+        isCurrentlyClickThrough = windows[0].getTitle().includes('click-through:true');
+      }
+      
+      // Toggle to opposite state
       const newState = !isCurrentlyClickThrough;
+      debugLog(`Global shortcut toggling click-through from ${isCurrentlyClickThrough} to ${newState}`);
       
-      console.log(`Global shortcut toggling click-through from ${isCurrentlyClickThrough} to ${newState}`);
-      
-      // Send message to renderer
-      win.webContents.send('app:toggle-click-through', newState);
-      
-      // Update window title with state for tracking
-      win.setTitle(`Speedforge (click-through:${newState})`);
+      // Apply the new state to all windows
+      toggleClickThroughForAllWindows(newState);
+    } catch (error) {
+      // Use the debugLog function which is more robust
+      try {
+        debugLog('Error in global shortcut handler:', error);
+      } catch (loggingError) {
+        // If even debugLog fails, last resort is to write to stderr directly
+        process.stderr.write(`Error in global shortcut handler: ${error}\n`);
+      }
     }
   });
   
   // Setup screen event listeners now that the app is ready
   screen.on('display-added', (event, display) => {
-    console.log('New display detected:', display);
-    
-    // Only create window if auto-create is enabled
-    if (!autoCreateWindowsForNewDisplays) {
-      console.log('Auto-create new windows is disabled, skipping window creation for new display');
-      return;
-    }
-    
-    // Create a window for the newly added display
-    const win = new BrowserWindow({
-      x: display.bounds.x,
-      y: display.bounds.y,
-      width: display.bounds.width,
-      height: display.bounds.height,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true,
-        backgroundThrottling: false,
-      },
-      transparent: true,
-      backgroundColor: '#00000000',
-      frame: false,
-      skipTaskbar: true,
-      hasShadow: false,
-      titleBarStyle: 'hidden',
-      titleBarOverlay: false,
-      fullscreen: false,
-      type: 'panel',
-      vibrancy: null as any,
-      visualEffectState: null as any,
-      focusable: true,
-      alwaysOnTop: true
-    });
-
-    // Set platform-specific settings
-    if (process.platform === 'darwin') {
-      win.setWindowButtonVisibility(false);
-      win.setAlwaysOnTop(true, 'screen-saver', 1);
-      win.setBackgroundColor('#00000000');
-      win.setOpacity(1.0);
-    } else if (process.platform === 'win32') {
-      win.setAlwaysOnTop(true, 'screen-saver');
-    } else {
-      win.setAlwaysOnTop(true);
-    }
-
-    // Start with click-through enabled
-    win.setIgnoreMouseEvents(true, { forward: true });
-    win.setTitle('Speedforge (click-through:true)');
-    
-    // Load the app
-    const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
-    win.loadURL(mainUrl);
-    
-    // Send initial UI state when the window is loaded
-    win.webContents.on('did-finish-load', () => {
-      // Send display ID to the renderer process
-      win.webContents.send('display:id', display.id);
+    try {
+      debugLog('New display detected:', display);
       
-      // Send initial UI state to the renderer
-      win.webContents.send('app:initial-state', {
-        clickThrough: true,
-        controlPanelHidden: true
+      // Only create window if auto-create is enabled
+      if (!autoCreateWindowsForNewDisplays) {
+        debugLog('Auto-create new windows is disabled, skipping window creation for new display');
+        return;
+      }
+      
+      // Create a window for the newly added display
+      const win = new BrowserWindow({
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          nodeIntegration: false,
+          contextIsolation: true,
+          backgroundThrottling: false,
+        },
+        transparent: true,
+        backgroundColor: '#00000000',
+        frame: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        titleBarStyle: 'hidden',
+        titleBarOverlay: false,
+        fullscreen: false,
+        type: 'panel',
+        vibrancy: null as any,
+        visualEffectState: null as any,
+        focusable: true,
+        alwaysOnTop: true
       });
-    });
-    
-    // Store the window reference
-    windows.push(win);
-    
-    // Map this window to its display ID
-    displayWindowMap.set(display.id, win);
-    
-    // Store the display ID in the window's metadata for reference
-    (win as any).displayId = display.id;
-    
-    console.log(`Created new window for display ${display.id}`);
+
+      // Set platform-specific settings
+      if (process.platform === 'darwin') {
+        win.setWindowButtonVisibility(false);
+        win.setAlwaysOnTop(true, 'screen-saver', 1);
+        win.setBackgroundColor('#00000000');
+        win.setOpacity(1.0);
+      } else if (process.platform === 'win32') {
+        win.setAlwaysOnTop(true, 'screen-saver');
+      } else {
+        win.setAlwaysOnTop(true);
+      }
+
+      // Start with click-through enabled
+      win.setIgnoreMouseEvents(true, { forward: true });
+      win.setTitle('Speedforge (click-through:true)');
+      
+      // Load the app
+      const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, 'index.html')}`;
+      win.loadURL(mainUrl);
+      
+      // Send initial UI state when the window is loaded
+      win.webContents.on('did-finish-load', () => {
+        try {
+          // Check if the window is still valid
+          if (win.isDestroyed()) {
+            console.warn('Window was destroyed before we could send display:id');
+            return;
+          }
+          
+          // Send display ID to the renderer process
+          win.webContents.send('display:id', display.id);
+          
+          // Check again if the window is still valid
+          if (win.isDestroyed()) {
+            console.warn('Window was destroyed before we could send app:initial-state');
+            return;
+          }
+          
+          // Send initial UI state to the renderer
+          win.webContents.send('app:initial-state', {
+            clickThrough: true,
+            controlPanelHidden: true
+          });
+        } catch (error) {
+          // Log error using the safer debugLog function
+          try {
+            debugLog('Error in did-finish-load handler:', error);
+          } catch (loggingError) {
+            process.stderr.write(`Error in did-finish-load handler: ${error}\n`);
+          }
+        }
+      });
+      
+      // Store the window reference
+      windows.push(win);
+      
+      // Map this window to its display ID
+      displayWindowMap.set(display.id, win);
+      
+      // Store the display ID in the window's metadata for reference
+      (win as any).displayId = display.id;
+      
+      debugLog(`Created new window for display ${display.id}`);
+    } catch (error) {
+      try {
+        debugLog('Error handling display-added event:', error);
+      } catch (loggingError) {
+        process.stderr.write(`Error handling display-added event: ${error}\n`);
+      }
+    }
   });
 
   screen.on('display-removed', (event, display) => {
-    console.log('Display removed:', display);
-    
-    // Get window before attempting to close it
-    const win = displayWindowMap.get(display.id);
-    
-    // Close the window associated with this display
-    const result = closeWindowForDisplay(display.id);
-    console.log(`Window for removed display ${display.id} was ${result ? 'closed' : 'not found or could not be closed'}`);
-    
-    // Force additional cleanup if the window was found but not properly closed
-    if (!result && win && !win.isDestroyed()) {
-      console.log(`Forcing additional cleanup for display ${display.id}`);
-      try {
-        win.removeAllListeners();
-        win.hide();
-        win.destroy();
-        
-        // Clean up tracking maps
-        displayWindowMap.delete(display.id);
-        const windowIndex = windows.indexOf(win);
-        if (windowIndex >= 0) {
-          windows.splice(windowIndex, 1);
+    try {
+      debugLog('Display removed:', display);
+      
+      // Get window before attempting to close it
+      const win = displayWindowMap.get(display.id);
+      
+      // Close the window associated with this display
+      const result = closeWindowForDisplay(display.id);
+      debugLog(`Window for removed display ${display.id} was ${result ? 'closed' : 'not found or could not be closed'}`);
+      
+      // Force additional cleanup if the window was found but not properly closed
+      if (!result && win && !win.isDestroyed()) {
+        debugLog(`Forcing additional cleanup for display ${display.id}`);
+        try {
+          win.removeAllListeners();
+          win.hide();
+          win.destroy();
+          
+          // Clean up tracking maps
+          displayWindowMap.delete(display.id);
+          const windowIndex = windows.indexOf(win);
+          if (windowIndex >= 0) {
+            windows.splice(windowIndex, 1);
+          }
+        } catch (cleanupError) {
+          debugLog(`Error during forced cleanup for display ${display.id}:`, cleanupError);
         }
-      } catch (cleanupError) {
-        console.error(`Error during forced cleanup for display ${display.id}:`, cleanupError);
       }
-    }
-    
-    // Verify cleanup was successful
-    if (displayWindowMap.has(display.id)) {
-      console.warn(`Window for display ${display.id} is still in displayWindowMap after cleanup attempt`);
-      displayWindowMap.delete(display.id);
+    } catch (error) {
+      try {
+        debugLog('Error handling display-removed event:', error);
+      } catch (loggingError) {
+        process.stderr.write(`Error handling display-removed event: ${error}\n`);
+      }
     }
   });
   

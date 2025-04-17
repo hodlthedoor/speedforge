@@ -135,6 +135,8 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
       className={`drag-handle w-auto ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
       style={{ opacity: currentOpacity, ...style }}
       onClick={handleWidgetClick}
+      id={id}
+      data-widget-id={id}
     >
       <div className="p-3 min-w-[200px] min-h-[100px] overflow-auto">
         {isLoading ? (

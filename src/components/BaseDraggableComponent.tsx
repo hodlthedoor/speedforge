@@ -19,6 +19,61 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Extract widget ID from children if possible
+  const getWidgetId = () => {
+    try {
+      if (!containerRef.current) return null;
+      
+      // First, try finding a child with data-widget-id attribute
+      const element = containerRef.current.querySelector('[data-widget-id]');
+      if (element) {
+        return element.getAttribute('data-widget-id');
+      }
+      
+      // Next, try finding a child with id attribute
+      const elementWithId = containerRef.current.querySelector('[id]');
+      if (elementWithId) {
+        return elementWithId.getAttribute('id');
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting widget ID:', error);
+      return null;
+    }
+  };
+
+  // Listen for widget:position events to update position
+  useEffect(() => {
+    const handlePositionUpdate = (e: CustomEvent) => {
+      const widgetId = getWidgetId();
+      if (!widgetId) return;
+      
+      try {
+        if (e.detail && e.detail.widgetId === widgetId && e.detail.position) {
+          const newPosition = e.detail.position;
+          console.log(`Position update received for widget ${widgetId}:`, newPosition);
+          
+          // Update the position state
+          setPosition(newPosition);
+          
+          // Notify parent if callback provided
+          if (onPositionChange) {
+            onPositionChange(newPosition);
+          }
+        }
+      } catch (error) {
+        console.error('Error handling position update:', error);
+      }
+    };
+    
+    window.addEventListener('widget:position', handlePositionUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('widget:position', handlePositionUpdate as EventListener);
+    };
+  }, [onPositionChange]);
 
   // Handle mouse down to start dragging
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {

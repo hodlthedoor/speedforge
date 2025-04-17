@@ -1,29 +1,38 @@
-interface ElectronAPI {
-  isElectron: boolean;
-  platform: string;
-  invoke: (channel: string, data?: any) => Promise<any>;
-  send: (channel: string, data?: any) => void;
-  on: (channel: string, callback: (data: any) => void) => (() => void) | undefined;
-  removeAllListeners: (channel: string) => void;
-  app: {
-    quit: () => Promise<void>;
-    toggleClickThrough: (state: boolean) => Promise<{ success: boolean, state: boolean, error?: string }>;
+export interface ElectronConfigAPI {
+  config?: {
+    saveConfig: (type: string, name: string, data: any) => Promise<boolean>;
+    loadConfig: (type: string, name: string) => Promise<any>;
+    listConfigs: (type: string) => Promise<string[]>;
   };
-  widgets: {
-    getAll: () => Promise<{ success: boolean; widgets: string[] }>;
-    create: (config: { widgetId: string; widgetType: string; width: number; height: number; params?: any }) => Promise<{ success: boolean }>;
-    close: (widgetId: string) => Promise<{ success: boolean }>;
-    setOpacity: (widgetId: string, opacity: number) => Promise<void>;
-    setVisible: (widgetId: string, visible: boolean) => Promise<void>;
-    setSize: (widgetId: string, width: number, height: number) => Promise<void>;
-    setAlwaysOnTop: (widgetId: string, alwaysOnTop: boolean) => Promise<void>;
-    updateParams: (widgetId: string, params: any) => Promise<{ success: boolean }>;
+  app: {
+    toggleClickThrough: (state: boolean) => Promise<any>;
+    quit: () => void;
+    getUserDataPath?: () => Promise<string>;
+    getCurrentDisplayId?: () => Promise<any>;
+    getDisplays?: () => Promise<any>;
+    closeWindowForDisplay?: (displayId: number) => Promise<any>;
+  };
+  debug?: {
+    listConfigFiles: () => Promise<any>;
+  };
+  on: (channel: string, callback: (data: any) => void) => (() => void);
+  send: (channel: string, data: any) => void;
+  widgets?: {
+    create: (options: any) => Promise<any>;
+    close: (widgetId: string) => Promise<any>;
+    getAll: () => Promise<any>;
+    setPosition: (widgetId: string, x: number, y: number) => Promise<any>;
+    setSize: (widgetId: string, width: number, height: number) => Promise<any>;
+    setAlwaysOnTop: (widgetId: string, alwaysOnTop: boolean) => Promise<any>;
+    setOpacity: (widgetId: string, opacity: number) => Promise<any>;
+    setVisible: (widgetId: string, visible: boolean) => Promise<any>;
+    updateParams: (widgetId: string, params: any) => Promise<any>;
   };
 }
 
 declare global {
   interface Window {
-    electronAPI: ElectronAPI;
+    electronAPI?: ElectronConfigAPI;
   }
 }
 

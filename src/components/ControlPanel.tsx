@@ -350,6 +350,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             closeWidget(widget.id);
           });
           
+          // Track widgets being added
+          const newWidgetIds: string[] = [];
+          
           // Add widgets from config
           config.widgets.forEach(widgetConfig => {
             if (widgetConfig.enabled) {
@@ -365,57 +368,69 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               
               if (onAddWidget) {
                 onAddWidget(newWidget);
-              }
-              
-              // Set widget position using its position info
-              if (widgetConfig.position) {
-                // Dispatch a position update event
-                const posEvent = new CustomEvent('widget:position', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    position: widgetConfig.position 
-                  }
-                });
-                window.dispatchEvent(posEvent);
-              }
-              
-              // Set opacity if specified
-              if (widgetConfig.opacity !== undefined) {
-                const opacityEvent = new CustomEvent('widget:opacity', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    opacity: widgetConfig.opacity 
-                  }
-                });
-                window.dispatchEvent(opacityEvent);
-                
-                // Update local state
-                setWidgetOpacity(prev => ({
-                  ...prev,
-                  [widgetConfig.id]: widgetConfig.opacity
-                }));
-              }
-              
-              // Set background transparency if specified
-              if (widgetConfig.isBackgroundTransparent !== undefined) {
-                const bgEvent = new CustomEvent('widget:background-transparent', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    transparent: widgetConfig.isBackgroundTransparent 
-                  }
-                });
-                window.dispatchEvent(bgEvent);
-                
-                // Update local state
-                setWidgetBackgroundTransparent(prev => ({
-                  ...prev,
-                  [widgetConfig.id]: widgetConfig.isBackgroundTransparent
-                }));
+                newWidgetIds.push(widgetConfig.id);
               }
             }
           });
           
+          // Set panel name
           setPanelName(name);
+          
+          // Apply widget positions and settings with a small delay to ensure widgets are mounted
+          setTimeout(() => {
+            console.log(`Applying positions and settings to ${newWidgetIds.length} widgets`);
+            
+            config.widgets.forEach(widgetConfig => {
+              if (widgetConfig.enabled) {
+                // Set widget position using its position info
+                if (widgetConfig.position) {
+                  // Dispatch a position update event
+                  const posEvent = new CustomEvent('widget:position', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      position: widgetConfig.position 
+                    }
+                  });
+                  window.dispatchEvent(posEvent);
+                  console.log(`Sent position update for widget ${widgetConfig.id}:`, widgetConfig.position);
+                }
+                
+                // Set opacity if specified
+                if (widgetConfig.opacity !== undefined) {
+                  const opacityEvent = new CustomEvent('widget:opacity', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      opacity: widgetConfig.opacity 
+                    }
+                  });
+                  window.dispatchEvent(opacityEvent);
+                  
+                  // Update local state
+                  setWidgetOpacity(prev => ({
+                    ...prev,
+                    [widgetConfig.id]: widgetConfig.opacity
+                  }));
+                }
+                
+                // Set background transparency if specified
+                if (widgetConfig.isBackgroundTransparent !== undefined) {
+                  const bgEvent = new CustomEvent('widget:background-transparent', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      transparent: widgetConfig.isBackgroundTransparent 
+                    }
+                  });
+                  window.dispatchEvent(bgEvent);
+                  
+                  // Update local state
+                  setWidgetBackgroundTransparent(prev => ({
+                    ...prev,
+                    [widgetConfig.id]: widgetConfig.isBackgroundTransparent
+                  }));
+                }
+              }
+            });
+          }, 100); // Small delay to ensure widgets are mounted
         }
       });
   }, [activeWidgets, closeWidget, onAddWidget]);
@@ -1094,9 +1109,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     console.log('Debug button clicked');
                     e.preventDefault();
                     if (window.electronAPI?.debug) {
-                      window.electronAPI.debug.listConfigFiles().then(result => {
+                      // Use type assertion to access debug property
+                      const api = window.electronAPI as any;
+                      api.debug.listConfigFiles().then((result: any) => {
                         console.log('Config files:', result);
-                      }).catch(err => {
+                      }).catch((err: any) => {
                         console.error('Error listing config files:', err);
                       });
                     } else {

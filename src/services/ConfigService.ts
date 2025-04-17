@@ -1,30 +1,6 @@
-import { WidgetInstance } from './WidgetManager';
-
-// Define a type for the ElectronAPI to access in TypeScript
-interface ElectronConfigAPI {
-  config: {
-    saveConfig: (type: string, name: string, data: any) => Promise<boolean>;
-    loadConfig: (type: string, name: string) => Promise<any>;
-    listConfigs: (type: string) => Promise<string[]>;
-  };
-  app: {
-    toggleClickThrough: (state: boolean) => Promise<any>;
-    quit: () => Promise<void>;
-    getUserDataPath: () => Promise<string>;
-    getCurrentDisplayId: () => Promise<any>;
-    getDisplays: () => Promise<any>;
-    closeWindowForDisplay: (displayId: number) => Promise<any>;
-  };
-  on: (channel: string, callback: (data: any) => void) => (() => void);
-  send: (channel: string, data: any) => void;
-}
-
-// Access the global window.electronAPI safely
-declare global {
-  interface Window {
-    electronAPI?: ElectronConfigAPI;
-  }
-}
+import { WidgetInstance } from '../services/WidgetManager';
+import WidgetManager from '../services/WidgetManager';
+import type { ElectronConfigAPI } from '../types/electron';
 
 export interface WidgetLayout {
   id: string;
@@ -49,17 +25,24 @@ export class ConfigService {
   private static instance: ConfigService;
   private configPath: string = '';
   private currentDisplayId: number | null = null;
+  private electronAPI: ElectronConfigAPI | undefined;
+  private widgetManager: typeof WidgetManager;
+  private configDirectory = '';
 
-  private constructor() {
+  constructor() {
+    this.widgetManager = WidgetManager;
+    this.electronAPI = window.electronAPI;
+    console.log('ConfigService initialized');
+    
     // Use default values for immediate rendering even before electronAPI is available
     this.configPath = '';
     this.currentDisplayId = 1; // Default to display 1
     
     // Initialize with electron's app.getPath to get the proper user data folder
-    if (window.electronAPI) {
+    if (this.electronAPI) {
       try {
         // Use type assertions to access methods
-        const api = window.electronAPI as any;
+        const api = this.electronAPI as any;
         if (api.app && typeof api.app.getUserDataPath === 'function') {
           api.app.getUserDataPath().then((path: string) => {
             this.configPath = path;
@@ -112,7 +95,7 @@ export class ConfigService {
   // Save the current panel configuration for the current display
   async savePanelConfig(name: string, widgets: WidgetInstance[]): Promise<boolean> {
     try {
-      if (!window.electronAPI || this.currentDisplayId === null) {
+      if (!this.electronAPI || this.currentDisplayId === null) {
         console.error('Cannot save panel config: electronAPI not available or currentDisplayId is null');
         return false;
       }
@@ -154,7 +137,7 @@ export class ConfigService {
       });
       
       // Use type assertion to access the config API
-      const api = window.electronAPI as ElectronConfigAPI;
+      const api = this.electronAPI;
       if (api.config && typeof api.config.saveConfig === 'function') {
         const result = await api.config.saveConfig(
           'panel', 
@@ -165,7 +148,7 @@ export class ConfigService {
         console.log(`Save result: ${result}`);
         return result;
       } else {
-        console.error('electronAPI.config.saveConfig is not a function');
+        console.error('electronAPI.config.saveConfig is not available');
         return false;
       }
     } catch (error) {
@@ -177,7 +160,7 @@ export class ConfigService {
   // Load a panel configuration for the current display
   async loadPanelConfig(name: string): Promise<PanelConfig | null> {
     try {
-      if (!window.electronAPI || this.currentDisplayId === null) {
+      if (!this.electronAPI || this.currentDisplayId === null) {
         console.error('Cannot load panel config: electronAPI not available or currentDisplayId is null');
         return null;
       }
@@ -185,9 +168,9 @@ export class ConfigService {
       console.log(`Loading panel config "${name}" for display ${this.currentDisplayId}`);
       
       // Use type assertion
-      const api = window.electronAPI as ElectronConfigAPI;
+      const api = this.electronAPI;
       if (!api.config || typeof api.config.loadConfig !== 'function') {
-        console.error('electronAPI.config.loadConfig is not a function');
+        console.error('electronAPI.config.loadConfig is not available');
         return null;
       }
       
@@ -219,17 +202,17 @@ export class ConfigService {
   // List available panel configurations for the current display
   async listPanelConfigs(): Promise<string[]> {
     try {
-      if (!window.electronAPI || this.currentDisplayId === null) {
+      if (!this.electronAPI || this.currentDisplayId === null) {
         console.error('Cannot list panel configs: electronAPI not available or currentDisplayId is null');
         return [];
       }
       
       console.log(`Listing panel configs for display ${this.currentDisplayId}`);
       
-      // Use type assertion with the interface we defined
-      const api = window.electronAPI as any;
+      // Check if config API is available
+      const api = this.electronAPI;
       if (!api.config || typeof api.config.listConfigs !== 'function') {
-        console.error('electronAPI.config.listConfigs is not a function');
+        console.error('electronAPI.config.listConfigs is not available');
         return [];
       }
       
@@ -254,13 +237,49 @@ export class ConfigService {
 
   // Helper methods to get widget properties
   private getWidgetPosition(widgetId: string): { x: number, y: number } {
-    // Get position from DOM or WidgetManager
-    const element = document.querySelector(`[data-widget-id="${widgetId}"]`);
-    if (element) {
-      const rect = element.getBoundingClientRect();
-      return { x: rect.left, y: rect.top };
+    // Try to get position from DOM using data-widget-id attribute first
+    try {
+      // Find the draggable container that contains this widget
+      const container = document.querySelector(`[data-widget-id="${widgetId}"]`);
+      if (container) {
+        // The container itself has the position we need
+        const parentContainer = container.closest('div');
+        if (parentContainer) {
+          const style = window.getComputedStyle(parentContainer);
+          const left = parseInt(style.left, 10);
+          const top = parseInt(style.top, 10);
+          
+          if (!isNaN(left) && !isNaN(top)) {
+            console.log(`Found position for widget ${widgetId}: x=${left}, y=${top}`);
+            return { x: left, y: top };
+          }
+        }
+      }
+      
+      // Fallback: Check any element that might contain the widget ID
+      const widgetElements = document.querySelectorAll(`[id="${widgetId}"]`);
+      for (let i = 0; i < widgetElements.length; i++) {
+        const element = widgetElements[i];
+        const parentContainer = element.closest('div[style*="position: absolute"]');
+        
+        if (parentContainer) {
+          const style = window.getComputedStyle(parentContainer);
+          const left = parseInt(style.left, 10);
+          const top = parseInt(style.top, 10);
+          
+          if (!isNaN(left) && !isNaN(top)) {
+            console.log(`Fallback: Found position for widget ${widgetId}: x=${left}, y=${top}`);
+            return { x: left, y: top };
+          }
+        }
+      }
+      
+      console.warn(`Could not find position for widget ${widgetId}, using default`);
+      return { x: 100 + Math.random() * 300, y: 100 + Math.random() * 200 };
+    } catch (error) {
+      console.error(`Error getting position for widget ${widgetId}:`, error);
+      return { x: 50, y: 50 };
     }
-    return { x: 0, y: 0 };
   }
 
   private getWidgetOpacity(widgetId: string): number {

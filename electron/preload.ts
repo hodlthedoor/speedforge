@@ -57,7 +57,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Invoke a function in the main process
   invoke: async (channel: string, data?: any): Promise<any> => {
-    const validChannels = ['app:quit', 'app:toggleClickThrough'];
+    const validChannels = [
+      'app:quit', 
+      'app:toggleClickThrough',
+      'app:getCurrentDisplayId',
+      'app:getUserDataPath',
+      'config:save',
+      'config:load',
+      'config:list',
+      'debug:listConfigFiles'
+    ];
     
     if (validChannels.includes(channel)) {
       return await ipcRenderer.invoke(channel, data);
@@ -84,6 +93,57 @@ contextBridge.exposeInMainWorld('electronAPI', {
         console.error('Preload: Error in toggleClickThrough:', error);
         throw error;
       }
+    },
+
+    // Get current display ID
+    getCurrentDisplayId: async (): Promise<any> => {
+      return await ipcRenderer.invoke('app:getCurrentDisplayId');
+    },
+
+    // Get user data path
+    getUserDataPath: async (): Promise<string> => {
+      return await ipcRenderer.invoke('app:getUserDataPath');
+    }
+  },
+
+  // Configuration API
+  config: {
+    // Save a configuration
+    saveConfig: async (type: string, name: string, data: any): Promise<boolean> => {
+      try {
+        return await ipcRenderer.invoke('config:save', type, name, data);
+      } catch (error) {
+        console.error('Error saving config:', error);
+        return false;
+      }
+    },
+    
+    // Load a configuration
+    loadConfig: async (type: string, name: string): Promise<any> => {
+      try {
+        return await ipcRenderer.invoke('config:load', type, name);
+      } catch (error) {
+        console.error('Error loading config:', error);
+        return null;
+      }
+    },
+    
+    // List available configurations
+    listConfigs: async (type: string): Promise<string[]> => {
+      try {
+        return await ipcRenderer.invoke('config:list', type);
+      } catch (error) {
+        console.error('Error listing configs:', error);
+        return [];
+      }
+    }
+  },
+
+  // Debug API
+  debug: {
+    // List all config files
+    listConfigFiles: async (): Promise<any> => {
+      return await ipcRenderer.invoke('debug:listConfigFiles');
     }
   }
 });
