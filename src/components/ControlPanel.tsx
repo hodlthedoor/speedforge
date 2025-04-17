@@ -312,15 +312,30 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Save the current panel configuration
   const handleSavePanel = useCallback(() => {
+    console.log(`Attempting to save panel config "${panelName}" with ${activeWidgets.length} widgets`);
+    if (!panelName || panelName.trim() === '') {
+      console.error("Cannot save panel config: no panel name provided");
+      return;
+    }
+    
     const configService = ConfigService.getInstance();
+    console.log("Got ConfigService instance, saving panel config...");
+    
     configService.savePanelConfig(panelName, activeWidgets)
       .then(success => {
+        console.log(`Save panel config result: ${success}`);
         if (success) {
           // Update the list of saved panels
           configService.listPanelConfigs().then(configs => {
+            console.log(`Updated saved panel list: ${configs.join(', ')}`);
             setSavedPanels(configs);
           });
+        } else {
+          console.error("Failed to save panel config");
         }
+      })
+      .catch(err => {
+        console.error("Error saving panel config:", err);
       });
   }, [activeWidgets, panelName]);
 
@@ -1056,7 +1071,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   placeholder="Configuration name"
                 />
                 <button
-                  onClick={handleSavePanel}
+                  onClick={(e) => {
+                    console.log('Save Config button clicked');
+                    e.preventDefault(); // Prevent any default action
+                    handleSavePanel();
+                  }}
                   style={{ 
                     backgroundColor: 'rgba(6, 182, 212, 0.15)',
                     color: '#06b6d4',
@@ -1069,6 +1088,32 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   }}
                 >
                   Save Config
+                </button>
+                <button
+                  onClick={(e) => {
+                    console.log('Debug button clicked');
+                    e.preventDefault();
+                    if (window.electronAPI?.debug) {
+                      window.electronAPI.debug.listConfigFiles().then(result => {
+                        console.log('Config files:', result);
+                      }).catch(err => {
+                        console.error('Error listing config files:', err);
+                      });
+                    } else {
+                      console.error('Debug API not available');
+                    }
+                  }}
+                  style={{ 
+                    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                    color: '#ef4444',
+                    border: '1px solid rgba(220, 38, 38, 0.3)',
+                    borderRadius: '4px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Debug
                 </button>
               </div>
               

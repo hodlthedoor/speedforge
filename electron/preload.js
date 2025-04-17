@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'config:save',
       'config:load',
       'config:list',
+      'debug:listConfigFiles',
       'telemetry:getData',
       'telemetry:getConnectionStatus',
       'widget:registerForUpdates',
@@ -142,6 +143,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Update widget parameters
     updateParams: (widgetId, params) => {
       return ipcRenderer.invoke('widget:updateParams', { widgetId, params });
+    }
+  },
+  // Debug API
+  debug: {
+    // List all config files
+    listConfigFiles: () => {
+      return ipcRenderer.invoke('debug:listConfigFiles');
     }
   }
 }); 

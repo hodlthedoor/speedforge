@@ -736,6 +736,48 @@ function setupIpcListeners() {
       return '';
     }
   });
+
+  // Debug handler to list files in config directory
+  ipcMain.handle('debug:listConfigFiles', async () => {
+    try {
+      const userDataPath = app.getPath('userData');
+      const configDir = path.join(userDataPath, 'configs');
+      
+      if (!fs.existsSync(configDir)) {
+        return { success: false, message: 'Config directory does not exist', files: [] };
+      }
+      
+      // Get all subdirectories in the configs directory
+      const subdirs = fs.readdirSync(configDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+      
+      const result: Record<string, string[]> = {};
+      
+      // For each subdirectory, get all files
+      for (const subdir of subdirs) {
+        const subdirPath = path.join(configDir, subdir);
+        const files = fs.readdirSync(subdirPath)
+          .filter(file => file.endsWith('.json'));
+        
+        result[subdir] = files;
+      }
+      
+      return { 
+        success: true, 
+        path: configDir,
+        subdirectories: subdirs,
+        files: result
+      };
+    } catch (error) {
+      console.error('Error listing config files:', error);
+      return { 
+        success: false, 
+        message: (error as Error).message, 
+        files: {} 
+      };
+    }
+  });
 }
 
 // Clean up all IPC handlers
@@ -766,6 +808,9 @@ function cleanupIpcHandlers() {
   ipcMain.removeHandler('config:save');
   ipcMain.removeHandler('config:load');
   ipcMain.removeHandler('config:list');
+
+  // Clean up debug handler
+  ipcMain.removeHandler('debug:listConfigFiles');
 }
 
 // Clean up when all windows are closed
@@ -810,6 +855,7 @@ app.on('before-quit', () => {
   ipcMain.removeHandler('config:load');
   ipcMain.removeHandler('config:list');
   ipcMain.removeHandler('app:getUserDataPath');
+  ipcMain.removeHandler('debug:listConfigFiles');
   
   // Clean up speech module
   cleanupSpeech();
