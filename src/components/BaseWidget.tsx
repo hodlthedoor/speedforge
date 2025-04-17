@@ -77,6 +77,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [currentOpacity, setCurrentOpacity] = useState(1);
   const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
+  const [backgroundColor, setBackgroundColor] = useState<string | null>(null);
 
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();
@@ -98,6 +99,12 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
       }
     };
 
+    const handleBackgroundColorChange = (e: CustomEvent) => {
+      if (e.detail.widgetId === id) {
+        setBackgroundColor(e.detail.color);
+      }
+    };
+
     // Check URL parameters on load
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -109,6 +116,11 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
         if (backgroundTransparent === 'true') {
           setIsBackgroundTransparent(true);
         }
+        
+        const bgColor = urlParams.get('backgroundColor');
+        if (bgColor) {
+          setBackgroundColor(bgColor);
+        }
       }
     } catch (error) {
       console.error('Error parsing URL parameters:', error);
@@ -116,11 +128,13 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
 
     window.addEventListener('widget:opacity', handleOpacityChange as EventListener);
     window.addEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
+    window.addEventListener('widget:background-color', handleBackgroundColorChange as EventListener);
 
     return () => {
       webSocketService.removeListeners(id);
       window.removeEventListener('widget:opacity', handleOpacityChange as EventListener);
       window.removeEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
+      window.removeEventListener('widget:background-color', handleBackgroundColorChange as EventListener);
     };
   }, [id]);
 
@@ -130,13 +144,33 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
     window.dispatchEvent(event);
   };
 
+  // Determine the background styling
+  const getBackgroundStyles = () => {
+    if (isBackgroundTransparent) {
+      return 'bg-transparent';
+    } else if (backgroundColor) {
+      // No Tailwind classes, we'll use inline style for custom color
+      return '';
+    } else {
+      return 'bg-slate-800/80 rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30';
+    }
+  };
+
+  const combinedStyle = {
+    opacity: currentOpacity,
+    ...(backgroundColor && !isBackgroundTransparent ? { backgroundColor } : {}),
+    ...style
+  };
+
   return (
     <div 
-      className={`drag-handle w-auto ${isBackgroundTransparent ? 'bg-transparent' : 'bg-slate-800/80'} ${isBackgroundTransparent ? '' : 'rounded-lg shadow-lg backdrop-blur-md border border-slate-600/30'} overflow-hidden m-0 ${className}`}
-      style={{ opacity: currentOpacity, ...style }}
+      className={`drag-handle w-auto ${getBackgroundStyles()} overflow-hidden m-0 ${className}`}
+      style={combinedStyle}
       onClick={handleWidgetClick}
       id={id}
       data-widget-id={id}
+      data-bg-transparent={isBackgroundTransparent.toString()}
+      data-bg-color={backgroundColor || ''}
     >
       <div className="p-3 min-w-[200px] min-h-[100px] overflow-auto">
         {isLoading ? (

@@ -435,6 +435,38 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       });
   }, [activeWidgets, closeWidget, onAddWidget]);
 
+  // Delete a panel configuration
+  const handleDeletePanel = useCallback((name: string, e: React.MouseEvent) => {
+    // Prevent the click from bubbling up to the parent (which would load the panel)
+    e.stopPropagation();
+    
+    // Ask for confirmation before deleting
+    if (window.confirm(`Are you sure you want to delete the layout "${name}"?`)) {
+      const configService = ConfigService.getInstance();
+      configService.deletePanelConfig(name)
+        .then(success => {
+          console.log(`Delete panel config result: ${success}`);
+          if (success) {
+            // Update the list of saved panels
+            configService.listPanelConfigs().then(configs => {
+              console.log(`Updated saved panel list: ${configs.join(', ')}`);
+              setSavedPanels(configs);
+            });
+            
+            // If the deleted panel was the current one, clear the panel name
+            if (name === panelName) {
+              setPanelName('');
+            }
+          } else {
+            console.error("Failed to delete panel config");
+          }
+        })
+        .catch(err => {
+          console.error("Error deleting panel config:", err);
+        });
+    }
+  }, [panelName]);
+
   // Toggle configuration panel visibility
   const toggleConfigPanel = useCallback(() => {
     setShowConfigPanel(prev => !prev);
@@ -1108,16 +1140,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   onClick={(e) => {
                     console.log('Debug button clicked');
                     e.preventDefault();
-                    if (window.electronAPI?.debug) {
-                      // Use type assertion to access debug property
+                    if (window.electronAPI) {
+                      // Use type assertion to access debug API if it exists
                       const api = window.electronAPI as any;
-                      api.debug.listConfigFiles().then((result: any) => {
-                        console.log('Config files:', result);
-                      }).catch((err: any) => {
-                        console.error('Error listing config files:', err);
-                      });
+                      if (api.debug && typeof api.debug.listConfigFiles === 'function') {
+                        api.debug.listConfigFiles().then((result: any) => {
+                          console.log('Config files:', result);
+                        }).catch((err: any) => {
+                          console.error('Error listing config files:', err);
+                        });
+                      } else {
+                        console.error('Debug API not available');
+                      }
                     } else {
-                      console.error('Debug API not available');
+                      console.error('Electron API not available');
                     }
                   }}
                   style={{ 
@@ -1139,7 +1175,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   {savedPanels.map(name => (
                     <div
                       key={name}
-                      onClick={() => handleLoadPanel(name)}
                       style={{ 
                         padding: '8px 10px',
                         backgroundColor: 'rgba(30, 41, 59, 0.6)',
@@ -1152,11 +1187,38 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}
+                      onClick={() => handleLoadPanel(name)}
                     >
                       <span>{name}</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {/* Delete Button */}
+                        <button
+                          onClick={(e) => handleDeletePanel(name, e)}
+                          style={{ 
+                            padding: '2px',
+                            backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(220, 38, 38, 0.3)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '20px',
+                            height: '20px'
+                          }}
+                          title="Delete layout"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        
+                        {/* Load Button */}
+                        <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                      </div>
                     </div>
                   ))}
                 </div>

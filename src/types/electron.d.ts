@@ -3,6 +3,7 @@ export interface ElectronConfigAPI {
     saveConfig: (type: string, name: string, data: any) => Promise<boolean>;
     loadConfig: (type: string, name: string) => Promise<any>;
     listConfigs: (type: string) => Promise<string[]>;
+    deleteConfig: (type: string, name: string) => Promise<boolean>;
   };
   app: {
     toggleClickThrough: (state: boolean) => Promise<any>;

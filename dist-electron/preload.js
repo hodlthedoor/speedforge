@@ -55,6 +55,7 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
       "config:save",
       "config:load",
       "config:list",
+      "config:delete",
       "debug:listConfigFiles"
     ];
     if (validChannels.includes(channel)) {
@@ -116,6 +117,15 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
       } catch (error) {
         console.error("Error listing configs:", error);
         return [];
+      }
+    },
+    // Delete a configuration
+    deleteConfig: async (type, name) => {
+      try {
+        return await import_electron.ipcRenderer.invoke("config:delete", type, name);
+      } catch (error) {
+        console.error("Error deleting config:", error);
+        return false;
       }
     }
   },

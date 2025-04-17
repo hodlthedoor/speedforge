@@ -235,6 +235,37 @@ export class ConfigService {
     }
   }
 
+  // Delete a panel configuration
+  async deletePanelConfig(name: string): Promise<boolean> {
+    try {
+      if (!this.electronAPI || this.currentDisplayId === null) {
+        console.error('Cannot delete panel config: electronAPI not available or currentDisplayId is null');
+        return false;
+      }
+      
+      console.log(`Deleting panel config "${name}" for display ${this.currentDisplayId}`);
+      
+      // Use type assertion to access the config API
+      const api = this.electronAPI;
+      if (!api.config || typeof api.config.deleteConfig !== 'function') {
+        console.error('electronAPI.config.deleteConfig is not available');
+        return false;
+      }
+      
+      // Delete the display-specific config
+      const displaySpecificKey = `${this.currentDisplayId}_${name}`;
+      console.log(`Deleting config with key: "${displaySpecificKey}"`);
+      
+      const result = await api.config.deleteConfig('panel', displaySpecificKey);
+      console.log(`Delete result: ${result}`);
+      
+      return result;
+    } catch (error) {
+      console.error('Failed to delete panel config:', error);
+      return false;
+    }
+  }
+
   // Helper methods to get widget properties
   private getWidgetPosition(widgetId: string): { x: number, y: number } {
     // Try to get position from DOM using data-widget-id attribute first
@@ -293,13 +324,24 @@ export class ConfigService {
   }
 
   private isWidgetBackgroundTransparent(widgetId: string): boolean {
-    // This could be more complex in practice - might need to store this in state
-    // For now, we'll use a data attribute if it exists
+    // First check the DOM element with data-widget-id
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`);
     if (element) {
-      return element.getAttribute('data-bg-transparent') === 'true';
+      // Check for the data-bg-transparent attribute first
+      const dataAttr = element.getAttribute('data-bg-transparent');
+      if (dataAttr === 'true') {
+        console.log(`[ConfigService] Found transparent widget ${widgetId} from data-bg-transparent attribute`);
+        return true;
+      }
+      
+      // Also check if the element has the bg-transparent class
+      if (element.classList.contains('bg-transparent')) {
+        console.log(`[ConfigService] Found transparent widget ${widgetId} from bg-transparent class`);
+        return true;
+      }
     }
-    return false; // Default
+    
+    return false; // Default to non-transparent
   }
 }
 

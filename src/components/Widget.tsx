@@ -25,10 +25,34 @@ export const Widget: React.FC<WidgetProps> = ({
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
-  const [position, setPosition] = useState(initialPosition || {
-    x: 200 + Math.random() * 300,
-    y: 200 + Math.random() * 200
-  });
+  
+  // Get initialPosition from props, fallback to a calculated position
+  const getInitialPosition = () => {
+    // Check if we can extract position from any child component's props
+    const childArray = React.Children.toArray(children);
+    let optionsPosition = null;
+    
+    // Try to extract initialPosition from child props if it exists
+    if (childArray.length > 0) {
+      const firstChild = childArray[0];
+      // Check if this is a React element with props
+      if (React.isValidElement(firstChild)) {
+        // Use type assertion to access options
+        const childProps = firstChild.props as any;
+        if (childProps?.options?.initialPosition) {
+          optionsPosition = childProps.options.initialPosition;
+        }
+      }
+    }
+    
+    // Priority: 1. Direct prop initialPosition, 2. Child's options.initialPosition, 3. Random position
+    return initialPosition || optionsPosition || {
+      x: 200 + Math.random() * 300,
+      y: 200 + Math.random() * 200
+    };
+  };
+  
+  const [position, setPosition] = useState(getInitialPosition());
   
   // Listen for highlight events
   useEffect(() => {

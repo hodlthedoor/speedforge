@@ -1157,6 +1157,23 @@ function setupIpcListeners() {
       return [];
     }
   });
+  ipcMain.handle("config:delete", async (event, type, name) => {
+    try {
+      debugLog(`Deleting config: type=${type}, name=${name}`);
+      const userDataPath = app.getPath("userData");
+      const configPath = path.join(userDataPath, "configs", type, `${name}.json`);
+      if (!fs.existsSync(configPath)) {
+        debugLog(`Config file does not exist: ${configPath}`);
+        return false;
+      }
+      fs.unlinkSync(configPath);
+      debugLog(`Config deleted successfully: ${configPath}`);
+      return true;
+    } catch (error) {
+      debugLog("Error deleting config:", error);
+      return false;
+    }
+  });
   ipcMain.handle("app:getUserDataPath", async () => {
     try {
       const userDataPath = app.getPath("userData");
@@ -1221,6 +1238,7 @@ app.on("before-quit", () => {
   ipcMain.removeHandler("config:save");
   ipcMain.removeHandler("config:load");
   ipcMain.removeHandler("config:list");
+  ipcMain.removeHandler("config:delete");
   ipcMain.removeHandler("app:getUserDataPath");
   ipcMain.removeHandler("debug:listConfigFiles");
   cleanup();
