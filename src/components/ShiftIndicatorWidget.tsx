@@ -25,31 +25,66 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
   const flashingTimerRef = useRef<number | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const [shiftRpm, setShiftRpm] = useState<number>(0);
-  const [width, setWidth] = useState<number>(400);
-  const renderCount = useRef(0);
+  const [widgetWidth, setWidgetWidth] = useState<number>(400);
+  const widgetWidthRef = useRef<number>(400);
+  const debugCounter = useRef<number>(0);
   
-  // On mount, check if we have a saved width
+  // Keep ref in sync with state for use in callbacks
   useEffect(() => {
+    widgetWidthRef.current = widgetWidth;
+    console.log(`[WIDTH] State updated to: ${widgetWidth}px (update #${debugCounter.current++})`);
+  }, [widgetWidth]);
+  
+  // Initialize from WidgetManager and listen for width changes
+  useEffect(() => {
+    // On mount, check if we have a saved width
     const widget = WidgetManager.getWidget(id);
     if (widget?.state?.widgetWidth) {
       const savedWidth = Number(widget.state.widgetWidth);
       console.log(`[MOUNT] Loading saved width: ${savedWidth}px`);
-      setWidth(savedWidth);
+      setWidgetWidth(savedWidth);
+      widgetWidthRef.current = savedWidth;
+    } else {
+      // Set initial width in WidgetManager if not already set
+      WidgetManager.updateWidgetState(id, { widgetWidth: widgetWidth });
     }
     
-    // Listen for width changes from the control panel
+    // Subscribe to WidgetManager events for width changes
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && 
           event.widgetId === id && 
           event.state.widgetWidth !== undefined) {
         const newWidth = Number(event.state.widgetWidth);
-        console.log(`[EVENT] Control panel changed width to: ${newWidth}px`);
-        setWidth(newWidth);
+        console.log(`[EVENT] Width changed to: ${newWidth}px`);
+        
+        // Update both state and ref
+        setWidgetWidth(newWidth);
+        widgetWidthRef.current = newWidth;
+        
+        // Force a refresh of the SVG
+        updateSvgDimensions(newWidth);
       }
     });
     
     return unsubscribe;
   }, [id]);
+  
+  // Function to update SVG dimensions
+  const updateSvgDimensions = (width: number) => {
+    if (!svgRef.current) return;
+    
+    // Update SVG element
+    const svg = d3.select(svgRef.current);
+    svg.attr('width', width);
+    
+    // Request a redraw in the next animation frame
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        renderChart();
+        animationFrameId.current = null;
+      });
+    }
+  };
   
   // Use telemetry data hook
   const { data: telemetryData, sessionData } = useTelemetryData(id, { 
@@ -126,21 +161,21 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     }
   };
   
-  // Draw chart only when necessary
-  useEffect(() => {
-    renderCount.current++;
-    console.log(`Render #${renderCount.current} - width: ${width}px`);
-    
+  // Function to render the chart
+  const renderChart = () => {
     if (!svgRef.current) return;
+    
+    const currentWidth = widgetWidthRef.current;
+    console.log(`[RENDER] Drawing chart with width: ${currentWidth}px`);
     
     const svg = d3.select(svgRef.current);
     const height = 120;
     const margin = { top: 15, right: 10, bottom: 25, left: 10 };
-    const innerWidth = width - margin.left - margin.right;
+    const innerWidth = currentWidth - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
     // Update SVG dimensions
-    svg.attr('width', width)
+    svg.attr('width', currentWidth)
        .attr('height', height);
 
     // Clear previous content
@@ -265,19 +300,29 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
           .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
-  }, [data, isFlashing, shiftRpm, width]);
+  };
+  
+  // Draw chart when data or flashing state changes
+  useEffect(() => {
+    renderChart();
+  }, [data, isFlashing, shiftRpm]);
+  
+  // Redraw chart when width changes
+  useEffect(() => {
+    renderChart();
+  }, [widgetWidth]);
 
   return (
     <Widget 
       id={id} 
-      title="Shift Indicator" 
-      width={width} 
+      title="Shift Indicator"
+      width={widgetWidth}
       height={120}
       onClose={onClose}
     >
       <svg
         ref={svgRef}
-        width={width}
+        width={widgetWidth}
         height={120}
         className="bg-transparent"
         style={{ pointerEvents: 'none' }}
@@ -307,16 +352,12 @@ const getShiftIndicatorControls = (widgetState: any, updateWidget: (updates: any
         const newWidth = Number(value);
         console.log(`[SLIDER] Changed to ${newWidth}px`);
         
-        // Update widget state
-        const widget = WidgetManager.getWidget(widgetState.id);
-        console.log(`[SLIDER] Current widget state:`, widget?.state);
-        
-        // Direct update to widget manager
+        // This is the key part - directly update the widget state
         WidgetManager.updateWidgetState(widgetState.id, { 
           widgetWidth: newWidth 
         });
         
-        // Update the control system too
+        // Also update through the control mechanism for completeness
         updateWidget({ widgetWidth: newWidth });
       }
     }
