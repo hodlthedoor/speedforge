@@ -1,7 +1,7 @@
 mod telemetry_fields;
 mod websocket_server;
 
-use iracing::Connection;
+use iracing::telemetry::Connection;
 use std::{thread, time::Duration};
 use std::{env, io};
 use std::io::{stdout, Write};
@@ -18,7 +18,7 @@ use serde_yaml;
 mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
-    use iracing::Connection;
+    use iracing::telemetry::Connection;
     
     pub fn get_raw_session_info(conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // Access the raw YAML string directly
@@ -42,7 +42,7 @@ mod iracing_wrapper {
 mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
-    use iracing::Connection;
+    use iracing::telemetry::Connection;
     
     pub fn get_raw_session_info(_conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // On non-Windows platforms, this is just a stub that returns an error
