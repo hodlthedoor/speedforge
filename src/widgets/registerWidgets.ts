@@ -3,6 +3,7 @@ import TrackMapWidget from '../components/TrackMapWidget';
 import { SimpleTelemetryWidget } from '../components/SimpleTelemetryWidget';
 import PedalTraceWidget from '../components/PedalTraceWidget';
 import ShiftIndicatorWidget from '../components/ShiftIndicatorWidget';
+import GearShiftWidget from '../components/GearShiftWidget';
 import CarLeftIndicatorWidget from '../components/CarLeftIndicatorWidget';
 import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
 import SpotterWidget from '../components/SpotterWidget';
@@ -45,6 +46,15 @@ WidgetRegistry.register('shift-indicator', {
   defaultTitle: 'Shift Indicator',
   defaultOptions: {},
   description: 'Display when to shift gears',
+  category: 'Driving Aids'
+});
+
+// Register Gear Shift Widget
+WidgetRegistry.register('gear-shift', {
+  component: GearShiftWidget,
+  defaultTitle: 'Gear Shift Indicator',
+  defaultOptions: { width: 300 },
+  description: 'Display a gear shift indicator bar that transitions from green to amber to red based on telemetry data',
   category: 'Driving Aids'
 });
 
