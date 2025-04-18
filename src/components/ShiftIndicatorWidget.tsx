@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Widget from './Widget';
 import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { WidgetManager } from '../services/WidgetManager';
-import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
 
 interface ShiftIndicatorWidgetProps {
   id: string;
@@ -18,27 +17,6 @@ interface ShiftData {
   rpm: number;
 }
 
-// Create a component that accesses state and forces rerenders
-const WidthDebugger = ({ id }: { id: string }) => {
-  const [state, setState] = useState({});
-  
-  useEffect(() => {
-    const widget = WidgetManager.getWidget(id);
-    setState(widget?.state || {});
-    
-    const unsubscribe = WidgetManager.subscribe((event) => {
-      if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        setState(event.state);
-        console.log("WidthDebugger received new state:", event.state);
-      }
-    });
-    
-    return unsubscribe;
-  }, [id]);
-  
-  return null;
-};
-
 const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<ShiftData[]>([]);
@@ -47,52 +25,33 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
   const flashingTimerRef = useRef<number | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const [shiftRpm, setShiftRpm] = useState<number>(0);
+  const [width, setWidth] = useState<number>(400);
+  const renderCount = useRef(0);
   
-  // Add width state with a ref to access current value from all callbacks
-  const [widgetWidth, setWidgetWidth] = useState<number>(400);
-  const widgetWidthRef = useRef<number>(400);
-  
-  // Keep ref in sync with state
+  // On mount, check if we have a saved width
   useEffect(() => {
-    widgetWidthRef.current = widgetWidth;
-    console.log(`Width state changed to: ${widgetWidth}px`);
-  }, [widgetWidth]);
-  
-  // Direct hook into WidgetManager state
-  useEffect(() => {
-    // Initialize from WidgetManager
     const widget = WidgetManager.getWidget(id);
     if (widget?.state?.widgetWidth) {
       const savedWidth = Number(widget.state.widgetWidth);
-      console.log(`Initializing width to ${savedWidth}px from WidgetManager state`);
-      setWidgetWidth(savedWidth);
-      widgetWidthRef.current = savedWidth;
-    } else {
-      // Set initial state in WidgetManager
-      WidgetManager.updateWidgetState(id, { widgetWidth });
+      console.log(`[MOUNT] Loading saved width: ${savedWidth}px`);
+      setWidth(savedWidth);
     }
     
-    // Subscribe to WidgetManager updates
+    // Listen for width changes from the control panel
     const unsubscribe = WidgetManager.subscribe((event) => {
-      if (event.type === 'widget:state:updated' && event.widgetId === id && event.state.widgetWidth !== undefined) {
+      if (event.type === 'widget:state:updated' && 
+          event.widgetId === id && 
+          event.state.widgetWidth !== undefined) {
         const newWidth = Number(event.state.widgetWidth);
-        console.log(`Width update from WidgetManager subscription: ${newWidth}px`);
-        setWidgetWidth(newWidth);
-        widgetWidthRef.current = newWidth;
-        
-        // Force an immediate redraw with correct width
-        if (svgRef.current) {
-          const svg = d3.select(svgRef.current);
-          svg.attr('width', newWidth);
-          renderChart(newWidth);
-        }
+        console.log(`[EVENT] Control panel changed width to: ${newWidth}px`);
+        setWidth(newWidth);
       }
     });
     
     return unsubscribe;
   }, [id]);
   
-  // Use our custom hook with shift indicator metric and RPM using typed metrics
+  // Use telemetry data hook
   const { data: telemetryData, sessionData } = useTelemetryData(id, { 
     metrics: ['shift_indicator_pct', 'rpm'] as TelemetryMetric[]
   });
@@ -104,7 +63,7 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     }
   }, [sessionData]);
 
-  // Transform telemetry data into our visualization format
+  // Transform telemetry data into visualization format
   useEffect(() => {
     if (telemetryData) {
       const newData: ShiftData = {
@@ -167,11 +126,12 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     }
   };
   
-  // Separate function to render the chart with explicit width parameter
-  const renderChart = (width: number) => {
-    if (!svgRef.current) return;
+  // Draw chart only when necessary
+  useEffect(() => {
+    renderCount.current++;
+    console.log(`Render #${renderCount.current} - width: ${width}px`);
     
-    console.log(`Rendering chart with explicit width: ${width}px`);
+    if (!svgRef.current) return;
     
     const svg = d3.select(svgRef.current);
     const height = 120;
@@ -179,7 +139,7 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
-    // Set SVG dimensions explicitly
+    // Update SVG dimensions
     svg.attr('width', width)
        .attr('height', height);
 
@@ -305,40 +265,24 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
           .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
-  };
-
-  // Update chart when data changes
-  useEffect(() => {
-    renderChart(widgetWidthRef.current);
-  }, [data, isFlashing, shiftRpm]);
-
-  // Separate effect for width changes
-  useEffect(() => {
-    renderChart(widgetWidth);
-  }, [widgetWidth]);
+  }, [data, isFlashing, shiftRpm, width]);
 
   return (
-    <>
-      <WidthDebugger id={id} />
-      <Widget 
-        id={id} 
-        title="Shift Indicator" 
-        className="p-2" 
-        width={widgetWidth} 
+    <Widget 
+      id={id} 
+      title="Shift Indicator" 
+      width={width} 
+      height={120}
+      onClose={onClose}
+    >
+      <svg
+        ref={svgRef}
+        width={width}
         height={120}
-        onClose={onClose}
-      >
-        <div className="flex items-center justify-center overflow-visible">
-          <svg
-            ref={svgRef}
-            width={widgetWidth}
-            height={120}
-            className="bg-transparent"
-            style={{ pointerEvents: 'none' }}
-          />
-        </div>
-      </Widget>
-    </>
+        className="bg-transparent"
+        style={{ pointerEvents: 'none' }}
+      />
+    </Widget>
   );
 };
 
@@ -347,9 +291,7 @@ const getShiftIndicatorControls = (widgetState: any, updateWidget: (updates: any
   // Default to 400 if not set
   const widgetWidth = widgetState.widgetWidth || 400;
   
-  console.log(`Control rendering with width: ${widgetWidth}px`);
-  
-  const controls: WidgetControlDefinition[] = [
+  return [
     {
       id: 'widgetWidth',
       type: 'slider' as WidgetControlType,
@@ -362,26 +304,23 @@ const getShiftIndicatorControls = (widgetState: any, updateWidget: (updates: any
         { value: 750, label: 'X-Large' }
       ],
       onChange: (value) => {
-        const numericValue = Number(value);
-        console.log(`Slider changed to: ${numericValue}px`);
+        const newWidth = Number(value);
+        console.log(`[SLIDER] Changed to ${newWidth}px`);
         
-        // Direct update to widget manager - most important change
+        // Update widget state
+        const widget = WidgetManager.getWidget(widgetState.id);
+        console.log(`[SLIDER] Current widget state:`, widget?.state);
+        
+        // Direct update to widget manager
         WidgetManager.updateWidgetState(widgetState.id, { 
-          widgetWidth: numericValue 
+          widgetWidth: newWidth 
         });
         
-        // Also update through the control mechanism
-        updateWidget({ widgetWidth: numericValue });
-        
-        // Direct state dispatch as additional backup
-        dispatchWidgetStateUpdate(widgetState.id, { 
-          widgetWidth: numericValue 
-        });
+        // Update the control system too
+        updateWidget({ widgetWidth: newWidth });
       }
     }
   ];
-  
-  return controls;
 };
 
 // Wrap component with controls and export
