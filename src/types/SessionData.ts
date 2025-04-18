@@ -49,6 +49,8 @@ export interface SessionData {
       team_name?: string;
       i_rating?: number;
       license?: string;
+      position?: number;
+      incidents?: number;
       [key: string]: any;
     }>;
     [key: string]: any;

@@ -44,17 +44,7 @@ mod iracing_wrapper {
                     // Got data, now copy it
                     let yaml_bytes = std::slice::from_raw_parts(c_str as *const u8, data_len as usize);
                     if let Ok(yaml_str) = String::from_utf8(yaml_bytes.to_vec()) {
-                        // Save the raw YAML to a file without any parsing
-                        let now = chrono::Local::now();
-                        let filename = format!("raw_iracing_yaml_{}.yaml", now.format("%Y%m%d_%H%M%S"));
-                        
-                        if let Ok(mut file) = File::create(&filename) {
-                            if file.write_all(yaml_str.as_bytes()).is_ok() {
-                                // Log success
-                                println!("[INFO] Saved raw iRacing YAML to {}", filename);
-                            }
-                        }
-                        
+                        // Return the raw YAML string without saving to a file
                         return Ok(yaml_str);
                     }
                 }
@@ -82,15 +72,13 @@ mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
     use iracing::telemetry::Connection;
-    use std::fs::File;
-    use std::io::Write;
     
     pub fn get_raw_session_info(_conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // On non-Windows platforms, this is just a stub that returns an error
         let error_msg = "iRacing SDK not available on non-Windows platforms";
         println!("[DEBUG] {} - Stub implementation called.", error_msg);
         
-        // Create a dummy YAML file for testing
+        // Create dummy YAML content without saving to file
         let yaml_content = r#"---
 WeekendInfo:
   TrackName: Test Track
@@ -111,17 +99,7 @@ DriverInfo:
       # Additional fields would be here
 "#;
 
-        // Save the test YAML to a file
-        let now = chrono::Local::now();
-        let filename = format!("test_yaml_{}.yaml", now.format("%Y%m%d_%H%M%S"));
-        
-        if let Ok(mut file) = File::create(&filename) {
-            if file.write_all(yaml_content.as_bytes()).is_ok() {
-                // Log success
-                println!("[INFO] Saved test YAML to {}", filename);
-            }
-        }
-        
+        // Just return an error, as this is a stub implementation
         Err(error_msg.into())
     }
 }
@@ -216,30 +194,26 @@ fn print_startup_info() {
     }
 }
 
-// Add a throttled logging function to reduce output frequency
+// Helper function to determine if we should log telemetry updates
+// This helps reduce log spam by only logging every few seconds
 fn should_log_telemetry_update() -> bool {
-    static mut LAST_TELEMETRY_LOG: u64 = 0;
+    static mut LAST_LOG: u64 = 0;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    
+        
     unsafe {
-        // Only log telemetry updates every 5 seconds in non-verbose mode
-        if now - LAST_TELEMETRY_LOG > 5 {
-            LAST_TELEMETRY_LOG = now;
-            return true;
+        if now - LAST_LOG > 10 {  // Log every 10 seconds
+            LAST_LOG = now;
+            true
+        } else {
+            false
         }
-        // In verbose mode, we still throttle but less aggressively
-        if is_verbose() && now - LAST_TELEMETRY_LOG > 1 {
-            LAST_TELEMETRY_LOG = now;
-            return true;
-        }
-        false
     }
 }
 
-// Helper function to get fallback session info
+// Get fallback session info when real data isn't available
 fn get_fallback_session_info(
     track_temp_c: f32, 
     air_temp_c: f32, 
@@ -310,40 +284,6 @@ note: This is simulated session info. The actual session_info was not available.
         humidity = humidity_pct,
         fog = fog_level_pct
     )
-}
-
-// Add this function before main()
-fn save_session_yaml_to_file(yaml_data: &str) -> Result<(), std::io::Error> {
-    use std::fs::File;
-    use std::io::Write;
-    
-    // Create the filename with timestamp to avoid overwriting
-    let now = chrono::Local::now();
-    let filename = format!("session_data_{}.yaml", now.format("%Y%m%d_%H%M%S"));
-    
-    log_info!("Saving session data to file: {}", filename);
-    
-    // Write the data to file
-    let mut file = File::create(&filename)?;
-    file.write_all(yaml_data.as_bytes())?;
-    
-    log_info!("Successfully wrote {} bytes to {}", yaml_data.len(), filename);
-    Ok(())
-}
-
-// Add this new function to create a string debug dump of any value
-fn debug_to_file(label: &str, data: impl std::fmt::Debug) -> std::io::Result<()> {
-    use std::fs::File;
-    use std::io::Write;
-    
-    let filename = format!("debug_{}_{}.txt", label, chrono::Local::now().format("%Y%m%d_%H%M%S"));
-    let mut file = File::create(&filename)?;
-    
-    // Write the debug representation to file
-    writeln!(file, "{:#?}", data)?;
-    
-    log_info!("Wrote debug info to {}", filename);
-    Ok(())
 }
 
 #[tokio::main]
@@ -435,16 +375,6 @@ async fn main() {
                                 };
                                 log_info!("Raw session info preview: {}", preview);
                                 
-                                // Save the raw debug string to file
-                                if let Err(e) = debug_to_file("session_raw", &raw_str) {
-                                    log_error!("Failed to write debug file: {}", e);
-                                }
-                                
-                                // Also save using our normal function
-                                if let Err(e) = save_session_yaml_to_file(&raw_str) {
-                                    log_error!("Failed to save session YAML to file: {}", e);
-                                }
-                                
                                 // Use the raw string directly, we'll handle parsing issues in the UI
                                 raw_str
                             },
@@ -511,11 +441,6 @@ async fn main() {
                                                             &raw_str
                                                         };
                                                         log_info!("Retry: Session info preview: {}", preview);
-                                                        
-                                                        // Save the raw YAML to a file on successful retry
-                                                        if let Err(e) = save_session_yaml_to_file(&raw_str) {
-                                                            log_error!("Failed to save session YAML to file on retry: {}", e);
-                                                        }
                                                         
                                                         // Update the telemetry data with the new session info
                                                         telemetry_data.session_info = raw_str;

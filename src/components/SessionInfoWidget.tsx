@@ -19,7 +19,7 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
   id,
   onClose,
   initialWidth = 600,
-  initialHeight = 400,
+  initialHeight = 500,
   initialX = 20,
   initialY = 20,
   title = 'Session Info'
@@ -32,7 +32,6 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
     sessionDetails: true,
     driverDetails: true
   });
-  const [searchTerm, setSearchTerm] = useState('');
   
   // Use telemetry hook to get session info data
   const { data, sessionData, isConnected } = useTelemetryData(`session-info-${id}`, {
@@ -77,12 +76,6 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
   };
 
   const renderPropertyRow = (key: string, value: any, depth = 0) => {
-    // Skip rendering if searching and no match
-    if (searchTerm && !key.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !(typeof value === 'string' && value.toLowerCase().includes(searchTerm.toLowerCase()))) {
-      return null;
-    }
-    
     const displayKey = key.replace(/([A-Z])/g, ' $1').trim();
     
     if (typeof value === 'object' && value !== null) {
@@ -161,6 +154,7 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
             <div className="section-content">
               {Object.entries({
                 trackName: weekendInfo.track_display_name || weekendInfo.track_name,
+                trackId: weekendInfo.track_id,
                 trackType: weekendInfo.track_type,
                 trackLength: weekendInfo.track_length,
                 trackTurns: weekendInfo.track_turns,
@@ -277,6 +271,8 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
                     carNumber: driver.car_number,
                     carName: driver.car_screen_name,
                     teamName: driver.team_name,
+                    position: driver.position,
+                    incidents: driver.incidents,
                     iRating: driver.i_rating,
                     license: driver.license
                   }).map(([key, value]) => renderPropertyRow(key, value))}
@@ -338,24 +334,6 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
             Not connected to telemetry
           </div>
         )}
-        
-        <div style={{ padding: '0 10px', marginBottom: '10px' }}>
-          <input
-            type="text"
-            placeholder="Search session info..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '6px 10px',
-              backgroundColor: 'rgba(30, 41, 59, 0.8)',
-              border: '1px solid rgba(71, 85, 105, 0.5)',
-              borderRadius: '4px',
-              color: 'white',
-              fontSize: '13px'
-            }}
-          />
-        </div>
         
         <div style={{ 
           display: 'flex', 
