@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Widget } from './Widget';
 import { useTelemetryData } from '../hooks/useTelemetryData';
-import yaml from 'js-yaml';
 
 interface SessionInfoWidgetProps {
   id: string;
@@ -16,9 +15,60 @@ interface SessionInfoWidgetProps {
 type TabKey = 'track' | 'session' | 'driver' | 'raw';
 
 interface SessionData {
-  WeekendInfo?: any;
-  SessionInfo?: any;
-  DriverInfo?: any;
+  weekend?: {
+    track_name?: string;
+    track_id?: number;
+    track_length?: string;
+    track_display_name?: string;
+    track_display_short_name?: string;
+    track_config_name?: string;
+    track_city?: string;
+    track_country?: string;
+    track_altitude?: string;
+    track_turns?: number;
+    track_pit_speed_limit?: string;
+    track_type?: string;
+    track_weather?: string;
+    track_skies?: string;
+    track_surface_temperature?: string;
+    track_air_tempearture?: string; // Note the typo in the API
+    track_wind_speed?: string;
+    track_wind_direction?: string;
+    options?: {
+      relative_humidity?: string;
+      temperature?: string;
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+  session?: {
+    sessions?: Array<{
+      session_number?: number;
+      laps?: any;
+      time?: string;
+      session_type?: string;
+      track_rubber_state?: string;
+      [key: string]: any;
+    }>;
+    [key: string]: any;
+  };
+  drivers?: {
+    idle_rpm?: number;
+    red_line_rpm?: number;
+    shift_light_shift_rpm?: number;
+    fuel_capacity?: number;
+    estimated_lap_time?: number;
+    other_drivers?: Array<{
+      user_name?: string;
+      car_number?: number;
+      car_screen_name?: string;
+      team_name?: string;
+      i_rating?: number;
+      license?: string;
+      [key: string]: any;
+    }>;
+    [key: string]: any;
+  };
   [key: string]: any;
 }
 
@@ -54,15 +104,103 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
       setSessionInfo(data.session_info);
       
       try {
-        // Attempt to parse the session info YAML
-        const yamlData = yaml.load(data.session_info) as SessionData;
-        setParsedData(yamlData || {});
+        // The data comes as a Debug-formatted string of a Rust struct, not as YAML
+        // Parse the Rust debug format string manually
+        const parsedObj: SessionData = {};
+        
+        // Extract weekend information
+        const weekendMatch = data.session_info.match(/weekend: WeekendInfo \{([^}]+)\}/);
+        if (weekendMatch && weekendMatch[1]) {
+          parsedObj.weekend = parseRustStruct(weekendMatch[1]);
+        }
+        
+        // Extract session information
+        const sessionMatch = data.session_info.match(/session: SessionInfo \{([^}]+)\}/);
+        if (sessionMatch && sessionMatch[1]) {
+          parsedObj.session = parseRustStruct(sessionMatch[1]);
+          
+          // Parse sessions array
+          const sessionsMatch = data.session_info.match(/sessions: \[(.*?)\]/s);
+          if (sessionsMatch && sessionsMatch[1]) {
+            const sessionsStr = sessionsMatch[1];
+            const sessionEntries = sessionsStr.match(/Session \{([^}]+)\}/g);
+            
+            if (sessionEntries) {
+              parsedObj.session.sessions = sessionEntries.map(entry => {
+                const contentMatch = entry.match(/Session \{([^}]+)\}/);
+                return contentMatch ? parseRustStruct(contentMatch[1]) : {};
+              });
+            }
+          }
+        }
+        
+        // Extract driver information
+        const driversMatch = data.session_info.match(/drivers: DriverInfo \{([^}]+)\}/);
+        if (driversMatch && driversMatch[1]) {
+          parsedObj.drivers = parseRustStruct(driversMatch[1]);
+          
+          // Parse other_drivers array
+          const otherDriversMatch = data.session_info.match(/other_drivers: \[(.*?)\]/s);
+          if (otherDriversMatch && otherDriversMatch[1]) {
+            const driversStr = otherDriversMatch[1];
+            const driverEntries = driversStr.match(/Driver \{([^}]+)\}/g);
+            
+            if (driverEntries) {
+              parsedObj.drivers.other_drivers = driverEntries.map(entry => {
+                const contentMatch = entry.match(/Driver \{([^}]+)\}/);
+                return contentMatch ? parseRustStruct(contentMatch[1]) : {};
+              });
+            }
+          }
+        }
+        
+        console.log('Parsed data:', parsedObj);
+        setParsedData(parsedObj);
       } catch (err) {
-        console.error('Failed to parse session info YAML:', err);
-        // If parsing fails, we'll keep the raw text view available
+        console.error('Failed to parse session info:', err);
       }
     }
   }, [data]);
+  
+  // Helper function to parse Rust struct format into JavaScript object
+  const parseRustStruct = (structStr: string): any => {
+    const result: any = {};
+    
+    // Match field: value pairs
+    const fieldPattern = /(\w+): ([^,]+),?/g;
+    let match;
+    
+    while ((match = fieldPattern.exec(structStr)) !== null) {
+      const key = match[1].trim();
+      let value = match[2].trim();
+      
+      // Convert string representations to actual types
+      if (value === 'None') {
+        result[key] = null;
+      } else if (value.startsWith('Some(') && value.endsWith(')')) {
+        // Extract value from Some()
+        const innerValue = value.substring(5, value.length - 1);
+        // Remove quotes if string
+        if (innerValue.startsWith('"') && innerValue.endsWith('"')) {
+          result[key] = innerValue.substring(1, innerValue.length - 1);
+        } else {
+          // Try to parse as number
+          const num = parseFloat(innerValue);
+          result[key] = isNaN(num) ? innerValue : num;
+        }
+      } else if (value === 'true' || value === 'false') {
+        result[key] = value === 'true';
+      } else if (!isNaN(Number(value))) {
+        result[key] = Number(value);
+      } else if (value.startsWith('"') && value.endsWith('"')) {
+        result[key] = value.substring(1, value.length - 1);
+      } else {
+        result[key] = value;
+      }
+    }
+    
+    return result;
+  };
   
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -156,7 +294,7 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
   };
   
   const renderTrackTab = () => {
-    const weekendInfo = parsedData.WeekendInfo || {};
+    const weekendInfo = parsedData.weekend || {};
     
     return (
       <div>
@@ -222,7 +360,7 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
   };
   
   const renderSessionTab = () => {
-    const sessionInfo = parsedData.SessionInfo || {};
+    const sessionInfo = parsedData.session || {};
     const sessions = sessionInfo.sessions || [];
     
     return (
@@ -264,7 +402,7 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
   };
   
   const renderDriverTab = () => {
-    const driverInfo = parsedData.DriverInfo || {};
+    const driverInfo = parsedData.drivers || {};
     const drivers = driverInfo.other_drivers || [];
     
     return (
