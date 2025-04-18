@@ -312,11 +312,15 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
   }, [widgetWidth]);
 
   return (
-    <Widget id={id} title="Shift Indicator" className="p-2" onClose={onClose}>
-      <div 
-        className="flex items-center justify-center overflow-visible" 
-        style={{ width: `${widgetWidth}px`, height: "120px", maxWidth: "100%" }}
-      >
+    <Widget 
+      id={id} 
+      title="Shift Indicator" 
+      className="p-2" 
+      width={widgetWidth}
+      height={120}
+      onClose={onClose}
+    >
+      <div className="flex items-center justify-center overflow-visible">
         <svg
           ref={svgRef}
           width={widgetWidth}
