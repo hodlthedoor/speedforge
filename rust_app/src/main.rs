@@ -19,10 +19,49 @@ mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
     use iracing::telemetry::Connection;
+    use std::fs::File;
+    use std::io::Write;
     
     pub fn get_raw_session_info(conn: &mut Connection) -> Result<String, Box<dyn Error>> {
-        // Access the raw YAML string directly
-        // We don't use IRSDK directly since it's not publicly exported
+        // We're going to take a different approach - try to get the raw data directly from the SDK
+        // Instead of parsing through serde_yaml, we'll just dump whatever we get
+        
+        // This uses internal details of the Connection type, which is unsafe
+        // but necessary to bypass the parsing error
+        #[cfg(feature = "telemetry")]
+        unsafe {
+            use iracing::sys::*;
+            
+            let mut data_len: i32 = 0;
+            let c_str = irsdk_getSessionInfoStr();
+            
+            if !c_str.is_null() {
+                while *c_str.offset(data_len as isize) != 0 {
+                    data_len += 1;
+                }
+                
+                if data_len > 0 {
+                    // Got data, now copy it
+                    let yaml_bytes = std::slice::from_raw_parts(c_str as *const u8, data_len as usize);
+                    if let Ok(yaml_str) = String::from_utf8(yaml_bytes.to_vec()) {
+                        // Save the raw YAML to a file without any parsing
+                        let now = chrono::Local::now();
+                        let filename = format!("raw_iracing_yaml_{}.yaml", now.format("%Y%m%d_%H%M%S"));
+                        
+                        if let Ok(mut file) = File::create(&filename) {
+                            if file.write_all(yaml_str.as_bytes()).is_ok() {
+                                // Log success
+                                println!("[INFO] Saved raw iRacing YAML to {}", filename);
+                            }
+                        }
+                        
+                        return Ok(yaml_str);
+                    }
+                }
+            }
+        }
+        
+        // Fallback to the original method if the direct access fails
         match conn.session_info() {
             Ok(session) => {
                 // Convert to debug format
@@ -43,11 +82,46 @@ mod iracing_wrapper {
     use std::result::Result;
     use std::error::Error;
     use iracing::telemetry::Connection;
+    use std::fs::File;
+    use std::io::Write;
     
     pub fn get_raw_session_info(_conn: &mut Connection) -> Result<String, Box<dyn Error>> {
         // On non-Windows platforms, this is just a stub that returns an error
         let error_msg = "iRacing SDK not available on non-Windows platforms";
         println!("[DEBUG] {} - Stub implementation called.", error_msg);
+        
+        // Create a dummy YAML file for testing
+        let yaml_content = r#"---
+WeekendInfo:
+  TrackName: Test Track
+  TrackID: 123
+  TrackLength: "4.5 km"
+  # Additional fields would be here
+SessionInfo:
+  Sessions:
+    - SessionNum: 0
+      SessionType: Practice
+      # Additional fields would be here
+DriverInfo:
+  Drivers:
+    - CarIdx: 0
+      UserName: "Test Driver"
+      # The LicLevel field is intentionally missing
+      CarID: 123
+      # Additional fields would be here
+"#;
+
+        // Save the test YAML to a file
+        let now = chrono::Local::now();
+        let filename = format!("test_yaml_{}.yaml", now.format("%Y%m%d_%H%M%S"));
+        
+        if let Ok(mut file) = File::create(&filename) {
+            if file.write_all(yaml_content.as_bytes()).is_ok() {
+                // Log success
+                println!("[INFO] Saved test YAML to {}", filename);
+            }
+        }
+        
         Err(error_msg.into())
     }
 }
@@ -257,6 +331,21 @@ fn save_session_yaml_to_file(yaml_data: &str) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+// Add this new function to create a string debug dump of any value
+fn debug_to_file(label: &str, data: impl std::fmt::Debug) -> std::io::Result<()> {
+    use std::fs::File;
+    use std::io::Write;
+    
+    let filename = format!("debug_{}_{}.txt", label, chrono::Local::now().format("%Y%m%d_%H%M%S"));
+    let mut file = File::create(&filename)?;
+    
+    // Write the debug representation to file
+    writeln!(file, "{:#?}", data)?;
+    
+    log_info!("Wrote debug info to {}", filename);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     // Process command line arguments
@@ -346,7 +435,12 @@ async fn main() {
                                 };
                                 log_info!("Raw session info preview: {}", preview);
                                 
-                                // Save the raw YAML to a file
+                                // Save the raw debug string to file
+                                if let Err(e) = debug_to_file("session_raw", &raw_str) {
+                                    log_error!("Failed to write debug file: {}", e);
+                                }
+                                
+                                // Also save using our normal function
                                 if let Err(e) = save_session_yaml_to_file(&raw_str) {
                                     log_error!("Failed to save session YAML to file: {}", e);
                                 }
