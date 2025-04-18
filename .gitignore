@@ -6,7 +6,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-iracing.rs/
 node_modules
 dist
 dist-ssr
@@ -29,3 +28,6 @@ Cargo.lock
 *.njsproj
 *.sln
 *.sw?
+
+# Allow submodules
+!submodules/

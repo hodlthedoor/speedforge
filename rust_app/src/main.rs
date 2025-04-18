@@ -238,6 +238,25 @@ note: This is simulated session info. The actual session_info was not available.
     )
 }
 
+// Add this function before main()
+fn save_session_yaml_to_file(yaml_data: &str) -> Result<(), std::io::Error> {
+    use std::fs::File;
+    use std::io::Write;
+    
+    // Create the filename with timestamp to avoid overwriting
+    let now = chrono::Local::now();
+    let filename = format!("session_data_{}.yaml", now.format("%Y%m%d_%H%M%S"));
+    
+    log_info!("Saving session data to file: {}", filename);
+    
+    // Write the data to file
+    let mut file = File::create(&filename)?;
+    file.write_all(yaml_data.as_bytes())?;
+    
+    log_info!("Successfully wrote {} bytes to {}", yaml_data.len(), filename);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     // Process command line arguments
@@ -327,6 +346,11 @@ async fn main() {
                                 };
                                 log_info!("Raw session info preview: {}", preview);
                                 
+                                // Save the raw YAML to a file
+                                if let Err(e) = save_session_yaml_to_file(&raw_str) {
+                                    log_error!("Failed to save session YAML to file: {}", e);
+                                }
+                                
                                 // Use the raw string directly, we'll handle parsing issues in the UI
                                 raw_str
                             },
@@ -393,6 +417,11 @@ async fn main() {
                                                             &raw_str
                                                         };
                                                         log_info!("Retry: Session info preview: {}", preview);
+                                                        
+                                                        // Save the raw YAML to a file on successful retry
+                                                        if let Err(e) = save_session_yaml_to_file(&raw_str) {
+                                                            log_error!("Failed to save session YAML to file on retry: {}", e);
+                                                        }
                                                         
                                                         // Update the telemetry data with the new session info
                                                         telemetry_data.session_info = raw_str;
