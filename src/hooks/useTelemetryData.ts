@@ -12,6 +12,7 @@ import {
   formatCarLeftRight
 } from '../utils/formatters';
 import { TrackSurface, CarLeftRight } from '../types/telemetry';
+import { SessionData } from '../types/SessionData';
 
 // Typescript interface for telemetry data
 export interface TelemetryData {
@@ -72,6 +73,9 @@ export interface TelemetryData {
   fuel_pct?: number;
   fuel_use_per_hour?: number;
   
+  // Session info data
+  session_info?: string;
+  
   // Additional fields from SimpleTelemetryWidget metrics
   // Any other fields that might be present in the data
   [key: string]: any;
@@ -88,13 +92,14 @@ interface UseTelemetryDataOptions {
  * 
  * @param id - Unique identifier for this data consumer (typically widget id)
  * @param options - Configuration options
- * @returns TelemetryData object and connection status
+ * @returns TelemetryData object, parsed SessionData and connection status
  */
 export function useTelemetryData(
   id: string,
   options: UseTelemetryDataOptions = {}
-): { data: TelemetryData | null; isConnected: boolean } {
+): { data: TelemetryData | null; sessionData: SessionData | null; isConnected: boolean } {
   const [data, setData] = useState<TelemetryData | null>(null);
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
   const { metrics, throttleUpdates = false, updateInterval = 100 } = options;
   
@@ -107,9 +112,112 @@ export function useTelemetryData(
   const metricsRef = useRef(metrics);
   metricsRef.current = metrics;
 
+  // Parse Rust struct format into JavaScript object
+  const parseRustStruct = useCallback((structStr: string): any => {
+    const result: any = {};
+    
+    // Match field: value pairs
+    const fieldPattern = /(\w+): ([^,]+),?/g;
+    let match;
+    
+    while ((match = fieldPattern.exec(structStr)) !== null) {
+      const key = match[1].trim();
+      let value = match[2].trim();
+      
+      // Convert string representations to actual types
+      if (value === 'None') {
+        result[key] = null;
+      } else if (value.startsWith('Some(') && value.endsWith(')')) {
+        // Extract value from Some()
+        const innerValue = value.substring(5, value.length - 1);
+        // Remove quotes if string
+        if (innerValue.startsWith('"') && innerValue.endsWith('"')) {
+          result[key] = innerValue.substring(1, innerValue.length - 1);
+        } else {
+          // Try to parse as number
+          const num = parseFloat(innerValue);
+          result[key] = isNaN(num) ? innerValue : num;
+        }
+      } else if (value === 'true' || value === 'false') {
+        result[key] = value === 'true';
+      } else if (!isNaN(Number(value))) {
+        result[key] = Number(value);
+      } else if (value.startsWith('"') && value.endsWith('"')) {
+        result[key] = value.substring(1, value.length - 1);
+      } else {
+        result[key] = value;
+      }
+    }
+    
+    return result;
+  }, []);
+
+  // Parse session info string into structured data
+  const parseSessionInfo = useCallback((sessionInfoStr: string): SessionData => {
+    const parsedObj: SessionData = {};
+    
+    try {
+      // Extract weekend information
+      const weekendMatch = sessionInfoStr.match(/weekend: WeekendInfo \{([^}]+)\}/);
+      if (weekendMatch && weekendMatch[1]) {
+        parsedObj.weekend = parseRustStruct(weekendMatch[1]);
+      }
+      
+      // Extract session information
+      const sessionMatch = sessionInfoStr.match(/session: SessionInfo \{([^}]+)\}/);
+      if (sessionMatch && sessionMatch[1]) {
+        parsedObj.session = parseRustStruct(sessionMatch[1]);
+        
+        // Parse sessions array
+        const sessionsMatch = sessionInfoStr.match(/sessions: \[(.*?)\]/s);
+        if (sessionsMatch && sessionsMatch[1]) {
+          const sessionsStr = sessionsMatch[1];
+          const sessionEntries = sessionsStr.match(/Session \{([^}]+)\}/g);
+          
+          if (sessionEntries) {
+            parsedObj.session.sessions = sessionEntries.map(entry => {
+              const contentMatch = entry.match(/Session \{([^}]+)\}/);
+              return contentMatch ? parseRustStruct(contentMatch[1]) : {};
+            });
+          }
+        }
+      }
+      
+      // Extract driver information
+      const driversMatch = sessionInfoStr.match(/drivers: DriverInfo \{([^}]+)\}/);
+      if (driversMatch && driversMatch[1]) {
+        parsedObj.drivers = parseRustStruct(driversMatch[1]);
+        
+        // Parse other_drivers array
+        const otherDriversMatch = sessionInfoStr.match(/other_drivers: \[(.*?)\]/s);
+        if (otherDriversMatch && otherDriversMatch[1]) {
+          const driversStr = otherDriversMatch[1];
+          const driverEntries = driversStr.match(/Driver \{([^}]+)\}/g);
+          
+          if (driverEntries) {
+            parsedObj.drivers.other_drivers = driverEntries.map(entry => {
+              const contentMatch = entry.match(/Driver \{([^}]+)\}/);
+              return contentMatch ? parseRustStruct(contentMatch[1]) : {};
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to parse session info:', err);
+    }
+    
+    return parsedObj;
+  }, [parseRustStruct]);
+
   // Memoized handler function to prevent recreation on every render
   const handleData = useCallback((newData: TelemetryData) => {
     if (!isMountedRef.current) return;
+    
+    // Process session info if available
+    if (newData.session_info) {
+      const parsedSessionData = parseSessionInfo(newData.session_info);
+      setSessionData(parsedSessionData);
+    }
     
     // If specific metrics are requested, filter the data
     if (metricsRef.current && metricsRef.current.length > 0) {
@@ -138,7 +246,7 @@ export function useTelemetryData(
     if (isMountedRef.current && newData.PlayerTrackSurface !== undefined) {
       setConnected(true);
     }
-  }, [throttleUpdates]);
+  }, [throttleUpdates, parseSessionInfo]);
 
   // Connection status handler
   const handleConnection = useCallback((isConnected: boolean) => {
@@ -205,7 +313,7 @@ export function useTelemetryData(
   // Calculate connection status based on PlayerTrackSurface
   const isConnected = data !== null && data.PlayerTrackSurface !== undefined;
 
-  return { data, isConnected };
+  return { data, sessionData, isConnected };
 }
 
 /**
