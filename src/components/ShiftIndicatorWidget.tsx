@@ -29,69 +29,49 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
   
   // Add width state
   const [widgetWidth, setWidgetWidth] = useState<number>(400);
-  const widgetWidthRef = useRef<number>(400);
-  
-  // Update the ref whenever width changes
-  useEffect(() => {
-    widgetWidthRef.current = widgetWidth;
-  }, [widgetWidth]);
   
   // Use the widget state update hook to listen for width changes
   useWidgetStateUpdates(id, (state) => {
     if (state.widgetWidth !== undefined) {
       const newWidth = Number(state.widgetWidth);
-      if (widgetWidthRef.current !== newWidth) {
+      if (widgetWidth !== newWidth) {
+        console.log(`Setting width to ${newWidth} from useWidgetStateUpdates`);
         setWidgetWidth(newWidth);
       }
     }
   });
   
-  // WidgetManager integration
+  // Initialize widget state
   useEffect(() => {
     // Get initial state from WidgetManager
     const widget = WidgetManager.getWidget(id);
-    if (widget) {
-      if (widget.state) {
-        if (widget.state.widgetWidth !== undefined && widget.state.widgetWidth !== widgetWidth) {
-          setWidgetWidth(Number(widget.state.widgetWidth));
-        }
-      } else {
-        // Set initial state in WidgetManager
-        WidgetManager.updateWidgetState(id, { widgetWidth });
-      }
+    if (widget?.state?.widgetWidth) {
+      const savedWidth = Number(widget.state.widgetWidth);
+      console.log(`Initializing width to ${savedWidth} from WidgetManager`);
+      setWidgetWidth(savedWidth);
     } else {
-      // If widget doesn't exist in WidgetManager at all
+      // Set initial state in WidgetManager
+      console.log(`Setting initial width ${widgetWidth} in WidgetManager`);
       WidgetManager.updateWidgetState(id, { widgetWidth });
     }
     
-    // Subscribe to future state changes
+    // Subscribe to WidgetManager updates
     const unsubscribe = WidgetManager.subscribe((event) => {
-      if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        if (event.state.widgetWidth !== undefined && event.state.widgetWidth !== widgetWidthRef.current) {
-          setWidgetWidth(Number(event.state.widgetWidth));
-        }
+      if (event.type === 'widget:state:updated' && event.widgetId === id && event.state.widgetWidth) {
+        const newWidth = Number(event.state.widgetWidth);
+        console.log(`Width update from WidgetManager: ${newWidth}`);
+        setWidgetWidth(newWidth);
       }
     });
     
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [id]);
   
-  // Sync width changes with WidgetManager
+  // Sync width changes back to WidgetManager
   useEffect(() => {
-    // Skip initial render
-    if (widgetWidthRef.current === widgetWidth) return;
-    
+    // This should run on all widgetWidth changes except the initial render
+    console.log(`Width changed to ${widgetWidth}, updating WidgetManager`);
     WidgetManager.updateWidgetState(id, { widgetWidth });
-    
-    // Redraw when width changes
-    if (!animationFrameId.current) {
-      animationFrameId.current = requestAnimationFrame(() => {
-        updateChart();
-        animationFrameId.current = null;
-      });
-    }
   }, [widgetWidth, id]);
   
   // Use our custom hook with shift indicator metric and RPM using typed metrics
@@ -173,6 +153,8 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
   const updateChart = useCallback(() => {
     if (!svgRef.current) return;
 
+    console.log(`Running updateChart with width: ${widgetWidth}px`);
+    
     const svg = d3.select(svgRef.current);
     const width = widgetWidth; // Use dynamic width
     const height = 120;
@@ -180,7 +162,7 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
-    // Set SVG dimensions
+    // Set SVG dimensions explicitly
     svg.attr('width', width)
        .attr('height', height);
 
@@ -306,20 +288,40 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
           .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
-  }, [data, isFlashing, shiftRpm, widgetWidth]);
+  }, [data, isFlashing, shiftRpm, widgetWidth]); // Include widgetWidth
 
+  // General chart update for data changes
   useEffect(() => {
     updateChart();
   }, [updateChart]);
 
+  // Special effect to force chart update on width changes
+  useEffect(() => {
+    // This is a dedicated effect just for width changes
+    console.log(`Width changed to ${widgetWidth}, forcing chart redraw`);
+    if (svgRef.current) {
+      // Immediately update SVG dimensions to match new width
+      const svg = d3.select(svgRef.current);
+      svg.attr('width', widgetWidth);
+      
+      // Schedule an immediate chart redraw
+      requestAnimationFrame(() => {
+        updateChart();
+      });
+    }
+  }, [widgetWidth]);
+
   return (
     <Widget id={id} title="Shift Indicator" className="p-2" onClose={onClose}>
-      <div className="w-full h-full flex items-center justify-center">
+      <div 
+        className="flex items-center justify-center overflow-visible" 
+        style={{ width: `${widgetWidth}px`, height: "120px", maxWidth: "100%" }}
+      >
         <svg
           ref={svgRef}
           width={widgetWidth}
           height={120}
-          className="bg-transparent w-full h-full"
+          className="bg-transparent"
           style={{ pointerEvents: 'none' }}
         />
       </div>
@@ -346,13 +348,17 @@ const getShiftIndicatorControls = (widgetState: any, updateWidget: (updates: any
       ],
       onChange: (value) => {
         const numericValue = Number(value);
+        console.log(`Slider changed to: ${numericValue}px`);
         
-        // Update widget state through the registry
+        // Direct update to widget manager for immediate effect
+        WidgetManager.updateWidgetState(widgetState.id, { widgetWidth: numericValue });
+        
+        // Update widget through the registry
         updateWidget({ widgetWidth: numericValue });
         
-        // Also use direct update mechanism as fallback
+        // Also use direct dispatch as fallback
         try {
-          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { widgetWidth: numericValue });
+          dispatchWidgetStateUpdate(widgetState.id, { widgetWidth: numericValue });
         } catch (err) {
           console.error(`[Controls] Error in direct update:`, err);
         }
