@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import Widget from './Widget';
 import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
+import { withControls } from '../widgets/WidgetRegistryAdapter';
+import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
+import { WidgetManager } from '../services/WidgetManager';
+import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
 
 interface ShiftIndicatorWidgetProps {
   id: string;
@@ -14,7 +18,7 @@ interface ShiftData {
   rpm: number;
 }
 
-const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
+const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<ShiftData[]>([]);
   const dataRef = useRef<ShiftData[]>([]);
@@ -22,6 +26,73 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   const flashingTimerRef = useRef<number | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const [shiftRpm, setShiftRpm] = useState<number>(0);
+  
+  // Add width state
+  const [widgetWidth, setWidgetWidth] = useState<number>(400);
+  const widgetWidthRef = useRef<number>(400);
+  
+  // Update the ref whenever width changes
+  useEffect(() => {
+    widgetWidthRef.current = widgetWidth;
+  }, [widgetWidth]);
+  
+  // Use the widget state update hook to listen for width changes
+  useWidgetStateUpdates(id, (state) => {
+    if (state.widgetWidth !== undefined) {
+      const newWidth = Number(state.widgetWidth);
+      if (widgetWidthRef.current !== newWidth) {
+        setWidgetWidth(newWidth);
+      }
+    }
+  });
+  
+  // WidgetManager integration
+  useEffect(() => {
+    // Get initial state from WidgetManager
+    const widget = WidgetManager.getWidget(id);
+    if (widget) {
+      if (widget.state) {
+        if (widget.state.widgetWidth !== undefined && widget.state.widgetWidth !== widgetWidth) {
+          setWidgetWidth(Number(widget.state.widgetWidth));
+        }
+      } else {
+        // Set initial state in WidgetManager
+        WidgetManager.updateWidgetState(id, { widgetWidth });
+      }
+    } else {
+      // If widget doesn't exist in WidgetManager at all
+      WidgetManager.updateWidgetState(id, { widgetWidth });
+    }
+    
+    // Subscribe to future state changes
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        if (event.state.widgetWidth !== undefined && event.state.widgetWidth !== widgetWidthRef.current) {
+          setWidgetWidth(Number(event.state.widgetWidth));
+        }
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [id]);
+  
+  // Sync width changes with WidgetManager
+  useEffect(() => {
+    // Skip initial render
+    if (widgetWidthRef.current === widgetWidth) return;
+    
+    WidgetManager.updateWidgetState(id, { widgetWidth });
+    
+    // Redraw when width changes
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        updateChart();
+        animationFrameId.current = null;
+      });
+    }
+  }, [widgetWidth, id]);
   
   // Use our custom hook with shift indicator metric and RPM using typed metrics
   const { data: telemetryData, sessionData } = useTelemetryData(id, { 
@@ -103,11 +174,15 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
-    const width = 400;
+    const width = widgetWidth; // Use dynamic width
     const height = 120;
     const margin = { top: 15, right: 10, bottom: 25, left: 10 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
+
+    // Set SVG dimensions
+    svg.attr('width', width)
+       .attr('height', height);
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -231,7 +306,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
           .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
-  }, [data, isFlashing, shiftRpm]);
+  }, [data, isFlashing, shiftRpm, widgetWidth]);
 
   useEffect(() => {
     updateChart();
@@ -242,7 +317,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       <div className="w-full h-full flex items-center justify-center">
         <svg
           ref={svgRef}
-          width={400}
+          width={widgetWidth}
           height={120}
           className="bg-transparent w-full h-full"
           style={{ pointerEvents: 'none' }}
@@ -251,5 +326,44 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     </Widget>
   );
 };
+
+// Define control definitions for the widget registry
+const getShiftIndicatorControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
+  // Default to 400 if not set
+  const widgetWidth = widgetState.widgetWidth || 400;
+  
+  const controls: WidgetControlDefinition[] = [
+    {
+      id: 'widgetWidth',
+      type: 'slider' as WidgetControlType,
+      label: `Width: ${widgetWidth}px`,
+      value: widgetWidth,
+      options: [
+        { value: 300, label: 'Small' },
+        { value: 450, label: 'Medium' },
+        { value: 600, label: 'Large' },
+        { value: 750, label: 'X-Large' }
+      ],
+      onChange: (value) => {
+        const numericValue = Number(value);
+        
+        // Update widget state through the registry
+        updateWidget({ widgetWidth: numericValue });
+        
+        // Also use direct update mechanism as fallback
+        try {
+          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { widgetWidth: numericValue });
+        } catch (err) {
+          console.error(`[Controls] Error in direct update:`, err);
+        }
+      }
+    }
+  ];
+  
+  return controls;
+};
+
+// Wrap component with controls and export
+const ShiftIndicatorWidget = withControls(ShiftIndicatorWidgetComponent, getShiftIndicatorControls);
 
 export default ShiftIndicatorWidget; 
