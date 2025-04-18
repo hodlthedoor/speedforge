@@ -11,6 +11,7 @@ interface ShiftIndicatorWidgetProps {
 interface ShiftData {
   timestamp: number;
   shiftIndicator: number;
+  rpm: number;
 }
 
 const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose }) => {
@@ -20,18 +21,27 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   const [isFlashing, setIsFlashing] = useState(false);
   const flashingTimerRef = useRef<number | null>(null);
   const animationFrameId = useRef<number | null>(null);
+  const [shiftRpm, setShiftRpm] = useState<number>(0);
   
-  // Use our custom hook with shift indicator metric
-  const { data: telemetryData } = useTelemetryData(id, { 
-    metrics: ['shift_indicator_pct']
+  // Use our custom hook with shift indicator metric and RPM
+  const { data: telemetryData, sessionData } = useTelemetryData(id, { 
+    metrics: ['shift_indicator_pct', 'engine_rpm']
   });
+
+  // Get shift RPM from session data
+  useEffect(() => {
+    if (sessionData?.drivers?.shift_light_shift_rpm) {
+      setShiftRpm(sessionData.drivers.shift_light_shift_rpm);
+    }
+  }, [sessionData]);
 
   // Transform telemetry data into our visualization format
   useEffect(() => {
     if (telemetryData) {
       const newData: ShiftData = {
         timestamp: Date.now(),
-        shiftIndicator: telemetryData.shift_indicator_pct || 0
+        shiftIndicator: telemetryData.shift_indicator_pct || 0,
+        rpm: telemetryData.engine_rpm || 0
       };
 
       dataRef.current = [newData];
@@ -75,6 +85,19 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     };
   }, [data]);
 
+  // Get bar color based on percentage
+  const getBarColor = (percentage: number): string => {
+    if (percentage < 60) {
+      return '#4CAF50'; // Green
+    } else if (percentage < 75) {
+      return '#FFEB3B'; // Yellow
+    } else if (percentage < 90) {
+      return '#FF9800'; // Orange
+    } else {
+      return '#F44336'; // Red
+    }
+  };
+
   // D3 drawing logic
   const updateChart = useCallback(() => {
     if (!svgRef.current) return;
@@ -97,29 +120,6 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     const x = d3.scaleLinear()
       .domain([0, 100])
       .range([0, innerWidth]);
-
-    // Define gradient
-    const gradient = svg.append('defs')
-      .append('linearGradient')
-      .attr('id', 'shift-indicator-gradient')
-      .attr('x1', '0%')
-      .attr('x2', '100%')
-      .attr('y1', '0%')
-      .attr('y2', '0%');
-
-    // Add gradient stops
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('style', 'stop-color: #4CAF50; stop-opacity: 1');
-    gradient.append('stop')
-      .attr('offset', '60%')
-      .attr('style', 'stop-color: #FFEB3B; stop-opacity: 1');
-    gradient.append('stop')
-      .attr('offset', '75%')
-      .attr('style', 'stop-color: #FF9800; stop-opacity: 1');
-    gradient.append('stop')
-      .attr('offset', '90%')
-      .attr('style', 'stop-color: #F44336; stop-opacity: 1');
 
     // Add background bar
     g.append('rect')
@@ -155,17 +155,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
     if (data.length > 0) {
       const currentValue = data[0].shiftIndicator;
       const displayValue = Math.min(currentValue, 100);
-
-      // Add the gradient bar
-      g.append('rect')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', x(displayValue))
-        .attr('height', innerHeight)
-        .attr('rx', 4)
-        .attr('fill', 'url(#shift-indicator-gradient)')
-        .attr('opacity', currentValue >= 90 && isFlashing ? 0.9 : 0.7)
-        .attr('filter', currentValue >= 90 ? 'url(#glow)' : null);
+      const barColor = getBarColor(currentValue);
 
       // Add glow filter for overrev state
       const defs = svg.append('defs');
@@ -182,15 +172,51 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       feMerge.append('feMergeNode')
         .attr('in', 'SourceGraphic');
 
-      // Add current value text
-      g.append('text')
-        .attr('x', innerWidth / 2)
-        .attr('y', innerHeight / 2 + 5)
-        .attr('text-anchor', 'middle')
-        .attr('fill', currentValue >= 90 && isFlashing ? '#ff0000' : '#fff')
-        .attr('font-size', '24px')
-        .attr('font-weight', 'bold')
-        .text(`${Math.round(currentValue)}%`);
+      // Add the solid color bar
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', x(displayValue))
+        .attr('height', innerHeight)
+        .attr('rx', 4)
+        .attr('fill', barColor)
+        .attr('opacity', currentValue >= 90 && isFlashing ? 0.9 : 0.7)
+        .attr('filter', currentValue >= 90 ? 'url(#glow)' : null);
+
+      // Add RPM and shift point info
+      if (shiftRpm > 0 && data[0].rpm > 0) {
+        const rpm = data[0].rpm;
+        const rpmPercentage = Math.min(100, (rpm / shiftRpm) * 100);
+        
+        // Add current RPM text
+        g.append('text')
+          .attr('x', innerWidth / 2)
+          .attr('y', innerHeight / 2 - 10)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#ccc')
+          .attr('font-size', '12px')
+          .text(`${Math.round(rpm)} / ${Math.round(shiftRpm)} RPM`);
+          
+        // Add percentage text
+        g.append('text')
+          .attr('x', innerWidth / 2)
+          .attr('y', innerHeight / 2 + 15)
+          .attr('text-anchor', 'middle')
+          .attr('fill', currentValue >= 90 && isFlashing ? '#ff0000' : '#fff')
+          .attr('font-size', '24px')
+          .attr('font-weight', 'bold')
+          .text(`${Math.round(rpmPercentage)}%`);
+      } else {
+        // Fallback to just percentage if RPM data not available
+        g.append('text')
+          .attr('x', innerWidth / 2)
+          .attr('y', innerHeight / 2 + 5)
+          .attr('text-anchor', 'middle')
+          .attr('fill', currentValue >= 90 && isFlashing ? '#ff0000' : '#fff')
+          .attr('font-size', '24px')
+          .attr('font-weight', 'bold')
+          .text(`${Math.round(currentValue)}%`);
+      }
 
       // Add shift indicator line at 90%
       if (currentValue >= 85) {
@@ -205,7 +231,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
           .attr('opacity', isFlashing ? 1 : 0.7);
       }
     }
-  }, [data, isFlashing]);
+  }, [data, isFlashing, shiftRpm]);
 
   useEffect(() => {
     updateChart();
