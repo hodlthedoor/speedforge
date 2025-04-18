@@ -25,10 +25,10 @@ const GearShiftWidgetComponent: React.FC<GearShiftWidgetProps> = ({ id, onClose 
   // Listen for widget state updates to update width from controls
   useWidgetStateUpdates(id, (state) => {
     if (state.width !== undefined) {
-      const numericWidth = Number(state.width);
-      if (numericWidth !== widgetWidth) {
-        setWidgetWidth(numericWidth);
-      }
+      setWidgetWidth(prevWidth => {
+        const newWidth = Number(state.width);
+        return newWidth !== prevWidth ? newWidth : prevWidth;
+      });
     }
   });
 
@@ -62,8 +62,8 @@ const GearShiftWidgetComponent: React.FC<GearShiftWidgetProps> = ({ id, onClose 
   const filledWidth = (shiftIndicator / 100) * widgetWidth;
 
   return (
-    <Widget id={id} title="Gear Shift Indicator" onClose={onClose}>
-      <div style={{ width: widgetWidth }}>
+    <Widget id={id} title="Gear Shift Indicator" onClose={onClose} width={widgetWidth}>
+      <div>
         <div style={{ border: '1px solid #ccc', borderRadius: '4px', background: '#eee', overflow: 'hidden' }}>
           <div
             style={{
