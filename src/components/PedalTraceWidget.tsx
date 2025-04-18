@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import Widget from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { WidgetManager } from '../services/WidgetManager';
@@ -127,9 +127,9 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     }
   }, [historyLength, id]);
   
-  // Use our custom hook to get telemetry data
+  // Use our custom hook to get telemetry data with typed metrics
   const { data: telemetryData } = useTelemetryData(id, { 
-    metrics: ['throttle_pct', 'brake_pct'],
+    metrics: ['throttle_pct', 'brake_pct'] as TelemetryMetric[],
     throttleUpdates: true,
     updateInterval: 20
   });

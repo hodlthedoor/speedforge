@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Widget from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
@@ -17,35 +17,22 @@ const SpeedWidgetComponent: React.FC<SpeedWidgetProps> = ({
   onClose,
   unit: initialUnit = 'kph'
 }) => {
-  // Define state for the size with default value (normal size = 100)
-  const [displaySize, setDisplaySize] = useState<number>(100);
-  const displaySizeRef = useRef<number>(100);
+  const [speed, setSpeed] = useState<number>(0);
+  const [unit, setUnit] = useState<'kph' | 'mph'>('kph');
+  const speedDisplayRef = useRef<HTMLDivElement>(null);
   
-  // Define state for the unit
-  const [unit, setUnit] = useState<'kph' | 'mph'>(initialUnit);
-  const unitRef = useRef<'kph' | 'mph'>(initialUnit);
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    displaySizeRef.current = displaySize;
-  }, [displaySize]);
-  
-  useEffect(() => {
-    unitRef.current = unit;
-  }, [unit]);
-  
-  // Listen for custom events via the useWidgetStateUpdates hook
-  useWidgetStateUpdates(id, (state) => {
-    if (state.displaySize !== undefined) {
-      const newSize = Number(state.displaySize);
-      if (displaySizeRef.current !== newSize) {
-        setDisplaySize(newSize);
-      }
+  // Subscribe to widget state updates
+  useWidgetStateUpdates(id, (widgetState) => {
+    if (widgetState && widgetState.unit) {
+      setUnit(widgetState.unit as 'kph' | 'mph');
     }
-    
-    if (state.unit !== undefined && state.unit !== unitRef.current) {
-      setUnit(state.unit);
-    }
+  }, []);
+  
+  // Use telemetry data
+  const { data: telemetryData } = useTelemetryData(id, { 
+    metrics: [unit === 'kph' ? 'speed_kph' : 'speed_mph'] as TelemetryMetric[],
+    throttleUpdates: true,
+    updateInterval: 100
   });
   
   // Initialize from WidgetManager and listen for its updates
@@ -54,42 +41,22 @@ const SpeedWidgetComponent: React.FC<SpeedWidgetProps> = ({
     const widget = WidgetManager.getWidget(id);
     if (widget) {
       if (widget.state) {
-        if (widget.state.displaySize !== undefined) {
-          const storedSize = Number(widget.state.displaySize);
-          if (storedSize !== displaySizeRef.current) {
-            setDisplaySize(storedSize);
-          }
-        }
-        
-        if (widget.state.unit !== undefined && widget.state.unit !== unitRef.current) {
+        if (widget.state.unit !== undefined && widget.state.unit !== unit) {
           setUnit(widget.state.unit);
         }
       } else {
         // Set initial state in WidgetManager
-        WidgetManager.updateWidgetState(id, { 
-          displaySize: displaySizeRef.current,
-          unit: unitRef.current
-        });
+        WidgetManager.updateWidgetState(id, { unit });
       }
     } else {
       // Widget doesn't exist yet, create state
-      WidgetManager.updateWidgetState(id, { 
-        displaySize: displaySizeRef.current,
-        unit: unitRef.current
-      });
+      WidgetManager.updateWidgetState(id, { unit });
     }
     
     // Subscribe to WidgetManager updates
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        if (event.state.displaySize !== undefined) {
-          const newSize = Number(event.state.displaySize);
-          if (displaySizeRef.current !== newSize) {
-            setDisplaySize(newSize);
-          }
-        }
-        
-        if (event.state.unit !== undefined && event.state.unit !== unitRef.current) {
+        if (event.state.unit !== undefined && event.state.unit !== unit) {
           setUnit(event.state.unit);
         }
       }
@@ -100,39 +67,23 @@ const SpeedWidgetComponent: React.FC<SpeedWidgetProps> = ({
     };
   }, [id]);
   
-  // Sync local displaySize changes to WidgetManager
-  useEffect(() => {
-    // Skip initial render
-    if (displaySizeRef.current === displaySize) return;
-    
-    // Update WidgetManager with new value
-    WidgetManager.updateWidgetState(id, { displaySize });
-  }, [displaySize, id]);
-  
   // Sync local unit changes to WidgetManager
   useEffect(() => {
     // Skip initial render
-    if (unitRef.current === unit) return;
+    if (unit === WidgetManager.getWidget(id)?.state?.unit) return;
     
     // Update WidgetManager with new value
     WidgetManager.updateWidgetState(id, { unit });
   }, [unit, id]);
   
-  // Use telemetry data
-  const { data: telemetryData } = useTelemetryData(id, { 
-    metrics: [unit === 'kph' ? 'speed_kph' : 'speed_mph'],
-    throttleUpdates: true,
-    updateInterval: 100
-  });
-
   // Get the speed value to display
   const speedValue = telemetryData 
     ? (unit === 'kph' ? telemetryData.speed_kph : telemetryData.speed_mph) || 0 
     : 0;
 
   // Calculate font size based on the display size setting
-  const fontSizeValue = 2.4 * (displaySize / 100);
-  const fontSizeUnit = 1.2 * (displaySize / 100);
+  const fontSizeValue = 2.4 * (100 / 100);
+  const fontSizeUnit = 1.2 * (100 / 100);
   
   return (
     <Widget id={id} title="Speed" onClose={onClose}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Widget from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 import { TrackSurface } from '../types/telemetry';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
@@ -75,7 +75,7 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       'VelocityY',
       'VelocityZ',
       'PlayerTrackSurface'
-    ],
+    ] as TelemetryMetric[],
     throttleUpdates: true,
     updateInterval: 75
   });

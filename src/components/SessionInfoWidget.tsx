@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Widget } from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 import { SessionData } from '../types/SessionData';
 
 interface SessionInfoWidgetProps {
@@ -33,9 +33,9 @@ const SessionInfoWidget: React.FC<SessionInfoWidgetProps> = ({
     driverDetails: true
   });
   
-  // Use telemetry hook to get session info data
+  // Use telemetry hook to get session info data with typed metrics
   const { data, sessionData, isConnected } = useTelemetryData(`session-info-${id}`, {
-    metrics: [],
+    metrics: [] as TelemetryMetric[],
     throttleUpdates: true,
     updateInterval: 5000 // Less frequent updates for session info
   });

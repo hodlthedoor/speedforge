@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import Widget from './Widget';
-import { useTelemetryData, formatTelemetryValue, getMetricName } from '../hooks/useTelemetryData';
+import { useTelemetryData, formatTelemetryValue, getMetricName, TelemetryMetric } from '../hooks/useTelemetryData';
 
 interface SimpleTelemetryWidgetProps {
   id: string;
   name: string;
-  metric: string;
+  metric: TelemetryMetric;
   initialPosition?: { x: number, y: number };
   onClose?: (id: string) => void;
 }
@@ -92,4 +92,6 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       </div>
     </Widget>
   );
-}; 
+};
+
+export default SimpleTelemetryWidget; 

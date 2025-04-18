@@ -81,8 +81,70 @@ export interface TelemetryData {
   [key: string]: any;
 }
 
+// Create a union type from TelemetryData keys for type safety
+export type TelemetryMetric = 
+  // Car State
+  | 'speed_kph'
+  | 'speed_mph'
+  | 'rpm'
+  | 'gear'
+  | 'gear_num'
+  | 'velocity_ms'
+  | 'shift_indicator_pct'
+  | 'on_pit_road'
+  | 'track_surface'
+  | 'PlayerTrackSurfaceStatus'
+  | 'PlayerTrackSurface'
+  | 'car_left_right'
+  
+  // Velocity Vectors
+  | 'VelocityX'
+  | 'VelocityY'
+  | 'VelocityZ'
+  
+  // Driver Inputs
+  | 'throttle_pct'
+  | 'brake_pct'
+  | 'clutch_pct'
+  | 'steering_angle_deg'
+  
+  // Dynamics
+  | 'lateral_accel_ms2'
+  | 'longitudinal_accel_ms2'
+  | 'vertical_accel_ms2'
+  | 'yaw_rate_deg_s'
+  | 'g_force_lat'
+  | 'g_force_lon'
+  | 'car_slip_angle_deg'
+  
+  // Track Position
+  | 'lap_dist_pct'
+  | 'lap_dist'
+  
+  // Location
+  | 'lat'
+  | 'lon'
+  
+  // Timing
+  | 'current_lap_time'
+  | 'last_lap_time'
+  | 'best_lap_time'
+  | 'lap_completed'
+  | 'delta_best'
+  | 'delta_session_best'
+  | 'delta_optimal'
+  | 'position'
+  
+  // Fuel & Temps
+  | 'fuel_level'
+  | 'fuel_pct'
+  | 'fuel_use_per_hour'
+  
+  // Session info
+  | 'session_info';
+
 interface UseTelemetryDataOptions {
-  metrics?: string[];
+  metrics?: TelemetryMetric[];
   throttleUpdates?: boolean;
   updateInterval?: number;
 }
@@ -224,7 +286,8 @@ export function useTelemetryData(
       const filteredData: TelemetryData = {};
       metricsRef.current.forEach(metric => {
         if (metric in newData) {
-          filteredData[metric] = newData[metric];
+          // Use type assertion to fix the type error
+          filteredData[metric as keyof TelemetryData] = newData[metric as keyof TelemetryData];
         }
       });
       latestDataRef.current = filteredData;

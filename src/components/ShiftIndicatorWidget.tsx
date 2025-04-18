@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import Widget from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
 
 interface ShiftIndicatorWidgetProps {
   id: string;
@@ -23,9 +23,9 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
   const animationFrameId = useRef<number | null>(null);
   const [shiftRpm, setShiftRpm] = useState<number>(0);
   
-  // Use our custom hook with shift indicator metric and RPM
+  // Use our custom hook with shift indicator metric and RPM using typed metrics
   const { data: telemetryData, sessionData } = useTelemetryData(id, { 
-    metrics: ['shift_indicator_pct', 'engine_rpm']
+    metrics: ['shift_indicator_pct', 'rpm'] as TelemetryMetric[]
   });
 
   // Get shift RPM from session data
@@ -41,7 +41,7 @@ const ShiftIndicatorWidget: React.FC<ShiftIndicatorWidgetProps> = ({ id, onClose
       const newData: ShiftData = {
         timestamp: Date.now(),
         shiftIndicator: telemetryData.shift_indicator_pct || 0,
-        rpm: telemetryData.engine_rpm || 0
+        rpm: telemetryData.rpm || 0
       };
 
       dataRef.current = [newData];
