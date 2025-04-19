@@ -10,19 +10,11 @@ import TrackMapWidget from './components/TrackMapWidget';
 import WidgetRegistry from './widgets/WidgetRegistry';
 import { v4 as uuidv4 } from 'uuid';
 
+// Initialize WebSocketService as a global singleton
+// This ensures the connection persists regardless of component lifecycle
+const globalWebSocketService = WebSocketService.getInstance();
+
 function App() {
-  // Initialize WebSocketService
-  useEffect(() => {
-    const webSocketService = WebSocketService.getInstance();
-    console.log('WebSocketService initialized in App component');
-    
-    // Cleanup when component unmounts
-    return () => {
-      console.log('Closing WebSocketService connection');
-      webSocketService.close();
-    };
-  }, []);
-  
   // Track all active widgets
   const [widgets, setWidgets] = useState<any[]>([]);
   
@@ -251,15 +243,19 @@ function App() {
       className={`app-container ${isClickThrough ? 'click-through' : ''}`}
       data-click-through={isClickThrough.toString()}
     >
-      {/* When click-through is enabled or control panel is hidden, don't show control panel */}
-      {!isClickThrough && !controlPanelHidden ? (
+      {/* Always render the control panel but hide it with CSS when needed */}
+      <div style={{ 
+        display: (!isClickThrough && !controlPanelHidden) ? 'block' : 'none',
+        // Ensure it's actually hidden when display:none is applied
+        pointerEvents: (!isClickThrough && !controlPanelHidden) ? 'auto' : 'none'
+      }}>
         <ControlPanel 
           initialPosition={{ x: windowWidth - 420, y: 20 }}
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}
           activeWidgets={widgets}
         />
-      ) : null}
+      </div>
       
       {/* Widgets are rendered at app level, separate from control panel */}
       {widgets.map(widget => {
