@@ -14,9 +14,10 @@ import {
 import { TrackSurface, CarLeftRight } from '../types/telemetry';
 import { SessionData } from '../types/SessionData';
 
-// Global connection ID used for the WebSocket connection
-// This ensures we use a single connection regardless of component ID
-const GLOBAL_CONNECTION_ID = 'global-telemetry-connection';
+// Global connection state to track if we've already set up the primary connection
+let globalConnectionEstablished = false;
+// Global ID for the main connection across all hook instances
+const SHARED_CONNECTION_ID = 'global-telemetry-connection';
 
 // Insert the following above the TelemetryData interface
 export interface WeekendInfo {
@@ -191,7 +192,7 @@ export function useTelemetryData(
 ): { data: TelemetryData | null; sessionData: SessionData | null; isConnected: boolean } {
   const [data, setData] = useState<TelemetryData | null>(null);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
-  const [connected, setConnected] = useState<boolean>(true);
+  const [connected, setConnected] = useState<boolean>(false);
   const { metrics, throttleUpdates = false, updateInterval = 100 } = options;
   
   // Use refs to store the latest values without causing re-renders
@@ -202,6 +203,9 @@ export function useTelemetryData(
   // Store metrics in a ref to avoid dependency changes
   const metricsRef = useRef(metrics);
   metricsRef.current = metrics;
+
+  // Get reference to the WebSocketService singleton
+  const webSocketServiceRef = useRef<WebSocketService>(WebSocketService.getInstance());
 
   // Parse Rust struct format into JavaScript object
   const parseRustStruct = useCallback((structStr: string): any => {
@@ -334,8 +338,8 @@ export function useTelemetryData(
       }
     }
     
-    // Update connected status based on PlayerTrackSurface
-    if (isMountedRef.current && newData.PlayerTrackSurface !== undefined) {
+    // Update connected status based on receiving data
+    if (isMountedRef.current) {
       setConnected(true);
     }
   }, [throttleUpdates, parseSessionInfo]);
@@ -358,17 +362,31 @@ export function useTelemetryData(
     }
   }, [throttleUpdates, updateInterval]);
 
+  // Initialize connection once and set up listeners specific to this instance
   useEffect(() => {
     isMountedRef.current = true;
-    const webSocketService = WebSocketService.getInstance();
+    const webSocketService = webSocketServiceRef.current;
     
-    // MODIFIED: Always use the global connection ID for the actual connection status
-    // but register the component-specific ID for data listeners
+    // Set initial connection state from the service
+    setConnected(webSocketService.isConnected());
     
-    // Add connection status listener using global ID
-    webSocketService.addConnectionListener(GLOBAL_CONNECTION_ID, handleConnection);
+    // Only add a connection listener with the shared ID if it hasn't been established yet
+    if (!globalConnectionEstablished) {
+      console.log('useTelemetryData: Setting up global connection with ID:', SHARED_CONNECTION_ID);
+      // Mark as established to prevent other instances from trying to establish primary connection
+      globalConnectionEstablished = true;
+      
+      // This instance will be responsible for maintaining the main connection
+      // All other instances will just piggyback on this connection
+      
+      // We don't need to do anything special here - the WebSocketService singleton
+      // maintains the connection, we just need to ensure we don't create additional ones
+    }
     
-    // Add data listener with component-specific ID
+    // Always add a connection listener for this specific instance
+    webSocketService.addConnectionListener(id, handleConnection);
+    
+    // Add data listener for this specific instance
     webSocketService.addDataListener(id, handleData);
     
     // Set up throttling timer if needed
@@ -378,11 +396,8 @@ export function useTelemetryData(
     return () => {
       isMountedRef.current = false;
       
-      // Remove the component-specific data listener
+      // Remove this instance's listeners
       webSocketService.removeListeners(id);
-      
-      // We don't remove the global connection listener as other components might be using it
-      // This ensures the WebSocket connection stays active
       
       if (timerRef.current !== null) {
         window.clearInterval(timerRef.current);
@@ -410,10 +425,7 @@ export function useTelemetryData(
     };
   }, [throttleUpdates, updateInterval, setupThrottledUpdates]);
 
-  // Calculate connection status based on PlayerTrackSurface
-  const isConnected = connected && data !== null;
-
-  return { data, sessionData, isConnected };
+  return { data, sessionData, isConnected: connected };
 }
 
 /**
