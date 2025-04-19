@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'main-process-message', 
       'app:toggle-click-through',
       'app:initial-state',
+      'app:before-quit',
       'display:id'
     ];
     if (validChannels.includes(channel)) {
@@ -48,6 +49,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'main-process-message', 
       'app:toggle-click-through', 
       'app:initial-state',
+      'app:before-quit',
       'display:id'
     ];
     if (validChannels.includes(channel)) {

@@ -28,6 +28,36 @@ function App() {
   // Track control panel visibility
   const [controlPanelHidden, setControlPanelHidden] = useState(false);
   
+  // Ensure proper cleanup of WebSocket connections when the app exits
+  useEffect(() => {
+    // Listen for the beforeunload event to clean up WebSocket connections
+    const handleBeforeUnload = () => {
+      console.log('App shutting down, closing WebSocket connections...');
+      // Explicitly close the WebSocketService connection
+      globalWebSocketService.close();
+    };
+    
+    // Handle window close events
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Additionally, listen for Electron-specific app quit event if available
+    if (window.electronAPI?.on) {
+      const removeListener = window.electronAPI.on('app:before-quit', () => {
+        console.log('Electron app quitting, closing WebSocket connections...');
+        globalWebSocketService.close();
+      });
+      
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        if (removeListener) removeListener();
+      };
+    }
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+  
   // Listen for WebSocket connection status changes
   useEffect(() => {
     const webSocketService = WebSocketService.getInstance();

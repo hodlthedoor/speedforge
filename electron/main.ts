@@ -576,26 +576,41 @@ function setupIpcListeners() {
   ipcMain.handle('app:quit', () => {
     console.log('Quitting application');
     try {
-      // Try to close all windows first
+      // Notify all windows to close their WebSocket connections first
       for (const win of windows) {
         if (!win.isDestroyed()) {
-          win.close();
+          try {
+            // Send message to renderers to close WebSocket connections
+            win.webContents.send('app:before-quit');
+          } catch (err) {
+            console.error('Error sending before-quit notification:', err);
+          }
         }
       }
       
-      // Clear out the windows array
-      windows.length = 0;
-      
-      // Schedule app quit to happen after current event loop
+      // Give a short delay for connections to close
       setTimeout(() => {
-        try {
-          app.quit();
-        } catch (error) {
-          console.log('Error during app.quit():', error);
-          // Force exit as a last resort
-          process.exit(0);
+        // Try to close all windows
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.close();
+          }
         }
-      }, 100);
+        
+        // Clear out the windows array
+        windows.length = 0;
+        
+        // Schedule app quit to happen after current event loop
+        setTimeout(() => {
+          try {
+            app.quit();
+          } catch (error) {
+            console.log('Error during app.quit():', error);
+            // Force exit as a last resort
+            process.exit(0);
+          }
+        }, 100);
+      }, 300); // Wait for WebSocket connections to close
       
       return { success: true };
     } catch (error) {
@@ -1213,4 +1228,29 @@ app.whenReady().then(async () => {
   const primary = screen.getPrimaryDisplay();
   console.log('Primary display:', primary);
   console.log('All displays:', displays);
+});
+
+// Notify renderer processes before quitting
+app.on('before-quit', (event) => {
+  debugLog('App before-quit event received');
+  
+  // Notify all windows to close their WebSocket connections
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      try {
+        // Send message to renderers to close WebSocket connections
+        win.webContents.send('app:before-quit');
+        debugLog(`Sent app:before-quit to window ${(win as any).displayId || 'unknown'}`);
+      } catch (err) {
+        debugLog('Error sending before-quit notification:', err);
+      }
+    }
+  }
+  
+  // Give renderers some time to clean up
+  event.preventDefault();
+  setTimeout(() => {
+    debugLog('Proceeding with app quit after delay');
+    app.quit();
+  }, 500); // 500ms delay to allow WebSocket connections to close
 });
