@@ -43,7 +43,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [activeWidgetsButtonHover, setActiveWidgetsButtonHover] = useState(false);
   
   // Telemetry connection
-  const { isConnected } = useTelemetryData('control-panel', {
+  const { isConnected } = useTelemetryData('global-telemetry-connection', {
     metrics: ['PlayerTrackSurface'],
     throttleUpdates: true,
     updateInterval: 1000

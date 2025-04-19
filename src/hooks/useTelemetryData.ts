@@ -14,6 +14,10 @@ import {
 import { TrackSurface, CarLeftRight } from '../types/telemetry';
 import { SessionData } from '../types/SessionData';
 
+// Global connection ID used for the WebSocket connection
+// This ensures we use a single connection regardless of component ID
+const GLOBAL_CONNECTION_ID = 'global-telemetry-connection';
+
 // Insert the following above the TelemetryData interface
 export interface WeekendInfo {
   track_name: string;
@@ -358,10 +362,13 @@ export function useTelemetryData(
     isMountedRef.current = true;
     const webSocketService = WebSocketService.getInstance();
     
-    // Add connection status listener
-    webSocketService.addConnectionListener(id, handleConnection);
+    // MODIFIED: Always use the global connection ID for the actual connection status
+    // but register the component-specific ID for data listeners
     
-    // Add data listener
+    // Add connection status listener using global ID
+    webSocketService.addConnectionListener(GLOBAL_CONNECTION_ID, handleConnection);
+    
+    // Add data listener with component-specific ID
     webSocketService.addDataListener(id, handleData);
     
     // Set up throttling timer if needed
@@ -370,7 +377,12 @@ export function useTelemetryData(
     // Clean up on unmount
     return () => {
       isMountedRef.current = false;
+      
+      // Remove the component-specific data listener
       webSocketService.removeListeners(id);
+      
+      // We don't remove the global connection listener as other components might be using it
+      // This ensures the WebSocket connection stays active
       
       if (timerRef.current !== null) {
         window.clearInterval(timerRef.current);
@@ -399,7 +411,7 @@ export function useTelemetryData(
   }, [throttleUpdates, updateInterval, setupThrottledUpdates]);
 
   // Calculate connection status based on PlayerTrackSurface
-  const isConnected = data !== null && data.PlayerTrackSurface !== undefined;
+  const isConnected = connected && data !== null;
 
   return { data, sessionData, isConnected };
 }
