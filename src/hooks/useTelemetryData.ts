@@ -187,7 +187,7 @@ export function useTelemetryData(
 ): { data: TelemetryData | null; sessionData: SessionData | null; isConnected: boolean } {
   const [data, setData] = useState<TelemetryData | null>(null);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
-  const [connected, setConnected] = useState<boolean>(false);
+  const [connected, setConnected] = useState<boolean>(true);
   const { metrics, throttleUpdates = false, updateInterval = 100 } = options;
   
   // Use refs to store the latest values without causing re-renders
