@@ -12,16 +12,17 @@ interface ControlPanelProps {
   onClickThrough?: (enabled: boolean) => void;
   onAddWidget?: (widget: any) => void;
   activeWidgets?: any[];
+  clickThrough?: boolean;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   initialPosition = { x: 20, y: 20 },
   onClickThrough,
   onAddWidget,
-  activeWidgets = []
+  activeWidgets = [],
+  clickThrough = false
 }) => {
   // State
-  const [clickThrough, setClickThrough] = useState(false);
   const [showWidgetMenu, setShowWidgetMenu] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
   const [reconnecting, setReconnecting] = useState(false);
@@ -685,15 +686,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   // Toggle click-through mode
   const toggleClickThrough = () => {
     const newValue = !clickThrough;
-    setClickThrough(newValue);
     
     if (onClickThrough) {
       onClickThrough(newValue);
     }
     
-    if (window.electronAPI) {
-      window.electronAPI.app.toggleClickThrough(newValue);
-    }
+    // The Electron API call is now handled in the App component
+    // through the isClickThrough state effect
   };
 
   // Handle opacity change

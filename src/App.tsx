@@ -254,6 +254,7 @@ function App() {
           onClickThrough={setIsClickThrough}
           onAddWidget={handleAddWidget}
           activeWidgets={widgets}
+          clickThrough={isClickThrough}
         />
       </div>
       
