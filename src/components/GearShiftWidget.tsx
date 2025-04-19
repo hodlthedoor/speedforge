@@ -101,11 +101,6 @@ const getGearShiftControls = (widgetState: any, updateWidget: (updates: any) => 
       onChange: (value) => {
         const numericValue = Number(value);
         updateWidget({ width: numericValue });
-        try {
-          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { width: numericValue });
-        } catch (err) {
-          console.error(`[Controls] Error in direct update:`, err);
-        }
       }
     }
   ];

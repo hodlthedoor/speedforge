@@ -72,6 +72,14 @@ export interface TelemetryData {
   fuel_level?: number;
   fuel_pct?: number;
   fuel_use_per_hour?: number;
+  track_temp_c?: number;
+  air_temp_c?: number;
+  humidity_pct?: number;
+  fog_level_pct?: number;
+  wind_vel_ms?: number;
+  wind_dir_rad?: number;
+  skies?: string;
+  weekend_info?: string;
   
   // Session info data
   session_info?: string;
@@ -139,6 +147,14 @@ export type TelemetryMetric =
   | 'fuel_level'
   | 'fuel_pct'
   | 'fuel_use_per_hour'
+  | 'track_temp_c'
+  | 'air_temp_c'
+  | 'humidity_pct'
+  | 'fog_level_pct'
+  | 'wind_vel_ms'
+  | 'wind_dir_rad'
+  | 'skies'
+  | 'weekend_info'
   
   // Session info
   | 'session_info';
@@ -503,6 +519,14 @@ export function getMetricName(metric: string): string {
     'fuel_level': 'Fuel Level',
     'fuel_pct': 'Fuel Percentage',
     'fuel_use_per_hour': 'Fuel Use Per Hour',
+    'track_temp_c': 'Track Temperature',
+    'air_temp_c': 'Air Temperature',
+    'humidity_pct': 'Humidity',
+    'fog_level_pct': 'Fog Level',
+    'wind_vel_ms': 'Wind Velocity',
+    'wind_dir_rad': 'Wind Direction',
+    'skies': 'Skies',
+    'weekend_info': 'Weekend Info',
   };
   
   return metricNames[metric] || metric;
