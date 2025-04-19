@@ -14,6 +14,15 @@ import {
 import { TrackSurface, CarLeftRight } from '../types/telemetry';
 import { SessionData } from '../types/SessionData';
 
+// Insert the following above the TelemetryData interface
+export interface WeekendInfo {
+  track_name: string;
+  track_config: string;
+  track_length_km: number;
+  session_type?: string;
+  speed_unit?: string;
+}
+
 // Typescript interface for telemetry data
 export interface TelemetryData {
   // Car State
@@ -79,7 +88,7 @@ export interface TelemetryData {
   wind_vel_ms?: number;
   wind_dir_rad?: number;
   skies?: string;
-  weekend_info?: string;
+  weekend_info?: WeekendInfo;
   
   // Session info data
   session_info?: string;
