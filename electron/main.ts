@@ -31,6 +31,9 @@ let autoCreateWindowsForNewDisplays = true;
 // Reference to the Rust backend process
 let rustBackendProcess: ChildProcess | null = null;
 
+// Track if we're already in the quit process to prevent loops
+let isQuitting = false;
+
 // Add a debug log function with timestamps
 function debugLog(...args: any[]) {
   try {
@@ -576,6 +579,13 @@ function setupIpcListeners() {
   ipcMain.handle('app:quit', () => {
     console.log('Quitting application');
     try {
+      // If already quitting, don't do duplicate work
+      if (isQuitting) {
+        return { success: true };
+      }
+      
+      isQuitting = true;
+      
       // Notify all windows to close their WebSocket connections first
       for (const win of windows) {
         if (!win.isDestroyed()) {
@@ -600,14 +610,15 @@ function setupIpcListeners() {
         // Clear out the windows array
         windows.length = 0;
         
-        // Schedule app quit to happen after current event loop
+        // Exit directly to avoid triggering more before-quit events
         setTimeout(() => {
           try {
-            app.quit();
-          } catch (error) {
-            console.log('Error during app.quit():', error);
-            // Force exit as a last resort
+            // Use process.exit instead of app.quit to avoid additional before-quit events
             process.exit(0);
+          } catch (error) {
+            console.log('Error during process.exit():', error);
+            // Force exit as a last resort
+            process.exit(1);
           }
         }, 100);
       }, 300); // Wait for WebSocket connections to close
@@ -616,7 +627,7 @@ function setupIpcListeners() {
     } catch (error) {
       console.error('Error during quit process:', error);
       // Force exit as a last resort
-      process.exit(0);
+      process.exit(1);
       return { success: false, error: String(error) };
     }
   });
@@ -947,7 +958,11 @@ app.on('activate', () => {
 
 // Clean up before quitting
 app.on('before-quit', () => {
+  // If we're already in the quit process, don't do this again
+  if (isQuitting) return;
+  
   console.log('App is quitting, cleaning up resources...');
+  isQuitting = true;
   
   // Stop the Rust backend
   stopRustBackend();
@@ -964,18 +979,7 @@ app.on('before-quit', () => {
   globalShortcut.unregisterAll();
   
   // Remove all IPC handlers
-  ipcMain.removeHandler('app:quit');
-  ipcMain.removeHandler('app:toggleAutoNewWindows');
-  ipcMain.removeHandler('app:toggleClickThrough');
-  ipcMain.removeHandler('app:closeWindowForDisplay');
-  ipcMain.removeHandler('app:getDisplays');
-  ipcMain.removeHandler('app:getCurrentDisplayId');
-  ipcMain.removeHandler('config:save');
-  ipcMain.removeHandler('config:load');
-  ipcMain.removeHandler('config:list');
-  ipcMain.removeHandler('config:delete');
-  ipcMain.removeHandler('app:getUserDataPath');
-  ipcMain.removeHandler('debug:listConfigFiles');
+  cleanupIpcHandlers();
   
   // Clean up speech module
   cleanupSpeech();
@@ -1228,29 +1232,4 @@ app.whenReady().then(async () => {
   const primary = screen.getPrimaryDisplay();
   console.log('Primary display:', primary);
   console.log('All displays:', displays);
-});
-
-// Notify renderer processes before quitting
-app.on('before-quit', (event) => {
-  debugLog('App before-quit event received');
-  
-  // Notify all windows to close their WebSocket connections
-  for (const win of windows) {
-    if (!win.isDestroyed()) {
-      try {
-        // Send message to renderers to close WebSocket connections
-        win.webContents.send('app:before-quit');
-        debugLog(`Sent app:before-quit to window ${(win as any).displayId || 'unknown'}`);
-      } catch (err) {
-        debugLog('Error sending before-quit notification:', err);
-      }
-    }
-  }
-  
-  // Give renderers some time to clean up
-  event.preventDefault();
-  setTimeout(() => {
-    debugLog('Proceeding with app quit after delay');
-    app.quit();
-  }, 500); // 500ms delay to allow WebSocket connections to close
 });
