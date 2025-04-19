@@ -1,6 +1,6 @@
 import React from 'react';
 import Widget from './Widget';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { useTelemetryData, WeekendInfo } from '../hooks/useTelemetryData';
 
 interface WeekendInfoWidgetProps {
   id: string;
@@ -31,7 +31,7 @@ const WeekendInfoWidget: React.FC<WeekendInfoWidgetProps> = ({
   const formatTrackName = () => {
     if (!data?.weekend_info) return 'Unknown Track';
     
-    const { track_name, track_config } = data.weekend_info;
+    const { track_name, track_config } = data.weekend_info as WeekendInfo;
     
     if (track_config && track_config !== '') {
       return `${track_name} - ${track_config}`;
@@ -42,9 +42,8 @@ const WeekendInfoWidget: React.FC<WeekendInfoWidgetProps> = ({
 
   // Helper function to format track length
   const formatTrackLength = () => {
-    if (!data?.weekend_info?.track_length_km) return '';
-    
-    return `${data.weekend_info.track_length_km.toFixed(2)} km`;
+    if (!(data?.weekend_info as WeekendInfo)?.track_length_km) return '';
+    return `${(data.weekend_info as WeekendInfo).track_length_km.toFixed(2)} km`;
   };
   
   // Helper to format wind direction
@@ -84,11 +83,11 @@ const WeekendInfoWidget: React.FC<WeekendInfoWidgetProps> = ({
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <div className="text-slate-400">Type</div>
-                  <div className="font-medium">{data?.weekend_info?.session_type || 'Unknown'}</div>
+                  <div className="font-medium">{(data?.weekend_info as WeekendInfo)?.session_type || 'Unknown'}</div>
                 </div>
                 <div>
                   <div className="text-slate-400">Speed Unit</div>
-                  <div className="font-medium">{data?.weekend_info?.speed_unit || 'Unknown'}</div>
+                  <div className="font-medium">{(data?.weekend_info as WeekendInfo)?.speed_unit || 'Unknown'}</div>
                 </div>
               </div>
             </div>

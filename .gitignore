@@ -10,6 +10,7 @@ node_modules
 dist
 dist-ssr
 *.local
+release/
 
 # Rust build output
 /target/

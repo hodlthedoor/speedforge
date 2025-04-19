@@ -26,7 +26,7 @@ const SpeedWidgetComponent: React.FC<SpeedWidgetProps> = ({
     if (widgetState && widgetState.unit) {
       setUnit(widgetState.unit as 'kph' | 'mph');
     }
-  }, []);
+  });
   
   // Use telemetry data
   const { data: telemetryData } = useTelemetryData(id, { 
