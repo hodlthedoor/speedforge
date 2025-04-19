@@ -956,13 +956,29 @@ app.on('activate', () => {
   if (windows.length === 0) createWindows();
 });
 
-// Clean up before quitting
-app.on('before-quit', () => {
-  // If we're already in the quit process, don't do this again
+// Notify renderer processes before quitting
+app.on('before-quit', (event) => {
+  // If we're already handling quit, don't do it again
   if (isQuitting) return;
   
-  console.log('App is quitting, cleaning up resources...');
+  debugLog('App before-quit event received');
   isQuitting = true;
+  
+  // Notify all windows to close their WebSocket connections
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      try {
+        // Send message to renderers to close WebSocket connections
+        win.webContents.send('app:before-quit');
+        debugLog(`Sent app:before-quit to window ${(win as any).displayId || 'unknown'}`);
+      } catch (err) {
+        debugLog('Error sending before-quit notification:', err);
+      }
+    }
+  }
+  
+  // Clean up resources
+  console.log('App is quitting, cleaning up resources...');
   
   // Stop the Rust backend
   stopRustBackend();
@@ -984,21 +1000,13 @@ app.on('before-quit', () => {
   // Clean up speech module
   cleanupSpeech();
   
-  // Close windows gracefully
-  for (const win of windows) {
-    try {
-      if (!win.isDestroyed()) {
-        win.removeAllListeners();
-        win.setClosable(true);
-        win.close();
-      }
-    } catch (error) {
-      console.error('Error closing window:', error);
-    }
-  }
-  
-  // Clear windows array
-  windows.length = 0;
+  // Give renderers more time to clean up their WebSocket connections
+  event.preventDefault();
+  setTimeout(() => {
+    debugLog('Proceeding with app quit after delay');
+    // Use process.exit instead of app.quit to avoid triggering before-quit again
+    process.exit(0);
+  }, 1500); // Increased to 1500ms to allow WebSocket connections to close properly
 });
 
 // When Electron is ready

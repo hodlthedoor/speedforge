@@ -373,14 +373,7 @@ export function useTelemetryData(
     // Only add a connection listener with the shared ID if it hasn't been established yet
     if (!globalConnectionEstablished) {
       console.log('useTelemetryData: Setting up global connection with ID:', SHARED_CONNECTION_ID);
-      // Mark as established to prevent other instances from trying to establish primary connection
       globalConnectionEstablished = true;
-      
-      // This instance will be responsible for maintaining the main connection
-      // All other instances will just piggyback on this connection
-      
-      // We don't need to do anything special here - the WebSocketService singleton
-      // maintains the connection, we just need to ensure we don't create additional ones
     }
     
     // Always add a connection listener for this specific instance
@@ -388,6 +381,23 @@ export function useTelemetryData(
     
     // Add data listener for this specific instance
     webSocketService.addDataListener(id, handleData);
+    
+    // Add a handler for the global force close event
+    const handleForceClose = () => {
+      console.log(`useTelemetryData (${id}): Received force-close event, closing connection`);
+      // Force close the WebSocket connection
+      webSocketService.close();
+    };
+    
+    // Listen for both global and widget-specific force close events
+    window.addEventListener('app:force-close-connections', handleForceClose);
+    window.addEventListener('widget:force-close-connections', (e: any) => {
+      // Check if this event is for this specific widget
+      if (e.detail && e.detail.widgetId === id) {
+        console.log(`useTelemetryData (${id}): Received widget-specific force-close event`);
+        handleForceClose();
+      }
+    });
     
     // Set up throttling timer if needed
     setupThrottledUpdates();
@@ -398,6 +408,10 @@ export function useTelemetryData(
       
       // Remove this instance's listeners
       webSocketService.removeListeners(id);
+      
+      // Remove force close event listeners
+      window.removeEventListener('app:force-close-connections', handleForceClose);
+      window.removeEventListener('widget:force-close-connections', handleForceClose);
       
       if (timerRef.current !== null) {
         window.clearInterval(timerRef.current);

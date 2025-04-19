@@ -254,18 +254,36 @@ export class WebSocketService {
    * Close the WebSocket connection
    */
   public close(): void {
+    console.log('WebSocketService: Closing connection');
+    
     if (this.ws) {
-      this.ws.close();
+      // Remove all event listeners to prevent any reconnection attempts
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
+      this.ws.onopen = null;
+      
+      // Set connection status to disconnected before closing
+      this.connected = false;
+      this.notifyConnectionListeners(false);
+      
+      // Close the connection with code 1000 (normal closure)
+      this.ws.close(1000, "Application closing");
+      console.log('WebSocketService: WebSocket connection closed');
       this.ws = null;
+    } else {
+      console.log('WebSocketService: No active connection to close');
     }
 
     if (this.reconnectTimer) {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+      console.log('WebSocketService: Cleared reconnect timer');
     }
 
     this.listeners.clear();
     this.connectionListeners.clear();
+    console.log('WebSocketService: Cleared all listeners');
   }
 
   /**

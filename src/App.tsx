@@ -32,7 +32,7 @@ function App() {
   useEffect(() => {
     // Listen for the beforeunload event to clean up WebSocket connections
     const handleBeforeUnload = () => {
-      console.log('App shutting down, closing WebSocket connections...');
+      console.log('App beforeunload event: closing WebSocket connections...');
       // Explicitly close the WebSocketService connection
       globalWebSocketService.close();
     };
@@ -43,8 +43,25 @@ function App() {
     // Additionally, listen for Electron-specific app quit event if available
     if (window.electronAPI?.on) {
       const removeListener = window.electronAPI.on('app:before-quit', () => {
-        console.log('Electron app quitting, closing WebSocket connections...');
+        console.log('App before-quit event received: closing WebSocket connections...');
+        
+        // Force all widgets to close their connections
+        widgets.forEach(widget => {
+          // Dispatch a close event that widget components can listen for
+          const closeEvent = new CustomEvent('widget:force-close-connections', { 
+            detail: { widgetId: widget.id }
+          });
+          window.dispatchEvent(closeEvent);
+        });
+        
+        // Explicitly close the main WebSocketService connection
         globalWebSocketService.close();
+        
+        // Also force any other potential connections to close by dispatching a global event
+        const globalCloseEvent = new CustomEvent('app:force-close-connections');
+        window.dispatchEvent(globalCloseEvent);
+        
+        console.log('All WebSocket connections should now be closed');
       });
       
       return () => {
@@ -56,7 +73,7 @@ function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, []);
+  }, [widgets]);
   
   // Listen for WebSocket connection status changes
   useEffect(() => {
