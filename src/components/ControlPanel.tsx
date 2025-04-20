@@ -370,27 +370,150 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     return categories;
   }, []);
 
-  // Get controls for selected widget
-  const widgetControls = useMemo(() => {
-    if (!selectedWidget || !selectedWidget.type) return [];
+  // First define renderWidgetControl before any code that uses it
+  const renderWidgetControl = (control: any) => {
+    // Check if conditional function exists and evaluates to false
+    if (control.conditional && !control.conditional(selectedWidget)) {
+      return null;
+    }
+    
+    switch (control.type) {
+      case 'button':
+        return (
+          <button 
+            key={control.id}
+            className="btn btn-sm btn-primary bg-blue-500 hover:bg-blue-600 text-white transition-all rounded px-3 py-1.5 text-xs font-medium shadow-sm hover:shadow"
+            onClick={() => control.onChange(control.value)}
+          >
+            {control.label}
+          </button>
+        );
+        
+      case 'select':
+        return (
+          <div key={control.id} className="mt-3">
+            <label className="detail-label text-sm text-gray-300 mb-1.5 block">{control.label}:</label>
+            <div className="flex gap-1.5">
+              {control.options.map((option: any) => (
+                <button 
+                  key={option.value}
+                  className={`px-2.5 py-1 rounded-md text-xs ${
+                    control.value === option.value 
+                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                  } transition-all`}
+                  onClick={() => control.onChange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      
+      case 'slider':
+        return (
+          <div key={control.id} className="mt-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="detail-label text-sm text-gray-300">{control.label}</label>
+              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
+                {control.value || 100}
+              </span>
+            </div>
+            <div className="pl-0 mt-1">
+              <input
+                type="range"
+                min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
+                max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
+                step={1}
+                value={control.value || 100}
+                onChange={(e) => {
+                  const numericValue = Number(e.target.value);
+                  console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
+                  control.onChange(numericValue);
+                }}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              {control.options && control.options.length > 0 && (
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  {control.options.map((option: any) => (
+                    <span 
+                      key={option.value} 
+                      className="cursor-pointer hover:text-blue-300 transition-colors" 
+                      onClick={() => control.onChange(Number(option.value))}
+                    >
+                      {option.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+        
+      case 'toggle':
+        return (
+          <div key={control.id} className="mt-3 flex items-center justify-between">
+            <label className="detail-label text-sm text-gray-300">{control.label}</label>
+            <div
+              className={`relative inline-flex items-center w-11 h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${
+                control.value ? 'bg-blue-600' : 'bg-gray-700'
+              }`}
+              onClick={() => control.onChange(!control.value)}
+            >
+              <span className="sr-only">Toggle {control.label}</span>
+              <div
+                className={`absolute left-0.5 inline-block w-5 h-5 transform rounded-full bg-white shadow transition-transform duration-200 ease-in-out ${
+                  control.value ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </div>
+          </div>
+        );
+        
+      default:
+        return (
+          <div key={control.id} className="mt-3 text-xs text-red-400 p-2 border border-red-400/20 rounded bg-red-400/10">
+            Unsupported control type: {control.type}
+          </div>
+        );
+    }
+  };
+
+  // Now we can get the widget controls
+  const getWidgetControls = useCallback((widget: any) => {
+    if (!widget || !widget.type) return [];
     
     // Get widget state based on widget type
     let widgetState: Record<string, any> = {};
     
     // For all widgets, include any state stored in the widget object
-    if (selectedWidget.state) {
-      widgetState = { ...widgetState, ...selectedWidget.state };
+    if (widget.state) {
+      widgetState = { ...widgetState, ...widget.state };
     }
     
-    console.log(`Getting controls for widget ${selectedWidget.id} (${selectedWidget.type}) with state:`, widgetState);
+    // For pedal-trace widgets, ensure historyLength is included if not already present
+    if (widget.type === 'pedal-trace') {
+      widgetState = { 
+        ...widgetState,
+        historyLength: widgetState.historyLength || 100 // Default to 100 if not set
+      };
+    }
+    
+    console.log(`Getting controls for widget ${widget.id} (${widget.type}) with state:`, widgetState);
       
-    // Get controls from registry
+    // Get controls from registry and pass our updateWidgetState function
     return WidgetRegistry.getWidgetControls(
-      selectedWidget.type,
+      widget.type,
       widgetState,
-      (updates: any) => updateWidgetState(selectedWidget.id, updates)
+      (updates: any) => updateWidgetState(widget.id, updates)
     );
-  }, [selectedWidget, updateWidgetState]);
+  }, [updateWidgetState]);
+
+  // Get controls for the currently selected widget
+  const widgetControls = useMemo(() => {
+    return selectedWidget ? getWidgetControls(selectedWidget) : [];
+  }, [selectedWidget, getWidgetControls]);
 
   // Memoize rendered widget control elements
   const renderedWidgetControls = useMemo(() => {
@@ -902,160 +1025,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const toggleConfigPanel = useCallback(() => {
     setShowConfigPanel(prev => !prev);
   }, []);
-
-  // Render a control based on its type
-  const renderWidgetControl = (control: any) => {
-    // Check if conditional function exists and evaluates to false
-    if (control.conditional && !control.conditional(selectedWidget)) {
-      return null;
-    }
-    
-    switch (control.type) {
-      case 'button':
-        return (
-          <button 
-            key={control.id}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              fontSize: '12px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              marginRight: '8px'
-            }}
-            onClick={() => control.onChange(control.value)}
-          >
-            {control.label}
-          </button>
-        );
-        
-      case 'select':
-        return (
-          <div key={control.id} style={{ marginTop: '12px' }}>
-            <label style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px', display: 'block' }}>{control.label}:</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {control.options.map((option: any) => (
-                <button 
-                  key={option.value}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    backgroundColor: control.value === option.value ? '#3b82f6' : '#374151',
-                    color: control.value === option.value ? 'white' : '#d1d5db',
-                    border: 'none',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onClick={() => control.onChange(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      
-      case 'slider':
-        return (
-          <div key={control.id} className="mt-3">
-            <div className="flex justify-between items-center mb-1.5">
-              <label className="detail-label text-sm text-gray-300">{control.label}</label>
-              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
-                {control.value || 100}
-              </span>
-            </div>
-            <div className="pl-0 mt-1">
-              <input
-                type="range"
-                min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
-                max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
-                step={1}
-                value={control.value || 100}
-                onChange={(e) => {
-                  const numericValue = Number(e.target.value);
-                  console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
-                  control.onChange(numericValue);
-                }}
-                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-              {control.options && control.options.length > 0 && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  fontSize: '10px', 
-                  color: '#9ca3af',
-                  marginTop: '4px'
-                }}>
-                  {control.options.map((option: any) => (
-                    <span 
-                      key={option.value} 
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => control.onChange(Number(option.value))}
-                    >
-                      {option.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-        
-      case 'toggle':
-        return (
-          <div key={control.id} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ fontSize: '12px', color: '#9ca3af' }}>{control.label}</label>
-            <div
-              style={{
-                position: 'relative',
-                display: 'inline-flex',
-                alignItems: 'center',
-                width: '36px',
-                height: '20px',
-                borderRadius: '9999px',
-                cursor: 'pointer',
-                backgroundColor: control.value ? '#3b82f6' : '#4b5563',
-                transition: 'background-color 0.2s ease'
-              }}
-              onClick={() => control.onChange(!control.value)}
-            >
-              <span style={{ position: 'absolute', left: '2px' }}>
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: control.value ? '16px' : '2px',
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '9999px',
-                    backgroundColor: 'white',
-                    transition: 'left 0.2s ease'
-                  }}
-                />
-              </span>
-            </div>
-          </div>
-        );
-        
-      default:
-        return (
-          <div key={control.id} style={{ 
-            marginTop: '12px', 
-            fontSize: '10px', 
-            color: '#ef4444', 
-            padding: '8px', 
-            border: '1px solid rgba(239, 68, 68, 0.2)', 
-            borderRadius: '6px', 
-            backgroundColor: 'rgba(239, 68, 68, 0.1)' 
-          }}>
-            Unsupported control type: {control.type}
-          </div>
-        );
-    }
-  };
 
   // Toggle click-through mode
   const toggleClickThrough = () => {
