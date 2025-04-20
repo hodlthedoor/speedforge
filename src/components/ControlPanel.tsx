@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { WebSocketService } from '../services/WebSocketService';
@@ -6,6 +6,52 @@ import { useTelemetryData } from '../hooks/useTelemetryData';
 import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
 import { availableMetrics } from './SimpleTelemetryWidget';
 import ConfigService from '../services/ConfigService';
+
+// Define the state shape and action types for our widget appearance reducer
+type WidgetAppearanceState = {
+  opacity: Record<string, number>;
+  backgroundTransparent: Record<string, boolean>;
+};
+
+type WidgetAppearanceAction = 
+  | { type: 'SET_OPACITY'; widgetId: string; value: number }
+  | { type: 'SET_BACKGROUND_TRANSPARENT'; widgetId: string; value: boolean }
+  | { type: 'RESET_ALL_WIDGETS' }
+  | { type: 'BULK_UPDATE'; updates: Partial<WidgetAppearanceState> };
+
+// Reducer function for widget appearance state
+function widgetAppearanceReducer(state: WidgetAppearanceState, action: WidgetAppearanceAction): WidgetAppearanceState {
+  switch (action.type) {
+    case 'SET_OPACITY':
+      return {
+        ...state,
+        opacity: {
+          ...state.opacity,
+          [action.widgetId]: action.value
+        }
+      };
+    case 'SET_BACKGROUND_TRANSPARENT':
+      return {
+        ...state,
+        backgroundTransparent: {
+          ...state.backgroundTransparent,
+          [action.widgetId]: action.value
+        }
+      };
+    case 'RESET_ALL_WIDGETS':
+      return {
+        opacity: {},
+        backgroundTransparent: {}
+      };
+    case 'BULK_UPDATE':
+      return {
+        ...state,
+        ...(action.updates || {})
+      };
+    default:
+      return state;
+  }
+}
 
 interface ControlPanelProps {
   initialPosition?: { x: number, y: number };
@@ -27,8 +73,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [showActiveWidgets, setShowActiveWidgets] = useState(false);
-  const [widgetOpacity, setWidgetOpacity] = useState<Record<string, number>>({});
-  const [widgetBackgroundTransparent, setWidgetBackgroundTransparent] = useState<Record<string, boolean>>({});
+  
+  // Replace individual state variables with reducer
+  const [widgetAppearance, dispatchWidgetAppearance] = useReducer(
+    widgetAppearanceReducer, 
+    { opacity: {}, backgroundTransparent: {} }
+  );
   
   // Configuration state
   const [panelName, setPanelName] = useState<string>('Default');
@@ -44,12 +94,104 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [activeWidgetsButtonHover, setActiveWidgetsButtonHover] = useState(false);
   
   // Telemetry connection
-  const { isConnected } = useTelemetryData('global-telemetry-connection', {
+  const { isConnected } = useTelemetryData('control-panel-telemetry-connection', {
     metrics: ['PlayerTrackSurface'],
     throttleUpdates: true,
     updateInterval: 1000
   });
 
+  // Ensure functions are declared before they're used in memoization
+  
+  // Handle widget close function
+  const closeWidget = useCallback((id: string) => {
+    if (!onAddWidget || !activeWidgets) return;
+    
+    const widgetToUpdate = activeWidgets.find(w => w.id === id);
+    if (widgetToUpdate) {
+      onAddWidget({
+        ...widgetToUpdate,
+        enabled: false
+      });
+      
+      // Clear selection if this was the selected widget
+      if (selectedWidget?.id === id) {
+        setSelectedWidget(null);
+      }
+    }
+  }, [onAddWidget, selectedWidget, activeWidgets]);
+
+  // Handle reconnect to WebSocket
+  const handleReconnect = useCallback(() => {
+    setReconnecting(true);
+    const webSocketService = WebSocketService.getInstance();
+    
+    if (webSocketService.reconnect) {
+      webSocketService.reconnect();
+      
+      setTimeout(() => {
+        setReconnecting(false);
+      }, 5000);
+    } else {
+      setReconnecting(false);
+    }
+  }, []);
+
+  // Add telemetry widget
+  const addTelemetryWidget = useCallback((metric: string, name: string) => {
+    if (!onAddWidget) return;
+    
+    const widgetDef = WidgetRegistry.get('telemetry');
+    if (!widgetDef) return;
+    
+    const id = uuidv4();
+    const widget = {
+      id,
+      type: 'telemetry',
+      title: widgetDef.defaultTitle,
+      options: { 
+        ...widgetDef.defaultOptions,
+        metric,
+        name
+      },
+      enabled: true
+    };
+    
+    onAddWidget(widget);
+  }, [onAddWidget]);
+
+  // Add any widget type from registry
+  const addWidgetFromRegistry = useCallback((type: string, customOptions?: any) => {
+    if (!onAddWidget) return;
+    
+    const widgetDef = WidgetRegistry.get(type);
+    if (!widgetDef) return;
+    
+    const id = uuidv4();
+    const widget = {
+      id,
+      type,
+      title: widgetDef.defaultTitle,
+      options: { 
+        ...widgetDef.defaultOptions,
+        ...customOptions 
+      },
+      enabled: true
+    };
+    
+    onAddWidget(widget);
+  }, [onAddWidget]);
+
+  // Function to select a widget and highlight it
+  const selectWidget = useCallback((widget: any) => {
+    setSelectedWidget(widget);
+    
+    // Dispatch event to highlight the selected widget
+    const event = new CustomEvent('widget:highlight', { 
+      detail: { widgetId: widget.id }
+    });
+    window.dispatchEvent(event);
+  }, []);
+  
   // Update widget state for any widget type
   const updateWidgetState = useCallback((widgetId: string, updates: any) => {
     // Get the widget
@@ -77,201 +219,70 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   }, [activeWidgets, selectedWidget]);
 
-  // Handle widget close function
-  const closeWidget = useCallback((id: string) => {
-    if (!onAddWidget || !activeWidgets) return;
-    
-    const widgetToUpdate = activeWidgets.find(w => w.id === id);
-    if (widgetToUpdate) {
-      onAddWidget({
-        ...widgetToUpdate,
-        enabled: false
-      });
-      
-      // Clear selection if this was the selected widget
-      if (selectedWidget?.id === id) {
-        setSelectedWidget(null);
-      }
+  // Helper function to generate a consistent color hash from a string
+  const getColorFromString = useCallback((str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-  }, [onAddWidget, selectedWidget, activeWidgets]);
-
-  // Handle reconnect to WebSocket
-  const handleReconnect = () => {
-    setReconnecting(true);
-    const webSocketService = WebSocketService.getInstance();
     
-    if (webSocketService.reconnect) {
-      webSocketService.reconnect();
-      
-      setTimeout(() => {
-        setReconnecting(false);
-      }, 5000);
-    } else {
-      setReconnecting(false);
-    }
-  };
-
-  // Auto-reconnect when connection is lost
-  useEffect(() => {
-    if (!isConnected && !reconnecting) {
-      handleReconnect();
-    }
-  }, [isConnected, reconnecting]);
-
-  // Listen for widget click events
-  useEffect(() => {
-    const handleWidgetClick = (e: any) => {
-      if (e && e.detail && e.detail.widget) {
-        setSelectedWidget(e.detail.widget);
-      }
-    };
-
-    window.addEventListener('widget:click', handleWidgetClick);
+    // Generate colors in the blue-green spectrum for telemetry metrics
+    const h = Math.abs(hash) % 180 + 180; // 180-360 range (blue to green hues)
+    const s = 70 + (Math.abs(hash) % 20); // 70-90%
+    const l = 45 + (Math.abs(hash) % 15); // 45-60%
     
-    return () => {
-      window.removeEventListener('widget:click', handleWidgetClick);
-    };
+    return `hsl(${h}, ${s}%, ${l}%)`;
   }, []);
-
-  // Initialize configuration and get display ID
-  useEffect(() => {
-    console.log('ControlPanel: Initializing configuration and getting display ID');
+  
+  // Function to show all widgets (reset opacity and transparency)
+  const handleShowAllWidgets = useCallback(() => {
+    // Only proceed if there are active widgets
+    if (!activeWidgets?.length) return;
     
-    // Get current display ID
-    if (window.electronAPI && window.electronAPI.app) {
-      // Use type assertion to handle the API method
-      console.log('ControlPanel: electronAPI available, getting display ID');
-      const appApi = window.electronAPI.app as any;
-      if (appApi.getCurrentDisplayId) {
-        appApi.getCurrentDisplayId().then((response: any) => {
-          console.log('ControlPanel: getCurrentDisplayId response:', response);
-          if (response.success && response.displayId) {
-            setCurrentDisplayId(response.displayId);
-            
-            // Load list of saved panels for this display
-            console.log('ControlPanel: Loading saved panel configs for display:', response.displayId);
-            const configService = ConfigService.getInstance();
-            configService.listPanelConfigs().then(configs => {
-              console.log('ControlPanel: Saved panel configs:', configs);
-              setSavedPanels(configs);
-            }).catch(err => {
-              console.error('ControlPanel: Error listing panel configs:', err);
-            });
-          }
-        }).catch(err => {
-          console.error('ControlPanel: Error getting current display ID:', err);
-        });
-      } else {
-        console.warn('ControlPanel: getCurrentDisplayId method not available');
-      }
-    } else {
-      console.warn('ControlPanel: electronAPI or app not available');
-    }
-
-    // Listen for display ID changes
-    if (window.electronAPI?.on) {
-      console.log('ControlPanel: Setting up display:id event listener');
-      const removeListener = window.electronAPI.on('display:id', (displayId: number) => {
-        console.log('ControlPanel: Received display:id event with ID:', displayId);
-        setCurrentDisplayId(displayId);
+    // Create a new opacity object with 1 (100%) for all widgets
+    const newOpacity: Record<string, number> = {};
+    // Create a new transparency object with false for all widgets
+    const newTransparency: Record<string, boolean> = {};
+    
+    // Set values for all active widgets
+    activeWidgets.forEach(widget => {
+      if (widget.enabled) {
+        newOpacity[widget.id] = 1;
+        newTransparency[widget.id] = false;
         
-        // Reload panel list for the new display
-        const configService = ConfigService.getInstance();
-        configService.listPanelConfigs().then(configs => {
-          console.log('ControlPanel: Updated saved panel configs:', configs);
-          setSavedPanels(configs);
-        }).catch(err => {
-          console.error('ControlPanel: Error listing updated panel configs:', err);
+        // Update widget opacity via event
+        const opacityEvent = new CustomEvent('widget:opacity', { 
+          detail: { widgetId: widget.id, opacity: 1 }
         });
-      });
-      
-      return () => {
-        if (removeListener) removeListener();
-      };
-    } else {
-      console.warn('ControlPanel: on method not available for event listening');
-    }
-  }, []);
+        window.dispatchEvent(opacityEvent);
+        
+        // Update widget transparency via event
+        const transparencyEvent = new CustomEvent('widget:background-transparent', { 
+          detail: { widgetId: widget.id, transparent: false }
+        });
+        window.dispatchEvent(transparencyEvent);
+      }
+    });
+    
+    // Update state with bulk reducer action
+    dispatchWidgetAppearance({
+      type: 'BULK_UPDATE',
+      updates: {
+        opacity: newOpacity,
+        backgroundTransparent: newTransparency
+      }
+    });
+  }, [activeWidgets, dispatchWidgetAppearance]);
 
-  // Auto-load default panel configuration on startup
-  useEffect(() => {
-    // Only try to auto-load if we have current display ID and active widgets is empty
-    if (currentDisplayId !== null && activeWidgets.length === 0) {
-      // Try to load the default config for this display
-      const configService = ConfigService.getInstance();
-      configService.loadPanelConfig('Default').then(config => {
-        if (config && config.widgets && config.widgets.length > 0) {
-          // Apply config widgets
-          config.widgets.forEach(widgetConfig => {
-            if (widgetConfig.enabled) {
-              const newWidget = {
-                id: widgetConfig.id,
-                type: widgetConfig.type,
-                title: widgetConfig.title,
-                options: widgetConfig.options,
-                state: widgetConfig.state,
-                enabled: true
-              };
-              
-              if (onAddWidget) {
-                onAddWidget(newWidget);
-              }
-              
-              // Set widget position, opacity, etc.
-              if (widgetConfig.position) {
-                const posEvent = new CustomEvent('widget:position', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    position: widgetConfig.position 
-                  }
-                });
-                window.dispatchEvent(posEvent);
-              }
-              
-              // Apply other widget properties
-              if (widgetConfig.opacity !== undefined) {
-                const opacityEvent = new CustomEvent('widget:opacity', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    opacity: widgetConfig.opacity 
-                  }
-                });
-                window.dispatchEvent(opacityEvent);
-                
-                // Update local state
-                setWidgetOpacity(prev => ({
-                  ...prev,
-                  [widgetConfig.id]: widgetConfig.opacity
-                }));
-              }
-              
-              // Set background transparency if specified
-              if (widgetConfig.isBackgroundTransparent !== undefined) {
-                const bgEvent = new CustomEvent('widget:background-transparent', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    transparent: widgetConfig.isBackgroundTransparent 
-                  }
-                });
-                window.dispatchEvent(bgEvent);
-                
-                // Update local state
-                setWidgetBackgroundTransparent(prev => ({
-                  ...prev,
-                  [widgetConfig.id]: widgetConfig.isBackgroundTransparent
-                }));
-              }
-            }
-          });
-          
-          setPanelName('Default');
-        }
-      });
-    }
-  }, [currentDisplayId, activeWidgets, onAddWidget]);
+  // Get enabled widgets from the activeWidgets prop
+  const enabledWidgets = useMemo(() => {
+    return Array.isArray(activeWidgets) 
+      ? activeWidgets.filter(w => w && w.enabled !== false)
+      : [];
+  }, [activeWidgets]);
 
-  // Get widget categories
-  const widgetsByCategory = useCallback(() => {
+  // Get widget categories with useMemo
+  const widgetsByCategory = useMemo(() => {
     const defs = WidgetRegistry.getAllDefinitions();
     const categories: Record<string, any[]> = {};
     
@@ -290,26 +301,195 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   }, []);
 
   // Get controls for selected widget
-  const getWidgetControls = useCallback((widget: any) => {
-    if (!widget || !widget.type) return [];
+  const widgetControls = useMemo(() => {
+    if (!selectedWidget || !selectedWidget.type) return [];
     
     // Get widget state based on widget type
     let widgetState: Record<string, any> = {};
     
     // For all widgets, include any state stored in the widget object
-    if (widget.state) {
-      widgetState = { ...widgetState, ...widget.state };
+    if (selectedWidget.state) {
+      widgetState = { ...widgetState, ...selectedWidget.state };
     }
     
-    console.log(`Getting controls for widget ${widget.id} (${widget.type}) with state:`, widgetState);
+    console.log(`Getting controls for widget ${selectedWidget.id} (${selectedWidget.type}) with state:`, widgetState);
       
     // Get controls from registry
     return WidgetRegistry.getWidgetControls(
-      widget.type,
+      selectedWidget.type,
       widgetState,
-      (updates: any) => updateWidgetState(widget.id, updates)
+      (updates: any) => updateWidgetState(selectedWidget.id, updates)
     );
-  }, [updateWidgetState]);
+  }, [selectedWidget, updateWidgetState]);
+
+  // Memoize rendered widget control elements
+  const renderedWidgetControls = useMemo(() => {
+    return widgetControls.map(control => renderWidgetControl(control));
+  }, [widgetControls]);
+
+  // Memoize the telemetry widgets rendering
+  const renderedTelemetryWidgets = useMemo(() => {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        {availableMetrics.map(metric => (
+          <div 
+            key={metric.id} 
+            style={{
+              padding: '8px',
+              backgroundColor: 'rgba(30, 41, 59, 0.8)',
+              borderRadius: '8px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onClick={() => addTelemetryWidget(metric.id, metric.name)}
+          >
+            <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [addTelemetryWidget]);
+
+  // Memoize the widget categories rendering
+  const renderedWidgetCategories = useMemo(() => {
+    return Object.entries(widgetsByCategory).map(([category, widgets]) => (
+      <div key={category} style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
+          <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          {widgets.map(widget => (
+            <div 
+              key={widget.type} 
+              style={{
+                padding: '8px',
+                backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                borderRadius: '8px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => addWidgetFromRegistry(widget.type)}
+              title={widget.description}
+            >
+              <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ));
+  }, [widgetsByCategory, addWidgetFromRegistry]);
+
+  // Memoize the active widgets list
+  const renderedActiveWidgets = useMemo(() => {
+    if (enabledWidgets.length === 0) {
+      return (
+        <div style={{ 
+          padding: '16px', 
+          backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+          borderRadius: '8px',
+          textAlign: 'center',
+          color: '#94a3b8'
+        }}>
+          No active widgets to display
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '8px',
+        maxHeight: '280px',
+        overflowY: 'auto',
+        paddingRight: '10px',
+        marginRight: '-10px'
+      }}>
+        {enabledWidgets.map(widget => (
+          <div 
+            key={widget.id}
+            style={{
+              padding: '10px',
+              backgroundColor: selectedWidget?.id === widget.id 
+                ? 'rgba(20, 184, 166, 0.2)' 
+                : 'rgba(30, 41, 59, 0.8)',
+              borderRadius: '6px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: selectedWidget?.id === widget.id 
+                ? '1px solid rgba(20, 184, 166, 0.5)' 
+                : '1px solid transparent'
+            }}
+            onClick={() => selectWidget(widget)}
+          >
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              fontSize: '12px',
+              fontWeight: 500, 
+              color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
+            }}>
+              <span>
+                {widget.title || `Widget ${widget.id.slice(0, 6)}`}
+                {widget.type === 'telemetry' && widget.options?.metric && (
+                  <span style={{ 
+                    display: 'flex',
+                    alignItems: 'center',
+                    fontSize: '10px', 
+                    marginTop: '2px',
+                    color: selectedWidget?.id === widget.id ? '#2dd4bf' : '#94a3b8'
+                  }}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: getColorFromString(widget.options.metric),
+                      marginRight: '5px'
+                    }} />
+                    {widget.options.name || widget.options.metric}
+                  </span>
+                )}
+              </span>
+              <span style={{ 
+                fontSize: '10px', 
+                padding: '2px 6px', 
+                backgroundColor: widget.type === 'telemetry' 
+                  ? 'rgba(56, 189, 248, 0.2)' 
+                  : widget.type === 'track-map' 
+                    ? 'rgba(168, 85, 247, 0.2)'
+                    : widget.type === 'shift-indicator'
+                      ? 'rgba(249, 115, 22, 0.2)'
+                      : widget.type === 'pedal-trace'
+                        ? 'rgba(34, 197, 94, 0.2)'
+                        : 'rgba(20, 184, 166, 0.2)',
+                color: widget.type === 'telemetry' 
+                  ? '#38bdf8' 
+                  : widget.type === 'track-map' 
+                    ? '#a855f7'
+                    : widget.type === 'shift-indicator'
+                      ? '#f97316'
+                      : widget.type === 'pedal-trace'
+                        ? '#22c55e'
+                        : '#14b8a6',
+                borderRadius: '4px'
+              }}>
+                {widget.type}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [enabledWidgets, selectedWidget, selectWidget, getColorFromString]);
 
   // Save the current panel configuration
   const handleSavePanel = useCallback(() => {
@@ -407,10 +587,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   window.dispatchEvent(opacityEvent);
                   
                   // Update local state
-                  setWidgetOpacity(prev => ({
-                    ...prev,
-                    [widgetConfig.id]: widgetConfig.opacity
-                  }));
+                  dispatchWidgetAppearance({
+                    type: 'SET_OPACITY',
+                    widgetId: widgetConfig.id,
+                    value: widgetConfig.opacity
+                  });
                 }
                 
                 // Set background transparency if specified
@@ -424,10 +605,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   window.dispatchEvent(bgEvent);
                   
                   // Update local state
-                  setWidgetBackgroundTransparent(prev => ({
-                    ...prev,
-                    [widgetConfig.id]: widgetConfig.isBackgroundTransparent
-                  }));
+                  dispatchWidgetAppearance({
+                    type: 'SET_BACKGROUND_TRANSPARENT',
+                    widgetId: widgetConfig.id,
+                    value: widgetConfig.isBackgroundTransparent
+                  });
                 }
               }
             });
@@ -638,51 +820,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   };
 
-  // Add telemetry widget
-  const addTelemetryWidget = useCallback((metric: string, name: string) => {
-    if (!onAddWidget) return;
-    
-    const widgetDef = WidgetRegistry.get('telemetry');
-    if (!widgetDef) return;
-    
-    const id = uuidv4();
-    const widget = {
-      id,
-      type: 'telemetry',
-      title: widgetDef.defaultTitle,
-      options: { 
-        ...widgetDef.defaultOptions,
-        metric,
-        name
-      },
-      enabled: true
-    };
-    
-    onAddWidget(widget);
-  }, [onAddWidget]);
-
-  // Add any widget type from registry
-  const addWidgetFromRegistry = useCallback((type: string, customOptions?: any) => {
-    if (!onAddWidget) return;
-    
-    const widgetDef = WidgetRegistry.get(type);
-    if (!widgetDef) return;
-    
-    const id = uuidv4();
-    const widget = {
-      id,
-      type,
-      title: widgetDef.defaultTitle,
-      options: { 
-        ...widgetDef.defaultOptions,
-        ...customOptions 
-      },
-      enabled: true
-    };
-    
-    onAddWidget(widget);
-  }, [onAddWidget]);
-
   // Toggle click-through mode
   const toggleClickThrough = () => {
     const newValue = !clickThrough;
@@ -697,10 +834,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Handle opacity change
   const handleOpacityChange = (widgetId: string, value: number) => {
-    setWidgetOpacity(prev => ({
-      ...prev,
-      [widgetId]: value
-    }));
+    // Update state with reducer
+    dispatchWidgetAppearance({ 
+      type: 'SET_OPACITY', 
+      widgetId, 
+      value 
+    });
     
     // Dispatch event to update widget opacity
     const event = new CustomEvent('widget:opacity', { 
@@ -711,12 +850,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Handle background transparency toggle
   const handleBackgroundTransparencyToggle = (widgetId: string) => {
-    const newValue = !(widgetBackgroundTransparent[widgetId] || false);
+    const currentValue = widgetAppearance.backgroundTransparent[widgetId] || false;
+    const newValue = !currentValue;
     
-    setWidgetBackgroundTransparent(prev => ({
-      ...prev,
-      [widgetId]: newValue
-    }));
+    // Update state with reducer
+    dispatchWidgetAppearance({ 
+      type: 'SET_BACKGROUND_TRANSPARENT', 
+      widgetId, 
+      value: newValue 
+    });
     
     // Dispatch event to update widget background transparency
     const event = new CustomEvent('widget:background-transparent', { 
@@ -737,17 +879,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setShowWidgetMenu(!showWidgetMenu);
   };
 
-  // Function to select a widget and highlight it
-  const selectWidget = (widget: any) => {
-    setSelectedWidget(widget);
-    
-    // Dispatch event to highlight the selected widget
-    const event = new CustomEvent('widget:highlight', { 
-      detail: { widgetId: widget.id }
-    });
-    window.dispatchEvent(event);
-  };
-
   // Toggle showing active widgets list
   const toggleActiveWidgetsList = () => {
     // If we're about to close the active widgets section and there's a selected widget, unselect it
@@ -758,60 +889,38 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setShowActiveWidgets(!showActiveWidgets);
   };
 
-  // Get enabled widgets from the activeWidgets prop
-  const enabledWidgets = Array.isArray(activeWidgets) 
-    ? activeWidgets.filter(w => w && w.enabled !== false)
-    : [];
-
-  // Function to show all widgets (reset opacity and transparency)
-  const handleShowAllWidgets = () => {
-    // Only proceed if there are active widgets
-    if (!activeWidgets?.length) return;
-    
-    // Create a new opacity object with 1 (100%) for all widgets
-    const newOpacity: Record<string, number> = {};
-    // Create a new transparency object with false for all widgets
-    const newTransparency: Record<string, boolean> = {};
-    
-    // Set values for all active widgets
-    activeWidgets.forEach(widget => {
-      if (widget.enabled) {
-        newOpacity[widget.id] = 1;
-        newTransparency[widget.id] = false;
-        
-        // Update widget opacity via event
-        const opacityEvent = new CustomEvent('widget:opacity', { 
-          detail: { widgetId: widget.id, opacity: 1 }
-        });
-        window.dispatchEvent(opacityEvent);
-        
-        // Update widget transparency via event
-        const transparencyEvent = new CustomEvent('widget:background-transparent', { 
-          detail: { widgetId: widget.id, transparent: false }
-        });
-        window.dispatchEvent(transparencyEvent);
-      }
-    });
-    
-    // Update state
-    setWidgetOpacity(newOpacity);
-    setWidgetBackgroundTransparent(newTransparency);
-  };
-
-  // Helper function to generate a consistent color hash from a string
-  const getColorFromString = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  // Auto-reconnect when connection is lost
+  useEffect(() => {
+    if (!isConnected && !reconnecting) {
+      handleReconnect();
     }
+  }, [isConnected, reconnecting, handleReconnect]);
+
+  // Listen for widget click events
+  useEffect(() => {
+    const handleWidgetClick = (e: any) => {
+      if (e && e.detail && e.detail.widget) {
+        setSelectedWidget(e.detail.widget);
+      }
+    };
+
+    window.addEventListener('widget:click', handleWidgetClick);
     
-    // Generate colors in the blue-green spectrum for telemetry metrics
-    const h = Math.abs(hash) % 180 + 180; // 180-360 range (blue to green hues)
-    const s = 70 + (Math.abs(hash) % 20); // 70-90%
-    const l = 45 + (Math.abs(hash) % 15); // 45-60%
+    return () => {
+      window.removeEventListener('widget:click', handleWidgetClick);
+    };
+  }, []);
+
+  // Ensure proper cleanup when component is unmounted
+  useEffect(() => {
+    // Get WebSocketService instance
+    const webSocketService = WebSocketService.getInstance();
     
-    return `hsl(${h}, ${s}%, ${l}%)`;
-  };
+    return () => {
+      // Clean up all listeners associated with this component
+      webSocketService.removeListeners('control-panel-telemetry-connection');
+    };
+  }, []);
 
   return (
     <>
@@ -1274,57 +1383,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     </svg>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    {availableMetrics.map(metric => (
-                      <div 
-                        key={metric.id} 
-                        style={{
-                          padding: '8px',
-                          backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                          borderRadius: '8px',
-                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onClick={() => addTelemetryWidget(metric.id, metric.name)}
-                      >
-                        <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
-                      </div>
-                    ))}
-                  </div>
+                  {renderedTelemetryWidgets}
                 </div>
                 
                 {/* Other Widget Types */}
-                {Object.entries(widgetsByCategory()).map(([category, widgets]) => (
-                  <div key={category} style={{ marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
-                      <svg style={{ width: '16px', height: '16px', color: '#a5b4fc' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      {widgets.map(widget => (
-                        <div 
-                          key={widget.type} 
-                          style={{
-                            padding: '8px',
-                            backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                            borderRadius: '8px',
-                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onClick={() => addWidgetFromRegistry(widget.type)}
-                          title={widget.description}
-                        >
-                          <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{widget.defaultTitle}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                {renderedWidgetCategories}
               </div>
             </div>
           )}
@@ -1377,295 +1440,32 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </div>
 
           {/* Active Widgets Content */}
-          {showActiveWidgets && enabledWidgets.length > 0 && (
+          {showActiveWidgets && (
             <div style={{ 
               backgroundColor: 'rgba(30, 41, 59, 0.4)',
               borderRadius: '8px',
               padding: '16px',
               marginTop: '4px'
             }}>
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '8px',
-                maxHeight: '280px',
-                overflowY: 'auto',
-                paddingRight: '10px',
-                marginRight: '-10px'
-              }}>
-                {enabledWidgets.map(widget => (
-                  <div 
-                    key={widget.id}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: selectedWidget?.id === widget.id 
-                        ? 'rgba(20, 184, 166, 0.2)' 
-                        : 'rgba(30, 41, 59, 0.8)',
-                      borderRadius: '6px',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      border: selectedWidget?.id === widget.id 
-                        ? '1px solid rgba(20, 184, 166, 0.5)' 
-                        : '1px solid transparent'
-                    }}
-                    onClick={() => selectWidget(widget)}
-                  >
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      fontSize: '12px',
-                      fontWeight: 500, 
-                      color: selectedWidget?.id === widget.id ? '#14b8a6' : 'white' 
-                    }}>
-                      <span>
-                        {widget.title || `Widget ${widget.id.slice(0, 6)}`}
-                        {widget.type === 'telemetry' && widget.options?.metric && (
-                          <span style={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            fontSize: '10px', 
-                            marginTop: '2px',
-                            color: selectedWidget?.id === widget.id ? '#2dd4bf' : '#94a3b8'
-                          }}>
-                            <span style={{
-                              display: 'inline-block',
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              backgroundColor: getColorFromString(widget.options.metric),
-                              marginRight: '5px'
-                            }} />
-                            {widget.options.name || widget.options.metric}
-                          </span>
-                        )}
-                      </span>
-                      <span style={{ 
-                        fontSize: '10px', 
-                        padding: '2px 6px', 
-                        backgroundColor: widget.type === 'telemetry' 
-                          ? 'rgba(56, 189, 248, 0.2)' 
-                          : widget.type === 'track-map' 
-                            ? 'rgba(168, 85, 247, 0.2)'
-                            : widget.type === 'shift-indicator'
-                              ? 'rgba(249, 115, 22, 0.2)'
-                              : widget.type === 'pedal-trace'
-                                ? 'rgba(34, 197, 94, 0.2)'
-                                : 'rgba(20, 184, 166, 0.2)',
-                        color: widget.type === 'telemetry' 
-                          ? '#38bdf8' 
-                          : widget.type === 'track-map' 
-                            ? '#a855f7'
-                            : widget.type === 'shift-indicator'
-                              ? '#f97316'
-                              : widget.type === 'pedal-trace'
-                                ? '#22c55e'
-                                : '#14b8a6',
-                        borderRadius: '4px'
-                      }}>
-                        {widget.type}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderedActiveWidgets}
             </div>
           )}
           
-          {showActiveWidgets && enabledWidgets.length === 0 && (
-            <div style={{ 
-              backgroundColor: 'rgba(30, 41, 59, 0.4)',
-              borderRadius: '8px',
-              padding: '16px',
-              marginTop: '4px'
-            }}>
+          {/* Dynamic Widget Controls from Registry */}
+          {widgetControls.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+              </div>
               <div style={{ 
-                padding: '16px', 
+                padding: '12px', 
                 backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                borderRadius: '8px',
-                textAlign: 'center',
-                color: '#94a3b8'
+                borderRadius: '8px'
               }}>
-                No active widgets to display
+                {renderedWidgetControls}
               </div>
             </div>
-          )}
-
-          {/* Selected Widget Section */}
-          {selectedWidget && (
-            <>
-              <div 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(147, 197, 253, 0.5)',
-                  marginTop: '8px'
-                }}
-              >
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: '#3b82f6',
-                  flex: 1
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Selected: {selectedWidget.title}
-                </div>
-                
-                <button 
-                  onClick={() => closeWidget(selectedWidget.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    border: 'none',
-                    backgroundColor: 'rgba(60, 60, 60, 0.4)',
-                    color: '#9ca3af',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    marginLeft: '8px'
-                  }}
-                >
-                  <svg style={{ width: '12px', height: '12px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div style={{ 
-                backgroundColor: 'rgba(30, 41, 59, 0.4)',
-                borderRadius: '8px',
-                padding: '16px',
-                marginTop: '4px'
-              }}>
-                <div style={{
-                  maxHeight: '400px',
-                  overflowY: 'auto',
-                  paddingRight: '10px',
-                  marginRight: '-10px'
-                }}>
-                  <div style={{ 
-                    padding: '12px', 
-                    backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    marginBottom: '16px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                      <span style={{ color: '#9ca3af' }}>ID:</span>
-                      <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                      <span style={{ color: '#9ca3af' }}>Type:</span>
-                      <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
-                    </div>
-                    {selectedWidget.options?.metric && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
-                        <span style={{ color: '#9ca3af' }}>Metric:</span>
-                        <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Dynamic Widget Controls from Registry */}
-                  {getWidgetControls(selectedWidget).length > 0 && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
-                        <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-                      </div>
-                      <div style={{ 
-                        padding: '12px', 
-                        backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                        borderRadius: '8px'
-                      }}>
-                        {getWidgetControls(selectedWidget).map(control => 
-                          renderWidgetControl(control)
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Appearance Controls */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
-                      <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-                    </div>
-                    <div style={{ 
-                      padding: '12px', 
-                      backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                      borderRadius: '8px'
-                    }}>
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
-                          <span style={{ 
-                            fontSize: '10px', 
-                            padding: '2px 6px', 
-                            backgroundColor: 'rgba(30, 41, 59, 0.8)', 
-                            borderRadius: '9999px',
-                            color: '#d1d5db' 
-                          }}>
-                            {Math.round((widgetOpacity[selectedWidget.id] ?? 1) * 100)}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0.3"
-                          max="1"
-                          step="0.1"
-                          value={widgetOpacity[selectedWidget.id] ?? 1}
-                          onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
-                          style={{
-                            width: '100%',
-                            height: '6px',
-                            borderRadius: '9999px',
-                            backgroundColor: '#4b5563',
-                            appearance: 'none',
-                            outline: 'none',
-                            cursor: 'pointer'
-                          }}
-                        />
-                      </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
-                        <button
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: widgetBackgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
-                            color: widgetBackgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
-                            border: 'none',
-                            fontSize: '11px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
-                        >
-                          {widgetBackgroundTransparent[selectedWidget.id] 
-                            ? '✓ Transparent' 
-                            : 'Make Transparent'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
           )}
         </div>
       </BaseDraggableComponent>
