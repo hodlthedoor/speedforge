@@ -106,6 +106,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Get user data path
     getUserDataPath: async (): Promise<string> => {
       return await ipcRenderer.invoke('app:getUserDataPath');
+    },
+
+    // Application control functions
+    appControl: {
+      quit: () => ipcRenderer.invoke('app:quit'),
+      toggleClickThrough: () => ipcRenderer.invoke('app:toggleClickThrough'),
+      toggleAutoNewWindows: () => ipcRenderer.invoke('app:toggleAutoNewWindows'),
+      closeWindowForDisplay: (displayId: number) => ipcRenderer.invoke('app:closeWindowForDisplay', displayId),
+      getDisplays: () => ipcRenderer.invoke('app:getDisplays'),
+      getCurrentDisplayId: () => ipcRenderer.invoke('app:getCurrentDisplayId'),
+      getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
+      openDevTools: () => ipcRenderer.invoke('app:openDevTools')
     }
   },
 

@@ -923,6 +923,21 @@ function setupIpcListeners() {
       };
     }
   });
+
+  // Handler to open developer tools for the current window
+  ipcMain.handle('app:openDevTools', async (event) => {
+    try {
+      const webContents = event.sender;
+      if (webContents) {
+        webContents.openDevTools({ mode: 'detach' });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error opening developer tools:', error);
+      return false;
+    }
+  });
 }
 
 // Clean up all IPC handlers
@@ -937,6 +952,7 @@ function cleanupIpcHandlers() {
   ipcMain.removeHandler('app:getDisplays');
   ipcMain.removeHandler('app:getCurrentDisplayId');
   ipcMain.removeHandler('app:getUserDataPath');
+  ipcMain.removeHandler('app:openDevTools');
   
   // Clean up widget handlers
   ipcMain.removeHandler('widget:create');
