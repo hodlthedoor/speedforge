@@ -6,6 +6,7 @@ import { useTelemetryData } from '../hooks/useTelemetryData';
 import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
 import { availableMetrics } from './SimpleTelemetryWidget';
 import ConfigService from '../services/ConfigService';
+import WidgetManager from '../services/WidgetManager';
 
 // Define the state shape and action types for our widget appearance reducer
 type WidgetAppearanceState = {
@@ -233,21 +234,54 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     // Get the widget
     const widget = activeWidgets.find(w => w.id === widgetId);
     if (!widget) {
-      console.error(`Cannot update widget state: widget with ID ${widgetId} not found`);
+      console.error(`[CRITICAL] Cannot update widget state: widget with ID ${widgetId} not found`);
       return;
     }
     
-    console.log(`updateWidgetState called for widget ${widgetId} with updates:`, updates);
+    console.log(`[ControlPanel] updateWidgetState called for widget ${widgetId} with updates:`, updates);
     
     // Update widget state in the widget object itself
     if (!widget.state) widget.state = {};
     widget.state = { ...widget.state, ...updates };
+    console.log(`[ControlPanel] Widget state after update:`, widget.state);
+    
+    // Handle track map widgets specifically
+    if (widget.type === 'track-map') {
+      const event = new CustomEvent('track-map:control', { 
+        detail: { widgetId, updates }
+      });
+      window.dispatchEvent(event);
+    }
+    
+    // Update the widget state using WidgetManager
+    console.log(`[ControlPanel] Calling WidgetManager.updateWidgetState for widget ${widgetId}`);
+    WidgetManager.updateWidgetState(widgetId, updates);
     
     // For all widget types, dispatch a generic widget:state:update event
     const updateEvent = new CustomEvent('widget:state:updated', { 
       detail: { widgetId, state: updates }
     });
     window.dispatchEvent(updateEvent);
+    
+    // For Electron environments, update widget state through API
+    if (window.electronAPI) {
+      try {
+        const widgetsAPI = window.electronAPI as unknown as { 
+          widgets: { 
+            updateState: (id: string, state: any) => Promise<any>
+          } 
+        };
+        
+        if (widgetsAPI.widgets && widgetsAPI.widgets.updateState) {
+          widgetsAPI.widgets.updateState(widgetId, updates)
+            .catch((error: any) => {
+              console.error('Error updating widget state:', error);
+            });
+        }
+      } catch (error) {
+        console.error('Error accessing widget API:', error);
+      }
+    }
     
     // Force a re-render of controls by updating the selected widget
     if (selectedWidget && selectedWidget.id === widgetId) {
@@ -927,58 +961,47 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       
       case 'slider':
         return (
-          <div key={control.id} style={{ marginTop: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <label style={{ fontSize: '12px', color: '#9ca3af' }}>{control.label}</label>
-              <span style={{ 
-                fontSize: '10px', 
-                padding: '2px 6px', 
-                backgroundColor: 'rgba(30, 41, 59, 0.8)', 
-                borderRadius: '9999px',
-                color: '#d1d5db' 
-              }}>
+          <div key={control.id} className="mt-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="detail-label text-sm text-gray-300">{control.label}</label>
+              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
                 {control.value || 100}
               </span>
             </div>
-            <input
-              type="range"
-              min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
-              max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
-              step={1}
-              value={control.value || 100}
-              onChange={(e) => {
-                const numericValue = Number(e.target.value);
-                control.onChange(numericValue);
-              }}
-              style={{
-                width: '100%',
-                height: '6px',
-                borderRadius: '9999px',
-                backgroundColor: '#4b5563',
-                appearance: 'none',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            />
-            {control.options && control.options.length > 0 && (
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                fontSize: '10px', 
-                color: '#9ca3af',
-                marginTop: '4px'
-              }}>
-                {control.options.map((option: any) => (
-                  <span 
-                    key={option.value} 
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => control.onChange(Number(option.value))}
-                  >
-                    {option.label}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="pl-0 mt-1">
+              <input
+                type="range"
+                min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
+                max={control.options && control.options[control.options.length - 1] ? Number(control.options[control.options.length - 1].value) : 100}
+                step={1}
+                value={control.value || 100}
+                onChange={(e) => {
+                  const numericValue = Number(e.target.value);
+                  console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
+                  control.onChange(numericValue);
+                }}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              {control.options && control.options.length > 0 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  fontSize: '10px', 
+                  color: '#9ca3af',
+                  marginTop: '4px'
+                }}>
+                  {control.options.map((option: any) => (
+                    <span 
+                      key={option.value} 
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => control.onChange(Number(option.value))}
+                    >
+                      {option.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
         
