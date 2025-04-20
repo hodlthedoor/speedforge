@@ -92,6 +92,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [menuButtonHover, setMenuButtonHover] = useState(false);
   const [quitButtonHover, setQuitButtonHover] = useState(false);
   const [activeWidgetsButtonHover, setActiveWidgetsButtonHover] = useState(false);
+  const [debugButtonHover, setDebugButtonHover] = useState(false);
   
   // Telemetry connection
   const { isConnected } = useTelemetryData('control-panel-telemetry-connection', {
@@ -1372,7 +1373,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           overflowY: 'auto'
         }}>
           {/* Top Row: Hide Panel, Show All, and Quit buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: '12px' }}>
             <button 
               style={{
                 display: 'flex',
@@ -1438,34 +1439,65 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             </button>
             
             {window.electronAPI && (
-              <button 
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '10px 0',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: quitButtonHover 
-                    ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
-                    : '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  transform: quitButtonHover ? 'translateY(-1px)' : 'none'
-                }}
-                onClick={quitApplication}
-                onMouseEnter={() => setQuitButtonHover(true)}
-                onMouseLeave={() => setQuitButtonHover(false)}
-                title="Quit Application"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <>
+                <button 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '10px 0',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    backgroundColor: debugButtonHover ? '#0369a1' : '#0284c7',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: debugButtonHover 
+                      ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(2, 132, 199, 0.3)' 
+                      : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    transform: debugButtonHover ? 'translateY(-1px)' : 'none'
+                  }}
+                  onClick={() => window.electronAPI?.invoke('app:openDevTools')}
+                  onMouseEnter={() => setDebugButtonHover(true)}
+                  onMouseLeave={() => setDebugButtonHover(false)}
+                  title="Open Developer Tools"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                </button>
+                
+                <button 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '10px 0',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    backgroundColor: quitButtonHover ? '#b91c1c' : '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: quitButtonHover 
+                      ? '0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(220, 38, 38, 0.3)' 
+                      : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    transform: quitButtonHover ? 'translateY(-1px)' : 'none'
+                  }}
+                  onClick={quitApplication}
+                  onMouseEnter={() => setQuitButtonHover(true)}
+                  onMouseLeave={() => setQuitButtonHover(false)}
+                  title="Quit Application"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
             )}
           </div>
 

@@ -18,6 +18,7 @@ export interface ElectronConfigAPI {
   };
   on: (channel: string, callback: (data: any) => void) => (() => void);
   send: (channel: string, data: any) => void;
+  invoke: (channel: string, data?: any) => Promise<any>;
   widgets?: {
     create: (options: any) => Promise<any>;
     close: (widgetId: string) => Promise<any>;
