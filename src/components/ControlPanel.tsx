@@ -1459,7 +1459,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                       : '0 2px 4px rgba(0, 0, 0, 0.1)',
                     transform: debugButtonHover ? 'translateY(-1px)' : 'none'
                   }}
-                  onClick={() => window.electronAPI?.invoke('app:openDevTools')}
+                  onClick={() => {
+                    if (window.electronAPI) {
+                      // Use type assertion to access invoke method
+                      (window.electronAPI as any).invoke('app:openDevTools');
+                    }
+                  }}
                   onMouseEnter={() => setDebugButtonHover(true)}
                   onMouseLeave={() => setDebugButtonHover(false)}
                   title="Open Developer Tools"

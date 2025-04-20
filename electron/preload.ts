@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'app:toggleClickThrough',
       'app:getCurrentDisplayId',
       'app:getUserDataPath',
+      'app:openDevTools',
       'config:save',
       'config:load',
       'config:list',
@@ -106,6 +107,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Get user data path
     getUserDataPath: async (): Promise<string> => {
       return await ipcRenderer.invoke('app:getUserDataPath');
+    },
+    
+    // Open DevTools
+    openDevTools: async (): Promise<boolean> => {
+      return await ipcRenderer.invoke('app:openDevTools');
     },
 
     // Application control functions

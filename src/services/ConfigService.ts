@@ -31,7 +31,8 @@ export class ConfigService {
 
   constructor() {
     this.widgetManager = WidgetManager;
-    this.electronAPI = window.electronAPI;
+    // Use type assertion to prevent TypeScript errors
+    this.electronAPI = window.electronAPI as ElectronConfigAPI;
     console.log('ConfigService initialized');
     
     // Use default values for immediate rendering even before electronAPI is available

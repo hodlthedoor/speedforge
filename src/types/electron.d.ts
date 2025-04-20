@@ -12,6 +12,7 @@ export interface ElectronConfigAPI {
     getCurrentDisplayId?: () => Promise<any>;
     getDisplays?: () => Promise<any>;
     closeWindowForDisplay?: (displayId: number) => Promise<any>;
+    openDevTools?: () => Promise<boolean>;
   };
   debug?: {
     listConfigFiles: () => Promise<any>;
