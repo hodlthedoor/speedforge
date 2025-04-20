@@ -922,6 +922,145 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     };
   }, []);
 
+  // Initialize configuration and get display ID
+  useEffect(() => {
+    console.log('ControlPanel: Initializing configuration and getting display ID');
+    
+    // Get current display ID
+    if (window.electronAPI && window.electronAPI.app) {
+      // Use type assertion to handle the API method
+      console.log('ControlPanel: electronAPI available, getting display ID');
+      const appApi = window.electronAPI.app as any;
+      if (appApi.getCurrentDisplayId) {
+        appApi.getCurrentDisplayId().then((response: any) => {
+          console.log('ControlPanel: getCurrentDisplayId response:', response);
+          if (response.success && response.displayId) {
+            setCurrentDisplayId(response.displayId);
+            
+            // Load list of saved panels for this display
+            console.log('ControlPanel: Loading saved panel configs for display:', response.displayId);
+            const configService = ConfigService.getInstance();
+            configService.listPanelConfigs().then(configs => {
+              console.log('ControlPanel: Saved panel configs:', configs);
+              setSavedPanels(configs);
+            }).catch(err => {
+              console.error('ControlPanel: Error listing panel configs:', err);
+            });
+          }
+        }).catch(err => {
+          console.error('ControlPanel: Error getting current display ID:', err);
+        });
+      } else {
+        console.warn('ControlPanel: getCurrentDisplayId method not available');
+      }
+    } else {
+      console.warn('ControlPanel: electronAPI or app not available');
+    }
+
+    // Listen for display ID changes
+    if (window.electronAPI?.on) {
+      console.log('ControlPanel: Setting up display:id event listener');
+      const removeListener = window.electronAPI.on('display:id', (displayId: number) => {
+        console.log('ControlPanel: Received display:id event with ID:', displayId);
+        setCurrentDisplayId(displayId);
+        
+        // Reload panel list for the new display
+        const configService = ConfigService.getInstance();
+        configService.listPanelConfigs().then(configs => {
+          console.log('ControlPanel: Updated saved panel configs:', configs);
+          setSavedPanels(configs);
+        }).catch(err => {
+          console.error('ControlPanel: Error listing updated panel configs:', err);
+        });
+      });
+      
+      return () => {
+        if (removeListener) removeListener();
+      };
+    } else {
+      console.warn('ControlPanel: on method not available for event listening');
+    }
+  }, []);
+
+  // Auto-load default panel configuration on startup
+  useEffect(() => {
+    // Only try to auto-load if we have current display ID and active widgets is empty
+    if (currentDisplayId !== null && activeWidgets.length === 0) {
+      // Try to load the default config for this display
+      const configService = ConfigService.getInstance();
+      configService.loadPanelConfig('Default').then(config => {
+        if (config && config.widgets && config.widgets.length > 0) {
+          // Apply config widgets
+          config.widgets.forEach(widgetConfig => {
+            if (widgetConfig.enabled) {
+              const newWidget = {
+                id: widgetConfig.id,
+                type: widgetConfig.type,
+                title: widgetConfig.title,
+                options: widgetConfig.options,
+                state: widgetConfig.state,
+                enabled: true
+              };
+              
+              if (onAddWidget) {
+                onAddWidget(newWidget);
+              }
+              
+              // Set widget position, opacity, etc.
+              if (widgetConfig.position) {
+                const posEvent = new CustomEvent('widget:position', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    position: widgetConfig.position 
+                  }
+                });
+                window.dispatchEvent(posEvent);
+              }
+              
+              // Apply other widget properties
+              if (widgetConfig.opacity !== undefined) {
+                const opacityEvent = new CustomEvent('widget:opacity', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    opacity: widgetConfig.opacity 
+                  }
+                });
+                window.dispatchEvent(opacityEvent);
+                
+                // Update local state
+                dispatchWidgetAppearance({
+                  type: 'SET_OPACITY',
+                  widgetId: widgetConfig.id,
+                  value: widgetConfig.opacity
+                });
+              }
+              
+              // Set background transparency if specified
+              if (widgetConfig.isBackgroundTransparent !== undefined) {
+                const bgEvent = new CustomEvent('widget:background-transparent', { 
+                  detail: { 
+                    widgetId: widgetConfig.id, 
+                    transparent: widgetConfig.isBackgroundTransparent 
+                  }
+                });
+                window.dispatchEvent(bgEvent);
+                
+                // Update local state
+                dispatchWidgetAppearance({
+                  type: 'SET_BACKGROUND_TRANSPARENT',
+                  widgetId: widgetConfig.id,
+                  value: widgetConfig.isBackgroundTransparent
+                });
+              }
+            }
+          });
+          
+          setPanelName('Default');
+        }
+      });
+    }
+  }, [currentDisplayId, activeWidgets, onAddWidget, dispatchWidgetAppearance]);
+
   return (
     <>
       {/* Debug indicator */}
