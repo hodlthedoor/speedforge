@@ -1112,18 +1112,39 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       if (appApi.getCurrentDisplayId) {
         appApi.getCurrentDisplayId().then((response: any) => {
           console.log('ControlPanel: getCurrentDisplayId response:', response);
-          if (response.success && response.displayId) {
-            setCurrentDisplayId(response.displayId);
-            
-            // Load list of saved panels for this display
-            console.log('ControlPanel: Loading saved panel configs for display:', response.displayId);
-            const configService = ConfigService.getInstance();
-            configService.listPanelConfigs().then(configs => {
-              console.log('ControlPanel: Saved panel configs:', configs);
-              setSavedPanels(configs);
-            }).catch(err => {
-              console.error('ControlPanel: Error listing panel configs:', err);
-            });
+          if (response.success) {
+            // Calculate a consistent display ID based on dimensions instead of using the system-provided ID
+            // This ensures the ID remains the same across reboots
+            if (response.displayBounds) {
+              // Calculate ID as height × width + width
+              const { width, height } = response.displayBounds;
+              const calculatedDisplayId = (height * width) + width;
+              
+              console.log(`ControlPanel: Using calculated display ID: ${calculatedDisplayId} from dimensions ${width}x${height}`);
+              setCurrentDisplayId(calculatedDisplayId);
+              
+              // Load list of saved panels for this display
+              console.log('ControlPanel: Loading saved panel configs for display:', calculatedDisplayId);
+              const configService = ConfigService.getInstance();
+              configService.listPanelConfigs().then(configs => {
+                console.log('ControlPanel: Saved panel configs:', configs);
+                setSavedPanels(configs);
+              }).catch(err => {
+                console.error('ControlPanel: Error listing panel configs:', err);
+              });
+            } else {
+              // Fallback to system ID if bounds not available
+              setCurrentDisplayId(response.displayId);
+              console.warn('ControlPanel: Display bounds not available, using system ID:', response.displayId);
+              
+              // Load list of saved panels for this display
+              const configService = ConfigService.getInstance();
+              configService.listPanelConfigs().then(configs => {
+                setSavedPanels(configs);
+              }).catch(err => {
+                console.error('ControlPanel: Error listing panel configs:', err);
+              });
+            }
           }
         }).catch(err => {
           console.error('ControlPanel: Error getting current display ID:', err);
@@ -1138,9 +1159,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     // Listen for display ID changes
     if (window.electronAPI?.on) {
       console.log('ControlPanel: Setting up display:id event listener');
-      const removeListener = window.electronAPI.on('display:id', (displayId: number) => {
+      const removeListener = window.electronAPI.on('display:id', (displayId: number, displayBounds?: { width: number, height: number }) => {
         console.log('ControlPanel: Received display:id event with ID:', displayId);
-        setCurrentDisplayId(displayId);
+        
+        // Calculate consistent ID based on dimensions if available
+        if (displayBounds) {
+          const { width, height } = displayBounds;
+          const calculatedDisplayId = (height * width) + width;
+          console.log(`ControlPanel: Using calculated display ID: ${calculatedDisplayId} from dimensions ${width}x${height}`);
+          setCurrentDisplayId(calculatedDisplayId);
+        } else {
+          // Fallback to system ID
+          setCurrentDisplayId(displayId);
+          console.warn('ControlPanel: Display bounds not available in event, using system ID:', displayId);
+        }
         
         // Reload panel list for the new display
         const configService = ConfigService.getInstance();

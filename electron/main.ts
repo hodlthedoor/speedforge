@@ -422,8 +422,9 @@ function createWindows() {
           return;
         }
         
-        // Send display ID to the renderer process
-        win.webContents.send('display:id', display.id);
+        // Send display ID to the renderer process, along with display bounds
+        // for calculating a consistent ID based on dimensions
+        win.webContents.send('display:id', display.id, display.bounds);
         
         // Check again if the window is still valid
         if (win.isDestroyed()) {
@@ -756,7 +757,22 @@ function setupIpcListeners() {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (win) {
         const displayId = (win as any).displayId;
-        return { success: true, displayId };
+        
+        // Get the actual display from electron's screen API
+        const winBounds = win.getBounds();
+        const pointInWindow = { x: winBounds.x + winBounds.width / 2, y: winBounds.y + winBounds.height / 2 };
+        const display = screen.getDisplayNearestPoint(pointInWindow);
+        
+        // Include the display bounds in the response for calculating a consistent ID
+        const displayBounds = display.bounds;
+        
+        console.log(`Returning display ID ${displayId} with bounds:`, displayBounds);
+        
+        return { 
+          success: true, 
+          displayId,
+          displayBounds
+        };
       }
       return { success: false, error: 'No window found for web contents' };
     } catch (error) {
@@ -1154,8 +1170,9 @@ app.whenReady().then(async () => {
             return;
           }
           
-          // Send display ID to the renderer process
-          win.webContents.send('display:id', display.id);
+          // Send display ID to the renderer process, along with display bounds
+          // for calculating a consistent ID based on dimensions
+          win.webContents.send('display:id', display.id, display.bounds);
           
           // Check again if the window is still valid
           if (win.isDestroyed()) {
