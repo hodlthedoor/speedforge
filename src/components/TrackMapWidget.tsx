@@ -886,18 +886,18 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
       type: 'slider' as WidgetControlType,
       id: 'scaleFactor',
       label: `Scale: ${scaleFactor.toFixed(1)}x`,
-      value: scaleFactor * 10,
+      value: scaleFactor,
       options: [
-        { value: 5, label: 'Small' },
-        { value: 7, label: 'Smaller' },
-        { value: 10, label: 'Default' },
-        { value: 15, label: 'Larger' },
-        { value: 20, label: 'Large' },
-        { value: 25, label: 'Very Large' },
-        { value: 30, label: 'Maximum' }
+        { value: 0.5, label: 'Small' },
+        { value: 0.7, label: 'Smaller' },
+        { value: 1.0, label: 'Default' },
+        { value: 1.5, label: 'Larger' },
+        { value: 2.0, label: 'Large' },
+        { value: 2.5, label: 'Very Large' },
+        { value: 3.0, label: 'Maximum' }
       ],
       onChange: (value) => {
-        const numericValue = Number(value) / 10;
+        const numericValue = Number(value);
         console.log(`[Controls] Slider onChange: setting scaleFactor to ${numericValue}`);
         
         // Update both the widget state and dispatch a direct update for redundancy
