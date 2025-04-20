@@ -135,6 +135,41 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       setReconnecting(false);
     }
   }, []);
+  
+  // Handle opacity change
+  const handleOpacityChange = useCallback((widgetId: string, value: number) => {
+    // Update state with reducer
+    dispatchWidgetAppearance({ 
+      type: 'SET_OPACITY', 
+      widgetId, 
+      value 
+    });
+    
+    // Dispatch event to update widget opacity
+    const event = new CustomEvent('widget:opacity', { 
+      detail: { widgetId, opacity: value }
+    });
+    window.dispatchEvent(event);
+  }, [dispatchWidgetAppearance]);
+
+  // Handle background transparency toggle
+  const handleBackgroundTransparencyToggle = useCallback((widgetId: string) => {
+    const currentValue = widgetAppearance.backgroundTransparent[widgetId] || false;
+    const newValue = !currentValue;
+    
+    // Update state with reducer
+    dispatchWidgetAppearance({ 
+      type: 'SET_BACKGROUND_TRANSPARENT', 
+      widgetId, 
+      value: newValue 
+    });
+    
+    // Dispatch event to update widget background transparency
+    const event = new CustomEvent('widget:background-transparent', { 
+      detail: { widgetId, transparent: newValue }
+    });
+    window.dispatchEvent(event);
+  }, [dispatchWidgetAppearance, widgetAppearance.backgroundTransparent]);
 
   // Add telemetry widget
   const addTelemetryWidget = useCallback((metric: string, name: string) => {
@@ -491,6 +526,184 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     );
   }, [enabledWidgets, selectedWidget, selectWidget, getColorFromString]);
 
+  // Memoize the selected widget section UI
+  const renderedSelectedWidgetSection = useMemo(() => {
+    if (!selectedWidget) return null;
+
+    return (
+      <>
+        <div 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+            borderRadius: '8px',
+            border: '1px solid rgba(147, 197, 253, 0.5)',
+            marginTop: '8px'
+          }}
+        >
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: '#3b82f6',
+            flex: 1
+          }}>
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Selected: {selectedWidget.title}
+          </div>
+          
+          <button 
+            onClick={() => closeWidget(selectedWidget.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: 'rgba(60, 60, 60, 0.4)',
+              color: '#9ca3af',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginLeft: '8px'
+            }}
+          >
+            <svg style={{ width: '12px', height: '12px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ 
+          backgroundColor: 'rgba(30, 41, 59, 0.4)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginTop: '4px'
+        }}>
+          <div style={{
+            maxHeight: '400px',
+            overflowY: 'auto',
+            paddingRight: '10px',
+            marginRight: '-10px'
+          }}>
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+              borderRadius: '8px',
+              fontSize: '12px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                <span style={{ color: '#9ca3af' }}>ID:</span>
+                <span style={{ color: '#d1d5db', fontFamily: 'monospace' }}>{selectedWidget.id.slice(0, 8)}...</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                <span style={{ color: '#9ca3af' }}>Type:</span>
+                <span style={{ color: '#d1d5db' }}>{selectedWidget.type}</span>
+              </div>
+              {selectedWidget.options?.metric && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', paddingBottom: '4px' }}>
+                  <span style={{ color: '#9ca3af' }}>Metric:</span>
+                  <span style={{ color: '#d1d5db' }}>{selectedWidget.options.metric}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Dynamic Widget Controls from Registry */}
+            {widgetControls.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
+                  <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+                </div>
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                  borderRadius: '8px'
+                }}>
+                  {renderedWidgetControls}
+                </div>
+              </div>
+            )}
+            
+            {/* Appearance Controls */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Appearance</span>
+                <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
+              </div>
+              <div style={{ 
+                padding: '12px', 
+                backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+                borderRadius: '8px'
+              }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Opacity</label>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      padding: '2px 6px', 
+                      backgroundColor: 'rgba(30, 41, 59, 0.8)', 
+                      borderRadius: '9999px',
+                      color: '#d1d5db' 
+                    }}>
+                      {Math.round((widgetAppearance.opacity[selectedWidget.id] ?? 1) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="1"
+                    step="0.1"
+                    value={widgetAppearance.opacity[selectedWidget.id] ?? 1}
+                    onChange={(e) => handleOpacityChange(selectedWidget.id, parseFloat(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: '6px',
+                      borderRadius: '9999px',
+                      backgroundColor: '#4b5563',
+                      appearance: 'none',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>Background</span>
+                  <button
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: widgetAppearance.backgroundTransparent[selectedWidget.id] ? '#3b82f6' : '#374151',
+                      color: widgetAppearance.backgroundTransparent[selectedWidget.id] ? 'white' : '#d1d5db',
+                      border: 'none',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => handleBackgroundTransparencyToggle(selectedWidget.id)}
+                  >
+                    {widgetAppearance.backgroundTransparent[selectedWidget.id] 
+                      ? '✓ Transparent' 
+                      : 'Make Transparent'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }, [selectedWidget, closeWidget, widgetControls, renderedWidgetControls, widgetAppearance, handleOpacityChange, handleBackgroundTransparencyToggle]);
+
   // Save the current panel configuration
   const handleSavePanel = useCallback(() => {
     console.log(`Attempting to save panel config "${panelName}" with ${activeWidgets.length} widgets`);
@@ -830,41 +1043,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     
     // The Electron API call is now handled in the App component
     // through the isClickThrough state effect
-  };
-
-  // Handle opacity change
-  const handleOpacityChange = (widgetId: string, value: number) => {
-    // Update state with reducer
-    dispatchWidgetAppearance({ 
-      type: 'SET_OPACITY', 
-      widgetId, 
-      value 
-    });
-    
-    // Dispatch event to update widget opacity
-    const event = new CustomEvent('widget:opacity', { 
-      detail: { widgetId, opacity: value }
-    });
-    window.dispatchEvent(event);
-  };
-
-  // Handle background transparency toggle
-  const handleBackgroundTransparencyToggle = (widgetId: string) => {
-    const currentValue = widgetAppearance.backgroundTransparent[widgetId] || false;
-    const newValue = !currentValue;
-    
-    // Update state with reducer
-    dispatchWidgetAppearance({ 
-      type: 'SET_BACKGROUND_TRANSPARENT', 
-      widgetId, 
-      value: newValue 
-    });
-    
-    // Dispatch event to update widget background transparency
-    const event = new CustomEvent('widget:background-transparent', { 
-      detail: { widgetId, transparent: newValue }
-    });
-    window.dispatchEvent(event);
   };
 
   // Quit application
@@ -1590,22 +1768,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             </div>
           )}
           
-          {/* Dynamic Widget Controls from Registry */}
-          {widgetControls.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: '#d1d5db', marginRight: '8px' }}>Widget Controls</span>
-                <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
-              </div>
-              <div style={{ 
-                padding: '12px', 
-                backgroundColor: 'rgba(30, 41, 59, 0.6)', 
-                borderRadius: '8px'
-              }}>
-                {renderedWidgetControls}
-              </div>
-            </div>
-          )}
+          {/* Selected Widget Section */}
+          {renderedSelectedWidgetSection}
         </div>
       </BaseDraggableComponent>
     </>
