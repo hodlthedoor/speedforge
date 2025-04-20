@@ -982,12 +982,43 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     value: widgetConfig.isBackgroundTransparent
                   });
                 }
+                
+                // Initialize widget-specific controls by getting controls and calling their update functions
+                if (widgetConfig.state) {
+                  console.log(`[ControlPanel] Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type} with state:`, widgetConfig.state);
+                  
+                  // Create an updater function for this widget
+                  const updateWidgetFn = (updates: any) => {
+                    console.log(`[ControlPanel] updateWidgetFn called for ${widgetConfig.id} with:`, updates);
+                    updateWidgetState(widgetConfig.id, updates);
+                  };
+                  
+                  // Get all controls for this widget type from the registry
+                  const controls = WidgetRegistry.getWidgetControls(
+                    widgetConfig.type,
+                    widgetConfig.state || {}, // Current state or empty object
+                    updateWidgetFn // Update function for the widget
+                  );
+                  
+                  console.log(`[ControlPanel] Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
+                  
+                  // For each control, check if we have a saved value and update if needed
+                  controls.forEach(control => {
+                    if (widgetConfig.state[control.id] !== undefined) {
+                      const savedValue = widgetConfig.state[control.id];
+                      console.log(`[ControlPanel] Setting control ${control.id} to saved value:`, savedValue);
+                      
+                      // Call the control's onChange function with the saved value
+                      control.onChange(savedValue);
+                    }
+                  });
+                }
               }
             });
           }, 100); // Small delay to ensure widgets are mounted
         }
       });
-  }, [activeWidgets, closeWidget, onAddWidget]);
+  }, [activeWidgets, closeWidget, onAddWidget, updateWidgetState]);
 
   // Delete a panel configuration
   const handleDeletePanel = useCallback((name: string, e: React.MouseEvent) => {
@@ -1255,6 +1286,37 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   value: widgetConfig.isBackgroundTransparent
                 });
               }
+              
+              // Initialize widget-specific controls by getting controls and calling their update functions
+              if (widgetConfig.state) {
+                console.log(`[ControlPanel] Auto-load: Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type}`);
+                
+                // Create an updater function for this widget
+                const updateWidgetFn = (updates: any) => {
+                  console.log(`[ControlPanel] Auto-load: updateWidgetFn called for ${widgetConfig.id} with:`, updates);
+                  updateWidgetState(widgetConfig.id, updates);
+                };
+                
+                // Get all controls for this widget type from the registry
+                const controls = WidgetRegistry.getWidgetControls(
+                  widgetConfig.type,
+                  widgetConfig.state || {}, // Current state or empty object
+                  updateWidgetFn // Update function for the widget
+                );
+                
+                console.log(`[ControlPanel] Auto-load: Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
+                
+                // For each control, check if we have a saved value and update if needed
+                controls.forEach(control => {
+                  if (widgetConfig.state[control.id] !== undefined) {
+                    const savedValue = widgetConfig.state[control.id];
+                    console.log(`[ControlPanel] Auto-load: Setting control ${control.id} to saved value:`, savedValue);
+                    
+                    // Call the control's onChange function with the saved value
+                    control.onChange(savedValue);
+                  }
+                });
+              }
             }
           });
           
@@ -1262,7 +1324,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         }
       });
     }
-  }, [currentDisplayId, activeWidgets, onAddWidget, dispatchWidgetAppearance]);
+  }, [currentDisplayId, activeWidgets, onAddWidget, dispatchWidgetAppearance, updateWidgetState]);
 
   return (
     <>
