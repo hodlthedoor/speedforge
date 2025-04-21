@@ -25,6 +25,9 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   const animationFrameId = useRef<number | null>(null);
   const [historyLength, setHistoryLength] = useState<number>(100);
   const historyLengthRef = useRef<number>(100);
+  // Add width state with direct pixel values
+  const [width, setWidth] = useState<number>(480);
+  const widthRef = useRef<number>(480);
   
   // Maximum history buffer size - we'll store up to this many points
   const MAX_HISTORY_BUFFER = 500;
@@ -34,6 +37,11 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     historyLengthRef.current = historyLength;
   }, [historyLength]);
   
+  // Update the ref whenever width changes
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
+  
   // Create a callback to be usable by controls
   const updateHistoryLength = useCallback((newLength: number) => {
     // Only update if the value has actually changed
@@ -42,8 +50,17 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     }
   }, []);
   
-  // Expose this function via a static property for the component
+  // Create a callback for updating width
+  const updateWidth = useCallback((newWidth: number) => {
+    // Only update if the value has actually changed
+    if (widthRef.current !== newWidth) {
+      setWidth(newWidth);
+    }
+  }, []);
+  
+  // Expose these functions via static properties for the component
   (PedalTraceWidgetComponent as any).updateHistoryLength = updateHistoryLength;
+  (PedalTraceWidgetComponent as any).updateWidth = updateWidth;
   
   // Use the generic widget state update hook
   useWidgetStateUpdates(id, (state) => {
@@ -54,11 +71,19 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
         setHistoryLength(newLength);
       }
     }
+    
+    if (state.width !== undefined) {
+      const newWidth = Number(state.width);
+      // Only update if the value has actually changed
+      if (widthRef.current !== newWidth) {
+        setWidth(newWidth);
+      }
+    }
   });
   
   // Listen for state updates from WidgetManager
   useEffect(() => {
-    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener with initial historyLength=${historyLengthRef.current}`);
+    console.log(`[PedalTrace:${id}] Setting up WidgetManager listener with initial historyLength=${historyLengthRef.current}, width=${widthRef.current}px`);
     
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
@@ -66,24 +91,47 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       console.log(`[PedalTrace:${id}] Found widget in WidgetManager:`, widget.state);
       
       // Always resync with WidgetManager's state on mount
-      if (widget.state && widget.state.historyLength !== undefined) {
-        const storedLength = Number(widget.state.historyLength);
-        console.log(`[PedalTrace:${id}] Found existing historyLength=${storedLength} in WidgetManager`);
+      if (widget.state) {
+        if (widget.state.historyLength !== undefined) {
+          const storedLength = Number(widget.state.historyLength);
+          console.log(`[PedalTrace:${id}] Found existing historyLength=${storedLength} in WidgetManager`);
+          
+          // Force update our local state to match WidgetManager
+          if (storedLength !== historyLengthRef.current) {
+            console.log(`[PedalTrace:${id}] Updating local historyLength to ${storedLength}`);
+            setHistoryLength(storedLength);
+          }
+        }
         
-        // Force update our local state to match WidgetManager
-        if (storedLength !== historyLengthRef.current) {
-          console.log(`[PedalTrace:${id}] Updating local historyLength to ${storedLength}`);
-          setHistoryLength(storedLength);
+        if (widget.state.width !== undefined) {
+          const storedWidth = Number(widget.state.width);
+          console.log(`[PedalTrace:${id}] Found existing width=${storedWidth}px in WidgetManager`);
+          
+          // Force update our local state to match WidgetManager
+          if (storedWidth !== widthRef.current) {
+            console.log(`[PedalTrace:${id}] Updating local width to ${storedWidth}px`);
+            setWidth(storedWidth);
+          }
+        } else {
+          // If widget exists but doesn't have width, set it
+          console.log(`[PedalTrace:${id}] Setting initial width=${widthRef.current}px in WidgetManager`);
+          WidgetManager.updateWidgetState(id, { width: widthRef.current });
         }
       } else {
-        // If widget exists but doesn't have historyLength, set it
-        console.log(`[PedalTrace:${id}] Setting initial historyLength=${historyLengthRef.current} in WidgetManager`);
-        WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
+        // If widget exists but state is empty, initialize both values
+        console.log(`[PedalTrace:${id}] Setting initial historyLength=${historyLengthRef.current} and width=${widthRef.current}px in WidgetManager`);
+        WidgetManager.updateWidgetState(id, { 
+          historyLength: historyLengthRef.current,
+          width: widthRef.current
+        });
       }
     } else {
       // If widget doesn't exist in WidgetManager at all
-      console.log(`[PedalTrace:${id}] Widget not found in WidgetManager, registering with historyLength=${historyLengthRef.current}`);
-      WidgetManager.updateWidgetState(id, { historyLength: historyLengthRef.current });
+      console.log(`[PedalTrace:${id}] Widget not found in WidgetManager, registering with historyLength=${historyLengthRef.current} and width=${widthRef.current}px`);
+      WidgetManager.updateWidgetState(id, { 
+        historyLength: historyLengthRef.current,
+        width: widthRef.current
+      });
     }
     
     // Subscribe to future state changes
@@ -101,13 +149,24 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
             setHistoryLength(newLength);
           }
         }
+        
+        if (event.state.width !== undefined) {
+          const newWidth = Number(event.state.width);
+          console.log(`[PedalTrace:${id}] New width=${newWidth}px, current=${widthRef.current}px`);
+          
+          // Only update if the value has actually changed
+          if (widthRef.current !== newWidth) {
+            console.log(`[PedalTrace:${id}] Updating width state to ${newWidth}px`);
+            setWidth(newWidth);
+          }
+        }
       }
     });
     
     return () => {
       unsubscribe();
     };
-  }, [id]); // Only depends on id, not historyLength
+  }, [id]); // Only depends on id, not historyLength or width
   
   // Sync historyLength changes with WidgetManager
   useEffect(() => {
@@ -126,6 +185,18 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       });
     }
   }, [historyLength, id]);
+  
+  // Sync width changes with WidgetManager
+  useEffect(() => {
+    // Skip initial render
+    if (widthRef.current === width) return;
+    
+    console.log(`[PedalTrace:${id}] width changed to ${width}px, updating WidgetManager`);
+    WidgetManager.updateWidgetState(id, { width });
+    
+    // When width changes, force update chart to match new dimensions
+    updateChart();
+  }, [width, id]);
   
   // Use our custom hook to get telemetry data with typed metrics
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -169,9 +240,15 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     if (!svgRef.current || data.length === 0) return;
 
     const svg = d3.select(svgRef.current);
-    const width = 480; // 20% longer than previous 400
+    // Use direct width in pixels
+    const currentWidth = widthRef.current;
     const height = 150;
     const margin = { top: 3, right: 0, bottom: 5, left: 0 };
+
+    // Update the SVG element size directly
+    svg
+      .attr('width', currentWidth)
+      .attr('height', height);
 
     // Clear previous content
     svg.selectAll('*').remove();
@@ -182,7 +259,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
     
     const x = d3.scaleTime()
       .domain([now - timeWindow, now])
-      .range([margin.left, width - margin.right]);
+      .range([margin.left, currentWidth - margin.right]);
 
     const y = d3.scaleLinear()
       .domain([0, 100])
@@ -222,7 +299,7 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
       .attr('d', brakeLine);
-  }, [data, historyLength]);
+  }, [data, historyLength, width]);
 
   // Apply D3 visualization when data changes
   useEffect(() => {
@@ -240,10 +317,10 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   }, []);
 
   return (
-    <Widget id={id} title="Pedal Trace" onClose={onClose}>
+    <Widget id={id} title="Pedal Trace" onClose={onClose} width={width}>
       <svg
         ref={svgRef}
-        width={480} // 20% longer than previous 400
+        width={width}
         height={150}
         className="bg-transparent"
       />
@@ -256,8 +333,10 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
 const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   // Default to 100 if not set
   const historyLength = widgetState.historyLength || 100;
+  // Default to 480 if not set
+  const width = widgetState.width || 480;
   
-  console.log(`[Controls] getPedalTraceControls called with historyLength=${historyLength}`);
+  console.log(`[Controls] getPedalTraceControls called with historyLength=${historyLength}, width=${width}px`);
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -282,6 +361,34 @@ const getPedalTraceControls = (widgetState: any, updateWidget: (updates: any) =>
         // Also try direct update mechanism as fallback
         try {
           dispatchWidgetStateUpdate(widgetState.id || 'unknown', { historyLength: numericValue });
+        } catch (err) {
+          console.error(`[Controls] Error in direct update:`, err);
+        }
+      }
+    },
+    {
+      id: 'width',
+      type: 'slider' as WidgetControlType,
+      label: `Width: ${width}px`,
+      value: width,
+      options: [
+        { value: 400, label: '400px' },
+        { value: 500, label: '500px' },
+        { value: 600, label: '600px' },
+        { value: 700, label: '700px' },
+        { value: 800, label: '800px' },
+        { value: 1000, label: '1000px' }
+      ],
+      onChange: (value) => {
+        const numericValue = Number(value);
+        console.log(`[Controls] Slider onChange: setting width to ${numericValue}px`);
+        
+        // Update both the widget state and dispatch a direct update for redundancy
+        updateWidget({ width: numericValue });
+        
+        // Also try direct update mechanism as fallback
+        try {
+          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { width: numericValue });
         } catch (err) {
           console.error(`[Controls] Error in direct update:`, err);
         }
