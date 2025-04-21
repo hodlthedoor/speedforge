@@ -14,7 +14,7 @@ import { WidgetManager } from '../services/WidgetManager';
 
 interface WidgetData {
   id: string;
-  type: 'default' | 'telemetry' | 'pedal-trace' | 'shift-indicator' | 'track-map';
+  type: 'default' | 'telemetry' | 'pedal-trace' | 'shift-indicator' | 'track-map' | 'number' | 'basic-map';
   title: string;
   content?: string;
   metric?: string;
@@ -442,6 +442,26 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
         ...widgetState,
         historyLength: widgetState.historyLength || 100, // Default to 100 if not set
         width: widgetState.width || 480 // Default to 480px if not set
+      };
+    }
+    
+    // For number widgets, ensure width, height, and value are included
+    if (widget.type === 'number') {
+      widgetState = {
+        ...widgetState,
+        width: widgetState.width || 480, // Default to 480px if not set
+        height: widgetState.height || 200, // Default to 200px if not set
+        value: widgetState.value || 50 // Default to 50 if not set
+      };
+    }
+    
+    // For basic-map widgets, ensure width and height are included
+    if (widget.type === 'basic-map') {
+      widgetState = {
+        ...widgetState,
+        width: widgetState.width || 480, // Default to 480px if not set
+        height: widgetState.height || 300, // Default to 300px if not set
+        mapBuildingState: widgetState.mapBuildingState || 'idle' // Default to idle if not set
       };
     }
     

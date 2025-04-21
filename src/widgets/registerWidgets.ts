@@ -11,6 +11,7 @@ import WeekendInfoWidget from '../components/WeekendInfoWidget';
 import SpeedWidget from '../components/SpeedWidget';
 import SessionInfoWidget from '../components/SessionInfoWidget';
 import NumberWidget from '../components/NumberWidget';
+import BasicMapWidget from '../components/BasicMapWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -136,6 +137,20 @@ WidgetRegistry.register('number', {
     value: 50
   },
   description: 'Display a configurable number',
+  category: 'Visualization'
+});
+
+// Register Basic Map Widget
+WidgetRegistry.register('basic-map', {
+  component: BasicMapWidget,
+  defaultTitle: 'Basic Map',
+  defaultOptions: {},
+  defaultState: {
+    width: 480,
+    height: 300,
+    mapBuildingState: 'idle'
+  },
+  description: 'Display a simple track map with car position',
   category: 'Visualization'
 });
 
