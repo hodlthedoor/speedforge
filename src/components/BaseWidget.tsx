@@ -21,8 +21,6 @@ interface WidgetStateUpdateEvent {
 
 // Function to dispatch a widget state update
 export function dispatchWidgetStateUpdate(widgetId: string, state: Record<string, any>) {
-  console.log(`[BaseWidget] Dispatching state update for widget ${widgetId}:`, state);
-  
   const event = new CustomEvent<WidgetStateUpdateEvent>(WIDGET_STATE_UPDATE_EVENT, {
     detail: {
       widgetId,
@@ -45,12 +43,9 @@ export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: R
   }, [onStateUpdate]);
   
   React.useEffect(() => {
-    console.log(`[BaseWidget] Setting up state update listener for widget ${widgetId}`);
-    
     const handleStateUpdate = (event: Event) => {
       const customEvent = event as CustomEvent<WidgetStateUpdateEvent>;
       if (customEvent.detail && customEvent.detail.widgetId === widgetId) {
-        console.log(`[BaseWidget] Widget ${widgetId} received state update:`, customEvent.detail.state);
         // Use the ref to get the latest callback
         callbackRef.current(customEvent.detail.state);
       }
@@ -59,7 +54,6 @@ export function useWidgetStateUpdates(widgetId: string, onStateUpdate: (state: R
     window.addEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
     
     return () => {
-      console.log(`[BaseWidget] Removing state update listener for widget ${widgetId}`);
       window.removeEventListener(WIDGET_STATE_UPDATE_EVENT, handleStateUpdate);
     };
   }, [widgetId]); // Only re-run when widgetId changes
@@ -73,7 +67,6 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   children,
   style
 }) => {
-  console.log(`[BaseWidget:${id}] Style props:`, style);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentOpacity, setCurrentOpacity] = useState(1);
