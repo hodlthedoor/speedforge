@@ -50,7 +50,7 @@ class WidgetManagerService {
       type,
       title: options.title || widgetDef.defaultTitle,
       options: { ...widgetDef.defaultOptions, ...options },
-      state: {},
+      state: { ...widgetDef.defaultState || {}, ...(options.state || {}) },
       enabled: true
     };
 

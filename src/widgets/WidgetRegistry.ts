@@ -26,6 +26,7 @@ export interface WidgetDefinition {
   component: ComponentType<any>;
   defaultTitle: string;
   defaultOptions?: Record<string, any>;
+  defaultState?: Record<string, any>;
   description: string;
   category?: string;
   getControls?: (widgetState: any, updateWidget: (updates: any) => void) => WidgetControlDefinition[];

@@ -18,6 +18,12 @@ WidgetRegistry.register('track-map', {
   defaultOptions: {
     colorMode: 'none'
   },
+  defaultState: {
+    width: 550,
+    height: 300,
+    colorMode: 'none',
+    mapBuildingState: 'idle'
+  },
   description: 'Visualize the race track and car position',
   category: 'Visualization'
 });
@@ -36,6 +42,10 @@ WidgetRegistry.register('pedal-trace', {
   component: PedalTraceWidget,
   defaultTitle: 'Pedal Inputs',
   defaultOptions: {},
+  defaultState: {
+    width: 480,
+    historyLength: 100
+  },
   description: 'Visualize throttle and brake inputs',
   category: 'Visualization'
 });

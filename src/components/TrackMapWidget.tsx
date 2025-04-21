@@ -45,6 +45,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   onStateChange,
   externalControls 
 }) => {
+  console.log(`[TrackMapWidget] Initializing with ID: ${id}`);
+
   // Replace PIXI container with Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameId = useRef<number | null>(null);
@@ -742,10 +744,14 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     }
   });
   
-  // Update the sync with WidgetManager effect
+  // Add better logging in the WidgetManager sync effect
   useEffect(() => {
+    console.log(`[TrackMapWidget:${id}] Setting up WidgetManager sync with ID: ${id}`);
+    
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
+    console.log(`[TrackMapWidget:${id}] WidgetManager.getWidget result:`, widget);
+    
     if (widget) {
       // Always resync with WidgetManager's state on mount
       if (widget.state) {
@@ -940,6 +946,9 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 };
 
 const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
+  console.log(`[TrackMapWidget] getTrackMapControls with state:`, widgetState);
+  console.log(`[TrackMapWidget] widgetState ID:`, widgetState.id);
+  
   const mapBuildingState = widgetState.mapBuildingState || 'idle';
   const colorMode = widgetState.colorMode || 'none';
   const width = widgetState.width || 550;
