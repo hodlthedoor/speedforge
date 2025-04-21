@@ -73,6 +73,7 @@ const BaseWidget: React.FC<React.PropsWithChildren<BaseWidgetProps>> = ({
   children,
   style
 }) => {
+  console.log(`[BaseWidget:${id}] Style props:`, style);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentOpacity, setCurrentOpacity] = useState(1);

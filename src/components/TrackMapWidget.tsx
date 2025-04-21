@@ -90,6 +90,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const width = Math.max(300, Math.round(550 * scaleFactorRef.current));
       const height = Math.max(200, Math.round(300 * scaleFactorRef.current));
       
+      console.log(`[TrackMapWidget:${id}] Resizing canvas to: ${width}x${height} (scaleFactor: ${scaleFactorRef.current})`);
+      
       canvas.width = width;
       canvas.height = height;
       
@@ -421,6 +423,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
+    
+    console.log(`[TrackMapWidget:${id}] renderCanvas called, canvas dimensions: ${canvas.width}x${canvas.height}`);
     
     const points = trackPointsRef.current;
     if (points.length < 2) return;
@@ -803,6 +807,8 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
     };
   }, []);
+
+  console.log(`[TrackMapWidget:${id}] Rendering with dimensions: ${Math.max(300, Math.round(550 * scaleFactor))}x${Math.max(200, Math.round(300 * scaleFactor))}`);
 
   return (
     <Widget 

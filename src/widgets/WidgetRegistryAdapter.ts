@@ -49,11 +49,11 @@ export function registerComponentControls<T extends React.ComponentType<any>>(
  * Get controls from a component, either from static method or prototype
  */
 export function getComponentControls(
-  Component: React.ComponentType<any>,
-  widgetState: any,
+  Component: any, 
+  widgetState: any, 
   updateWidget: (updates: any) => void
 ): WidgetControlDefinition[] {
-  console.log(`[WidgetRegistryAdapter] getComponentControls called for Component:`, Component.name || 'unnamed');
+  console.log(`[WidgetRegistryAdapter] getComponentControls called for:`, Component.name || 'Unknown Component');
   console.log(`[WidgetRegistryAdapter] Widget state:`, widgetState);
   
   // Check for static getControls method
