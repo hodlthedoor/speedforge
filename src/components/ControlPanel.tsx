@@ -902,46 +902,67 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     configService.loadPanelConfig(name)
       .then(config => {
         if (config && config.widgets) {
-          // Clear existing widgets for this panel
-          activeWidgets.forEach(widget => {
-            closeWidget(widget.id);
-          });
+          // Instead of just closing widgets (which only sets enabled=false),
+          // let's actually remove all existing widgets completely
+          
+          // First, store the widgets we need to remove
+          const widgetsToRemove = [...activeWidgets];
           
           // Clear pending settings before adding new ones
           pendingWidgetSettings.current.clear();
           
-          // Store settings for each widget that will be created
-          config.widgets.forEach(widgetConfig => {
-            if (widgetConfig.enabled) {
-              // Store all settings for this widget
-              pendingWidgetSettings.current.set(widgetConfig.id, {
-                position: widgetConfig.position,
-                opacity: widgetConfig.opacity,
-                isBackgroundTransparent: widgetConfig.isBackgroundTransparent,
-                state: widgetConfig.state
+          // Clear any selected widget
+          setSelectedWidget(null);
+          
+          // Remove all existing widgets
+          widgetsToRemove.forEach(widget => {
+            // Fully remove the widget from state using WidgetManager
+            WidgetManager.removeWidget(widget.id);
+            
+            // Also mark it as disabled in the activeWidgets array
+            if (onAddWidget) {
+              onAddWidget({
+                ...widget,
+                enabled: false
               });
-              
-              // Add widget using onAddWidget
-              const newWidget = {
-                id: widgetConfig.id,
-                type: widgetConfig.type,
-                title: widgetConfig.title,
-                options: widgetConfig.options,
-                state: widgetConfig.state,
-                enabled: true
-              };
-              
-              if (onAddWidget) {
-                onAddWidget(newWidget);
-              }
             }
           });
           
-          // Set panel name
-          setPanelName(name);
+          // Small delay to ensure widgets are fully removed before adding new ones
+          setTimeout(() => {
+            // Now add the widgets from the config
+            config.widgets.forEach(widgetConfig => {
+              if (widgetConfig.enabled) {
+                // Store all settings for this widget
+                pendingWidgetSettings.current.set(widgetConfig.id, {
+                  position: widgetConfig.position,
+                  opacity: widgetConfig.opacity,
+                  isBackgroundTransparent: widgetConfig.isBackgroundTransparent,
+                  state: widgetConfig.state
+                });
+                
+                // Add widget using onAddWidget
+                const newWidget = {
+                  id: widgetConfig.id,
+                  type: widgetConfig.type,
+                  title: widgetConfig.title,
+                  options: widgetConfig.options,
+                  state: widgetConfig.state,
+                  enabled: true
+                };
+                
+                if (onAddWidget) {
+                  onAddWidget(newWidget);
+                }
+              }
+            });
+            
+            // Set panel name
+            setPanelName(name);
+          }, 100); // Small delay to ensure clean widget removal
         }
       });
-  }, [activeWidgets, closeWidget, onAddWidget]);
+  }, [activeWidgets, onAddWidget, setSelectedWidget]);
 
   // Delete a panel configuration
   const handleDeletePanel = useCallback((name: string, e: React.MouseEvent) => {
