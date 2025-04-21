@@ -10,6 +10,7 @@ import SpotterWidget from '../components/SpotterWidget';
 import WeekendInfoWidget from '../components/WeekendInfoWidget';
 import SpeedWidget from '../components/SpeedWidget';
 import SessionInfoWidget from '../components/SessionInfoWidget';
+import NumberWidget from '../components/NumberWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -122,6 +123,20 @@ WidgetRegistry.register('session-info', {
   defaultOptions: {},
   description: 'Display raw session information data from iRacing',
   category: 'Advanced'
+});
+
+// Register Number Widget
+WidgetRegistry.register('number', {
+  component: NumberWidget,
+  defaultTitle: 'Number Display',
+  defaultOptions: {},
+  defaultState: {
+    width: 480,
+    height: 200,
+    value: 50
+  },
+  description: 'Display a configurable number',
+  category: 'Visualization'
 });
 
 export default WidgetRegistry; 
