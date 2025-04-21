@@ -102,8 +102,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       if (!canvas) return;
       
       // Use width and height directly
-      console.log(`[TrackMapWidget:${id}] Resizing canvas to: ${widthRef.current}x${heightRef.current}`);
-      
       canvas.width = widthRef.current;
       canvas.height = heightRef.current;
       
@@ -436,8 +434,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     
-    console.log(`[TrackMapWidget:${id}] renderCanvas called, canvas dimensions: ${canvas.width}x${canvas.height}`);
-    
     const points = trackPointsRef.current;
     if (points.length < 2) return;
     
@@ -692,7 +688,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
 
   // Replace the scaleFactor effect with width/height effects
   useEffect(() => {
-    console.log(`[TrackMap:${id}] Setting width to ${width}`);
     widthRef.current = width;
     
     // Update WidgetManager with the new width
@@ -705,7 +700,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   }, [width, id]);
   
   useEffect(() => {
-    console.log(`[TrackMap:${id}] Setting height to ${height}`);
     heightRef.current = height;
     
     // Update WidgetManager with the new height
@@ -723,7 +717,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const newWidth = Number(state.width);
       // Only update if the value has actually changed
       if (widthRef.current !== newWidth) {
-        console.log(`[TrackMap:${id}] Updating width to ${newWidth}px from state update`);
         setWidth(newWidth);
       }
     }
@@ -732,7 +725,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       const newHeight = Number(state.height);
       // Only update if the value has actually changed
       if (heightRef.current !== newHeight) {
-        console.log(`[TrackMap:${id}] Updating height to ${newHeight}px from state update`);
         setHeight(newHeight);
       }
     }
@@ -752,47 +744,36 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
   
   // Update the sync with WidgetManager effect
   useEffect(() => {
-    console.log(`[TrackMap:${id}] Setting up WidgetManager listener with initial dimensions width=${widthRef.current}px, height=${heightRef.current}px`);
-    
     // Force resyncing from WidgetManager on every mount
     const widget = WidgetManager.getWidget(id);
     if (widget) {
-      console.log(`[TrackMap:${id}] Found widget in WidgetManager:`, widget.state);
-      
       // Always resync with WidgetManager's state on mount
       if (widget.state) {
         if (widget.state.width !== undefined) {
           const storedWidth = Number(widget.state.width);
-          console.log(`[TrackMap:${id}] Found existing width=${storedWidth}px in WidgetManager`);
           
           // Force update our local state to match WidgetManager
           if (storedWidth !== widthRef.current) {
-            console.log(`[TrackMap:${id}] Updating local width to ${storedWidth}px`);
             setWidth(storedWidth);
           }
         } else {
           // If widget exists but doesn't have width, set it
-          console.log(`[TrackMap:${id}] Setting initial width=${widthRef.current}px in WidgetManager`);
           WidgetManager.updateWidgetState(id, { width: widthRef.current });
         }
         
         if (widget.state.height !== undefined) {
           const storedHeight = Number(widget.state.height);
-          console.log(`[TrackMap:${id}] Found existing height=${storedHeight}px in WidgetManager`);
           
           // Force update our local state to match WidgetManager
           if (storedHeight !== heightRef.current) {
-            console.log(`[TrackMap:${id}] Updating local height to ${storedHeight}px`);
             setHeight(storedHeight);
           }
         } else {
           // If widget exists but doesn't have height, set it
-          console.log(`[TrackMap:${id}] Setting initial height=${heightRef.current}px in WidgetManager`);
           WidgetManager.updateWidgetState(id, { height: heightRef.current });
         }
       } else {
         // If widget exists but state is empty, initialize both values
-        console.log(`[TrackMap:${id}] Setting initial dimensions width=${widthRef.current}px, height=${heightRef.current}px in WidgetManager`);
         WidgetManager.updateWidgetState(id, { 
           width: widthRef.current,
           height: heightRef.current
@@ -800,7 +781,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
       }
     } else {
       // If widget doesn't exist in WidgetManager at all
-      console.log(`[TrackMap:${id}] Widget not found in WidgetManager, registering with width=${widthRef.current}px, height=${heightRef.current}px`);
       WidgetManager.updateWidgetState(id, { 
         width: widthRef.current,
         height: heightRef.current
@@ -810,26 +790,20 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     // Subscribe to future state changes
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        console.log(`[TrackMap:${id}] Received WidgetManager update:`, event.state);
-        
         if (event.state.width !== undefined) {
           const newWidth = Number(event.state.width);
-          console.log(`[TrackMap:${id}] New width=${newWidth}px, current=${widthRef.current}px`);
           
           // Only update if the value has actually changed
           if (widthRef.current !== newWidth) {
-            console.log(`[TrackMap:${id}] Updating width state to ${newWidth}px`);
             setWidth(newWidth);
           }
         }
         
         if (event.state.height !== undefined) {
           const newHeight = Number(event.state.height);
-          console.log(`[TrackMap:${id}] New height=${newHeight}px, current=${heightRef.current}px`);
           
           // Only update if the value has actually changed
           if (heightRef.current !== newHeight) {
-            console.log(`[TrackMap:${id}] Updating height state to ${newHeight}px`);
             setHeight(newHeight);
           }
         }
@@ -903,8 +877,6 @@ const TrackMapWidgetComponent: React.FC<TrackMapWidgetProps> = ({
     };
   }, []);
 
-  console.log(`[TrackMapWidget:${id}] Rendering with dimensions: ${width}x${height}`);
-
   return (
     <Widget 
       id={id} 
@@ -972,6 +944,8 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
   const colorMode = widgetState.colorMode || 'none';
   const width = widgetState.width || 550;
   const height = widgetState.height || 300;
+
+  console.log(`[TrackMapWidget] widgetState:, ${widgetState}`);
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -1001,7 +975,6 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
       ],
       onChange: (value) => {
         const numericValue = Number(value);
-        console.log(`[Controls] Slider onChange: setting width to ${numericValue}px`);
         
         // Update both the widget state and dispatch a direct update for redundancy
         updateWidget({ width: numericValue });
@@ -1028,7 +1001,6 @@ const getTrackMapControls = (widgetState: any, updateWidget: (updates: any) => v
       ],
       onChange: (value) => {
         const numericValue = Number(value);
-        console.log(`[Controls] Slider onChange: setting height to ${numericValue}px`);
         
         // Update both the widget state and dispatch a direct update for redundancy
         updateWidget({ height: numericValue });
