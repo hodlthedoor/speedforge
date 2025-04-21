@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import BaseWidget from './BaseWidget';
 
@@ -25,6 +25,7 @@ export const Widget: React.FC<WidgetProps> = ({
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [isBackgroundTransparent, setIsBackgroundTransparent] = useState(false);
+  const widgetRef = useRef<HTMLDivElement>(null);
   
   // Get initialPosition from props, fallback to a calculated position
   const getInitialPosition = () => {
@@ -116,6 +117,23 @@ export const Widget: React.FC<WidgetProps> = ({
     
     return () => {
       window.removeEventListener('widget:background-transparent', handleBackgroundTransparency as EventListener);
+    };
+  }, [id]);
+
+  // Signal that this widget is mounted and ready for state updates
+  useEffect(() => {
+    // Dispatch an event when this widget is mounted
+    const mountEvent = new CustomEvent('widget:mounted', {
+      detail: { widgetId: id }
+    });
+    window.dispatchEvent(mountEvent);
+    
+    return () => {
+      // Clean up on unmount
+      const unmountEvent = new CustomEvent('widget:unmounted', {
+        detail: { widgetId: id }
+      });
+      window.dispatchEvent(unmountEvent);
     };
   }, [id]);
 

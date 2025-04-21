@@ -102,6 +102,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     updateInterval: 1000
   });
 
+  // At the top of the component, add a state to track mounted widgets
+  const [mountedWidgets, setMountedWidgets] = useState<Set<string>>(new Set());
+  const pendingWidgetSettings = useRef<Map<string, any>>(new Map());
+
   // Ensure functions are declared before they're used in memoization
   
   // Handle widget close function
@@ -903,12 +907,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             closeWidget(widget.id);
           });
           
-          // Track widgets being added
-          const newWidgetIds: string[] = [];
+          // Clear pending settings before adding new ones
+          pendingWidgetSettings.current.clear();
           
-          // Add widgets from config
+          // Store settings for each widget that will be created
           config.widgets.forEach(widgetConfig => {
             if (widgetConfig.enabled) {
+              // Store all settings for this widget
+              pendingWidgetSettings.current.set(widgetConfig.id, {
+                position: widgetConfig.position,
+                opacity: widgetConfig.opacity,
+                isBackgroundTransparent: widgetConfig.isBackgroundTransparent,
+                state: widgetConfig.state
+              });
+              
               // Add widget using onAddWidget
               const newWidget = {
                 id: widgetConfig.id,
@@ -921,105 +933,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               
               if (onAddWidget) {
                 onAddWidget(newWidget);
-                newWidgetIds.push(widgetConfig.id);
               }
             }
           });
           
           // Set panel name
           setPanelName(name);
-          
-          // Apply widget positions and settings with a small delay to ensure widgets are mounted
-          setTimeout(() => {
-            console.log(`Applying positions and settings to ${newWidgetIds.length} widgets`);
-            
-            config.widgets.forEach(widgetConfig => {
-              if (widgetConfig.enabled) {
-                // Set widget position using its position info
-                if (widgetConfig.position) {
-                  // Dispatch a position update event
-                  const posEvent = new CustomEvent('widget:position', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      position: widgetConfig.position 
-                    }
-                  });
-                  window.dispatchEvent(posEvent);
-                  console.log(`Sent position update for widget ${widgetConfig.id}:`, widgetConfig.position);
-                }
-                
-                // Set opacity if specified
-                if (widgetConfig.opacity !== undefined) {
-                  const opacityEvent = new CustomEvent('widget:opacity', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      opacity: widgetConfig.opacity 
-                    }
-                  });
-                  window.dispatchEvent(opacityEvent);
-                  
-                  // Update local state
-                  dispatchWidgetAppearance({
-                    type: 'SET_OPACITY',
-                    widgetId: widgetConfig.id,
-                    value: widgetConfig.opacity
-                  });
-                }
-                
-                // Set background transparency if specified
-                if (widgetConfig.isBackgroundTransparent !== undefined) {
-                  const bgEvent = new CustomEvent('widget:background-transparent', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      transparent: widgetConfig.isBackgroundTransparent 
-                    }
-                  });
-                  window.dispatchEvent(bgEvent);
-                  
-                  // Update local state
-                  dispatchWidgetAppearance({
-                    type: 'SET_BACKGROUND_TRANSPARENT',
-                    widgetId: widgetConfig.id,
-                    value: widgetConfig.isBackgroundTransparent
-                  });
-                }
-                
-                // Initialize widget-specific controls by getting controls and calling their update functions
-                if (widgetConfig.state) {
-                  console.log(`[ControlPanel] Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type} with state:`, widgetConfig.state);
-                  
-                  // Create an updater function for this widget
-                  const updateWidgetFn = (updates: any) => {
-                    console.log(`[ControlPanel] updateWidgetFn called for ${widgetConfig.id} with:`, updates);
-                    updateWidgetState(widgetConfig.id, updates);
-                  };
-                  
-                  // Get all controls for this widget type from the registry
-                  const controls = WidgetRegistry.getWidgetControls(
-                    widgetConfig.type,
-                    widgetConfig.state || {}, // Current state or empty object
-                    updateWidgetFn // Update function for the widget
-                  );
-                  
-                  console.log(`[ControlPanel] Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
-                  
-                  // For each control, check if we have a saved value and update if needed
-                  controls.forEach(control => {
-                    if (widgetConfig.state[control.id] !== undefined) {
-                      const savedValue = widgetConfig.state[control.id];
-                      console.log(`[ControlPanel] Setting control ${control.id} to saved value:`, savedValue);
-                      
-                      // Call the control's onChange function with the saved value
-                      control.onChange(savedValue);
-                    }
-                  });
-                }
-              }
-            });
-          }, 100); // Small delay to ensure widgets are mounted
         }
       });
-  }, [activeWidgets, closeWidget, onAddWidget, updateWidgetState]);
+  }, [activeWidgets, closeWidget, onAddWidget]);
 
   // Delete a panel configuration
   const handleDeletePanel = useCallback((name: string, e: React.MouseEvent) => {
@@ -1225,12 +1147,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       const configService = ConfigService.getInstance();
       configService.loadPanelConfig('Default').then(config => {
         if (config && config.widgets && config.widgets.length > 0) {
-          // Track widgets being added
-          const newWidgetIds: string[] = [];
+          // Clear pending settings before adding new ones
+          pendingWidgetSettings.current.clear();
           
-          // Apply config widgets
+          // Store settings for each widget that will be created
           config.widgets.forEach(widgetConfig => {
             if (widgetConfig.enabled) {
+              // Store all settings for this widget
+              pendingWidgetSettings.current.set(widgetConfig.id, {
+                position: widgetConfig.position,
+                opacity: widgetConfig.opacity,
+                isBackgroundTransparent: widgetConfig.isBackgroundTransparent,
+                state: widgetConfig.state
+              });
+              
+              // Add widget using onAddWidget
               const newWidget = {
                 id: widgetConfig.id,
                 type: widgetConfig.type,
@@ -1242,103 +1173,114 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               
               if (onAddWidget) {
                 onAddWidget(newWidget);
-                newWidgetIds.push(widgetConfig.id);
               }
             }
           });
           
-          // Apply widget positions and settings with a small delay to ensure widgets are mounted
-          setTimeout(() => {
-            console.log(`[ControlPanel] Auto-load: Applying positions and settings to ${newWidgetIds.length} widgets after delay`);
-            
-            config.widgets.forEach(widgetConfig => {
-              if (widgetConfig.enabled) {
-                // Set widget position, opacity, etc.
-                if (widgetConfig.position) {
-                  const posEvent = new CustomEvent('widget:position', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      position: widgetConfig.position 
-                    }
-                  });
-                  window.dispatchEvent(posEvent);
-                }
-                
-                // Set opacity if specified
-                if (widgetConfig.opacity !== undefined) {
-                  const opacityEvent = new CustomEvent('widget:opacity', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      opacity: widgetConfig.opacity 
-                    }
-                  });
-                  window.dispatchEvent(opacityEvent);
-                  
-                  // Update local state
-                  dispatchWidgetAppearance({
-                    type: 'SET_OPACITY',
-                    widgetId: widgetConfig.id,
-                    value: widgetConfig.opacity
-                  });
-                }
-                
-                // Set background transparency if specified
-                if (widgetConfig.isBackgroundTransparent !== undefined) {
-                  const bgEvent = new CustomEvent('widget:background-transparent', { 
-                    detail: { 
-                      widgetId: widgetConfig.id, 
-                      transparent: widgetConfig.isBackgroundTransparent 
-                    }
-                  });
-                  window.dispatchEvent(bgEvent);
-                  
-                  // Update local state
-                  dispatchWidgetAppearance({
-                    type: 'SET_BACKGROUND_TRANSPARENT',
-                    widgetId: widgetConfig.id,
-                    value: widgetConfig.isBackgroundTransparent
-                  });
-                }
-                
-                // Initialize widget-specific controls by getting controls and calling their update functions
-                if (widgetConfig.state) {
-                  console.log(`[ControlPanel] Auto-load: Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type}`);
-                  
-                  // Create an updater function for this widget
-                  const updateWidgetFn = (updates: any) => {
-                    console.log(`[ControlPanel] Auto-load: updateWidgetFn called for ${widgetConfig.id} with:`, updates);
-                    updateWidgetState(widgetConfig.id, updates);
-                  };
-                  
-                  // Get all controls for this widget type from the registry
-                  const controls = WidgetRegistry.getWidgetControls(
-                    widgetConfig.type,
-                    widgetConfig.state || {}, // Current state or empty object
-                    updateWidgetFn // Update function for the widget
-                  );
-                  
-                  console.log(`[ControlPanel] Auto-load: Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
-                  
-                  // For each control, check if we have a saved value and update if needed
-                  controls.forEach(control => {
-                    if (widgetConfig.state[control.id] !== undefined) {
-                      const savedValue = widgetConfig.state[control.id];
-                      console.log(`[ControlPanel] Auto-load: Setting control ${control.id} to saved value:`, savedValue);
-                      
-                      // Call the control's onChange function with the saved value
-                      control.onChange(savedValue);
-                    }
-                  });
-                }
-              }
-            });
-            
-            setPanelName('Default');
-          }, 100); // Small delay to ensure widgets are mounted
+          setPanelName('Default');
         }
       });
     }
-  }, [currentDisplayId, activeWidgets, onAddWidget, dispatchWidgetAppearance, updateWidgetState]);
+  }, [currentDisplayId, activeWidgets, onAddWidget]);
+
+  // Add a useEffect to listen for widget mount/unmount events
+  useEffect(() => {
+    const handleWidgetMounted = (event: Event) => {
+      const { widgetId } = (event as CustomEvent).detail;
+      console.log(`Widget mounted: ${widgetId}`);
+      
+      // Add to mounted set
+      setMountedWidgets(prev => {
+        const updated = new Set(prev);
+        updated.add(widgetId);
+        return updated;
+      });
+      
+      // Apply any pending settings for this widget
+      if (pendingWidgetSettings.current.has(widgetId)) {
+        const settings = pendingWidgetSettings.current.get(widgetId);
+        console.log(`Applying pending settings for newly mounted widget ${widgetId}:`, settings);
+        
+        // Apply position if needed
+        if (settings.position) {
+          const posEvent = new CustomEvent('widget:position', { 
+            detail: { 
+              widgetId: widgetId, 
+              position: settings.position 
+            }
+          });
+          window.dispatchEvent(posEvent);
+        }
+        
+        // Apply opacity if needed
+        if (settings.opacity !== undefined) {
+          const opacityEvent = new CustomEvent('widget:opacity', { 
+            detail: { 
+              widgetId: widgetId, 
+              opacity: settings.opacity 
+            }
+          });
+          window.dispatchEvent(opacityEvent);
+          
+          // Update local state
+          dispatchWidgetAppearance({
+            type: 'SET_OPACITY',
+            widgetId: widgetId,
+            value: settings.opacity
+          });
+        }
+        
+        // Apply background transparency if needed
+        if (settings.isBackgroundTransparent !== undefined) {
+          const bgEvent = new CustomEvent('widget:background-transparent', { 
+            detail: { 
+              widgetId: widgetId, 
+              transparent: settings.isBackgroundTransparent 
+            }
+          });
+          window.dispatchEvent(bgEvent);
+          
+          // Update local state
+          dispatchWidgetAppearance({
+            type: 'SET_BACKGROUND_TRANSPARENT',
+            widgetId: widgetId,
+            value: settings.isBackgroundTransparent
+          });
+        }
+        
+        // Apply widget state
+        if (settings.state) {
+          console.log(`Applying state for newly mounted widget ${widgetId}:`, settings.state);
+          updateWidgetState(widgetId, settings.state);
+        }
+        
+        // Remove from pending map
+        pendingWidgetSettings.current.delete(widgetId);
+      }
+    };
+    
+    const handleWidgetUnmounted = (event: Event) => {
+      const { widgetId } = (event as CustomEvent).detail;
+      console.log(`Widget unmounted: ${widgetId}`);
+      
+      // Remove from mounted set
+      setMountedWidgets(prev => {
+        const updated = new Set(prev);
+        updated.delete(widgetId);
+        return updated;
+      });
+    };
+    
+    // Add event listeners
+    window.addEventListener('widget:mounted', handleWidgetMounted);
+    window.addEventListener('widget:unmounted', handleWidgetUnmounted);
+    
+    return () => {
+      // Remove event listeners
+      window.removeEventListener('widget:mounted', handleWidgetMounted);
+      window.removeEventListener('widget:unmounted', handleWidgetUnmounted);
+    };
+  }, [dispatchWidgetAppearance, updateWidgetState]);
 
   return (
     <>
