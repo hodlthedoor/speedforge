@@ -64,18 +64,24 @@ const PedalTraceWidgetComponent: React.FC<PedalTraceWidgetProps> = ({ id, onClos
   
   // Use the generic widget state update hook
   useWidgetStateUpdates(id, (state) => {
+    console.log(`[PedalTrace:${id}] Received state update:`, state);
+    
     if (state.historyLength !== undefined) {
       const newLength = Number(state.historyLength);
+      console.log(`[PedalTrace:${id}] Processing historyLength update: ${newLength}, current=${historyLengthRef.current}`);
       // Only update if the value has actually changed
       if (historyLengthRef.current !== newLength) {
+        console.log(`[PedalTrace:${id}] Updating historyLength to ${newLength}`);
         setHistoryLength(newLength);
       }
     }
     
     if (state.width !== undefined) {
       const newWidth = Number(state.width);
+      console.log(`[PedalTrace:${id}] Processing width update: ${newWidth}, current=${widthRef.current}`);
       // Only update if the value has actually changed
       if (widthRef.current !== newWidth) {
+        console.log(`[PedalTrace:${id}] Updating width to ${newWidth}`);
         setWidth(newWidth);
       }
     }

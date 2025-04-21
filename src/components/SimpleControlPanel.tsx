@@ -440,7 +440,8 @@ const SimpleControlPanel: React.FC<SimpleControlPanelProps> = ({
     if (widget.type === 'pedal-trace') {
       widgetState = { 
         ...widgetState,
-        historyLength: widgetState.historyLength || 100 // Default to 100 if not set
+        historyLength: widgetState.historyLength || 100, // Default to 100 if not set
+        width: widgetState.width || 480 // Default to 480px if not set
       };
     }
     

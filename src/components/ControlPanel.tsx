@@ -496,7 +496,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     if (widget.type === 'pedal-trace') {
       widgetState = { 
         ...widgetState,
-        historyLength: widgetState.historyLength || 100 // Default to 100 if not set
+        historyLength: widgetState.historyLength || 100, // Default to 100 if not set
+        width: widgetState.width || 480 // Default to 480px if not set
       };
     }
     
@@ -1224,6 +1225,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       const configService = ConfigService.getInstance();
       configService.loadPanelConfig('Default').then(config => {
         if (config && config.widgets && config.widgets.length > 0) {
+          // Track widgets being added
+          const newWidgetIds: string[] = [];
+          
           // Apply config widgets
           config.widgets.forEach(widgetConfig => {
             if (widgetConfig.enabled) {
@@ -1238,89 +1242,99 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               
               if (onAddWidget) {
                 onAddWidget(newWidget);
-              }
-              
-              // Set widget position, opacity, etc.
-              if (widgetConfig.position) {
-                const posEvent = new CustomEvent('widget:position', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    position: widgetConfig.position 
-                  }
-                });
-                window.dispatchEvent(posEvent);
-              }
-              
-              // Apply other widget properties
-              if (widgetConfig.opacity !== undefined) {
-                const opacityEvent = new CustomEvent('widget:opacity', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    opacity: widgetConfig.opacity 
-                  }
-                });
-                window.dispatchEvent(opacityEvent);
-                
-                // Update local state
-                dispatchWidgetAppearance({
-                  type: 'SET_OPACITY',
-                  widgetId: widgetConfig.id,
-                  value: widgetConfig.opacity
-                });
-              }
-              
-              // Set background transparency if specified
-              if (widgetConfig.isBackgroundTransparent !== undefined) {
-                const bgEvent = new CustomEvent('widget:background-transparent', { 
-                  detail: { 
-                    widgetId: widgetConfig.id, 
-                    transparent: widgetConfig.isBackgroundTransparent 
-                  }
-                });
-                window.dispatchEvent(bgEvent);
-                
-                // Update local state
-                dispatchWidgetAppearance({
-                  type: 'SET_BACKGROUND_TRANSPARENT',
-                  widgetId: widgetConfig.id,
-                  value: widgetConfig.isBackgroundTransparent
-                });
-              }
-              
-              // Initialize widget-specific controls by getting controls and calling their update functions
-              if (widgetConfig.state) {
-                console.log(`[ControlPanel] Auto-load: Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type}`);
-                
-                // Create an updater function for this widget
-                const updateWidgetFn = (updates: any) => {
-                  console.log(`[ControlPanel] Auto-load: updateWidgetFn called for ${widgetConfig.id} with:`, updates);
-                  updateWidgetState(widgetConfig.id, updates);
-                };
-                
-                // Get all controls for this widget type from the registry
-                const controls = WidgetRegistry.getWidgetControls(
-                  widgetConfig.type,
-                  widgetConfig.state || {}, // Current state or empty object
-                  updateWidgetFn // Update function for the widget
-                );
-                
-                console.log(`[ControlPanel] Auto-load: Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
-                
-                // For each control, check if we have a saved value and update if needed
-                controls.forEach(control => {
-                  if (widgetConfig.state[control.id] !== undefined) {
-                    const savedValue = widgetConfig.state[control.id];
-                    console.log(`[ControlPanel] Auto-load: Setting control ${control.id} to saved value:`, savedValue);
-                    
-                    // Call the control's onChange function with the saved value
-                    control.onChange(savedValue);
-                  }
-                });
+                newWidgetIds.push(widgetConfig.id);
               }
             }
           });
           
-          setPanelName('Default');
+          // Apply widget positions and settings with a small delay to ensure widgets are mounted
+          setTimeout(() => {
+            console.log(`[ControlPanel] Auto-load: Applying positions and settings to ${newWidgetIds.length} widgets after delay`);
+            
+            config.widgets.forEach(widgetConfig => {
+              if (widgetConfig.enabled) {
+                // Set widget position, opacity, etc.
+                if (widgetConfig.position) {
+                  const posEvent = new CustomEvent('widget:position', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      position: widgetConfig.position 
+                    }
+                  });
+                  window.dispatchEvent(posEvent);
+                }
+                
+                // Set opacity if specified
+                if (widgetConfig.opacity !== undefined) {
+                  const opacityEvent = new CustomEvent('widget:opacity', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      opacity: widgetConfig.opacity 
+                    }
+                  });
+                  window.dispatchEvent(opacityEvent);
+                  
+                  // Update local state
+                  dispatchWidgetAppearance({
+                    type: 'SET_OPACITY',
+                    widgetId: widgetConfig.id,
+                    value: widgetConfig.opacity
+                  });
+                }
+                
+                // Set background transparency if specified
+                if (widgetConfig.isBackgroundTransparent !== undefined) {
+                  const bgEvent = new CustomEvent('widget:background-transparent', { 
+                    detail: { 
+                      widgetId: widgetConfig.id, 
+                      transparent: widgetConfig.isBackgroundTransparent 
+                    }
+                  });
+                  window.dispatchEvent(bgEvent);
+                  
+                  // Update local state
+                  dispatchWidgetAppearance({
+                    type: 'SET_BACKGROUND_TRANSPARENT',
+                    widgetId: widgetConfig.id,
+                    value: widgetConfig.isBackgroundTransparent
+                  });
+                }
+                
+                // Initialize widget-specific controls by getting controls and calling their update functions
+                if (widgetConfig.state) {
+                  console.log(`[ControlPanel] Auto-load: Processing saved controls for widget ${widgetConfig.id} type ${widgetConfig.type}`);
+                  
+                  // Create an updater function for this widget
+                  const updateWidgetFn = (updates: any) => {
+                    console.log(`[ControlPanel] Auto-load: updateWidgetFn called for ${widgetConfig.id} with:`, updates);
+                    updateWidgetState(widgetConfig.id, updates);
+                  };
+                  
+                  // Get all controls for this widget type from the registry
+                  const controls = WidgetRegistry.getWidgetControls(
+                    widgetConfig.type,
+                    widgetConfig.state || {}, // Current state or empty object
+                    updateWidgetFn // Update function for the widget
+                  );
+                  
+                  console.log(`[ControlPanel] Auto-load: Retrieved ${controls.length} controls for widget ${widgetConfig.id}`);
+                  
+                  // For each control, check if we have a saved value and update if needed
+                  controls.forEach(control => {
+                    if (widgetConfig.state[control.id] !== undefined) {
+                      const savedValue = widgetConfig.state[control.id];
+                      console.log(`[ControlPanel] Auto-load: Setting control ${control.id} to saved value:`, savedValue);
+                      
+                      // Call the control's onChange function with the saved value
+                      control.onChange(savedValue);
+                    }
+                  });
+                }
+              }
+            });
+            
+            setPanelName('Default');
+          }, 100); // Small delay to ensure widgets are mounted
         }
       });
     }
