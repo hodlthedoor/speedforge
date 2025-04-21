@@ -156,9 +156,6 @@ export const Widget: React.FC<WidgetProps> = ({
     setPosition(newPosition);
   };
 
-  // Add logging to see what width/height the Widget gets from its props
-  console.log(`Widget ${id} rendering with dimensions: ${width}x${height}, type: ${typeof width}/${typeof height}`);
-
   const combinedStyle: React.CSSProperties = {
     width: width ? (typeof width === 'number' ? `${width}px` : width) : undefined,
     height: height ? (typeof height === 'number' ? `${height}px` : height) : undefined,
