@@ -108,7 +108,24 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     setMapBuildingState('complete');
     mapCompleteRef.current = true;
     if (trackPointsRef.current.length > 10) {
-      const sortedPoints = [...trackPointsRef.current].sort((a, b) => a.lapDistPct - b.lapDistPct);
+      // Find the minimum lap distance to properly identify the start of the lap
+      const minLapDistPct = Math.min(...trackPointsRef.current.map(p => p.lapDistPct));
+      
+      // Sort points by lap distance percentage, but handle potential lap crossing
+      // by using the distance from the minimum lap distance as the sorting key
+      const sortedPoints = [...trackPointsRef.current].sort((a, b) => {
+        // Calculate distance from minimum lap distance (handling wrap-around at 1.0)
+        const distA = (a.lapDistPct >= minLapDistPct) 
+          ? a.lapDistPct - minLapDistPct 
+          : a.lapDistPct + 1.0 - minLapDistPct;
+        
+        const distB = (b.lapDistPct >= minLapDistPct) 
+          ? b.lapDistPct - minLapDistPct 
+          : b.lapDistPct + 1.0 - minLapDistPct;
+          
+        return distA - distB;
+      });
+      
       const normalizedTrack = normalizeTrack(sortedPoints);
       setTrackPoints(normalizedTrack);
     }
@@ -134,10 +151,21 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     if (points.length < 10) return points;
     const firstPoint = points[0];
     const lastPoint = points[points.length - 1];
+    
+    // Only auto-complete the circuit if we've actually completed a lap
+    // This means the last point should be near the end of the lap (close to 1.0)
+    // and the first point should be near the start of the lap (close to 0.0)
+    const isLapComplete = 
+      (lastPoint.lapDistPct > 0.98 && firstPoint.lapDistPct < 0.1) ||
+      (lastPoint.lapDistPct < 0.1 && firstPoint.lapDistPct > 0.98);
+    
     const distToClose = Math.sqrt((lastPoint.x - firstPoint.x) ** 2 + (lastPoint.y - firstPoint.y) ** 2);
-    if (distToClose > 2) {
+    
+    // Only add the closing point if the lap is actually completed AND the track isn't already closed
+    if (isLapComplete && distToClose > 2) {
       points.push({ ...firstPoint, lapDistPct: 1.0 });
     }
+    
     const smoothedPoints: TrackPoint[] = [];
     const windowSize = 2;
     for (let i = 0; i < points.length; i++) {
@@ -306,13 +334,16 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
       trackPointsRef.current = [...trackPointsRef.current, newPoint];
       lastPositionRef.current = newPoint;
       
+      // Check if we've completed a lap (crossing start/finish line)
       if (trackPointsRef.current.length > 20) {
         let completedLap = false;
         if (lastPositionRef.current) {
           const lastLapPct = lastPositionRef.current.lapDistPct;
-          if ((lastLapPct > 0.9 && lapDistPct < 0.1) || 
-              (lastLapPct < 0.1 && lapDistPct > 0.9)) {
+          // We've completed a lap if we cross from near the end (>0.98) to near the beginning (<0.1)
+          // This is a more reliable way to detect crossing the start/finish line
+          if (lastLapPct > 0.98 && lapDistPct < 0.1) {
             completedLap = true;
+            console.log(`[BasicMap:${id}] Lap completed - crossed start/finish line`);
           }
         }
         if (completedLap) {
