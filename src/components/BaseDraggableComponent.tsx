@@ -77,8 +77,20 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
 
   // Handle mouse down to start dragging
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Skip if the click originated from an input, button, or other interactive element
+    const targetElement = e.target as HTMLElement;
+    if (
+      targetElement.tagName === 'INPUT' || 
+      targetElement.tagName === 'TEXTAREA' || 
+      targetElement.tagName === 'SELECT' || 
+      targetElement.tagName === 'BUTTON' ||
+      targetElement.closest('input, textarea, select, button')
+    ) {
+      return;
+    }
+    
     // Only initiate drag from the header area, identified by a class
-    if (!(e.target as HTMLElement).closest('.drag-handle')) {
+    if (!(targetElement).closest('.drag-handle')) {
       return;
     }
 
