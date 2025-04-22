@@ -985,17 +985,11 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
       label: `Width: ${width}px`,
       value: width,
       options: [
-        { value: 300, label: '300px' },
         { value: 400, label: '400px' },
-        { value: 500, label: '500px' },
         { value: 600, label: '600px' },
-        { value: 700, label: '700px' },
         { value: 800, label: '800px' },
-        { value: 900, label: '900px' },
         { value: 1000, label: '1000px' },
-        { value: 1100, label: '1100px' },
         { value: 1200, label: '1200px' },
-        { value: 1300, label: '1300px' },
         { value: 1400, label: '1400px' },
         
       ],
@@ -1017,15 +1011,9 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
       value: height,
       options: [
         { value: 200, label: '200px' },
-        { value: 250, label: '250px' },
-        { value: 300, label: '300px' },
-        { value: 350, label: '350px' },
         { value: 400, label: '400px' },
-        { value: 500, label: '500px' },
         { value: 600, label: '600px' },
-        { value: 700, label: '700px' },
         { value: 800, label: '800px' },
-        { value: 900, label: '900px' },
         { value: 1000, label: '1000px' },
         
       ],
