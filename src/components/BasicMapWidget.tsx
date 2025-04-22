@@ -73,6 +73,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
   const [lapInvalidated, setLapInvalidated] = useState<boolean>(false);
+  const [trackWidth, setTrackWidth] = useState<number>(4); // Default track width (black line)
   
   // Use the animation frame hook
   const { requestFrame, cancelFrame, frameIdRef } = useAnimationFrame([]);
@@ -80,6 +81,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   // Refs to store current values
   const widthRef = useRef<number>(480);
   const heightRef = useRef<number>(300);
+  const trackWidthRef = useRef<number>(4);
   
   // Telemetry data for car position with more metrics similar to TrackMapWidget
   const { data: telemetryData } = useTelemetryData(id, { 
@@ -108,6 +110,10 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     heightRef.current = height;
   }, [height]);
   
+  useEffect(() => {
+    trackWidthRef.current = trackWidth;
+  }, [trackWidth]);
+  
   // Callbacks for updating widget properties
   const updateWidth = useCallback((newWidth: number) => {
     if (widthRef.current !== newWidth) {
@@ -118,6 +124,12 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   const updateHeight = useCallback((newHeight: number) => {
     if (heightRef.current !== newHeight) {
       setHeight(newHeight);
+    }
+  }, []);
+  
+  const updateTrackWidth = useCallback((newTrackWidth: number) => {
+    if (trackWidthRef.current !== newTrackWidth) {
+      setTrackWidth(newTrackWidth);
     }
   }, []);
   
@@ -300,6 +312,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   // Expose functions via static properties
   (BasicMapWidgetComponent as any).updateWidth = updateWidth;
   (BasicMapWidgetComponent as any).updateHeight = updateHeight;
+  (BasicMapWidgetComponent as any).updateTrackWidth = updateTrackWidth;
   
   // Handle widget state updates
   useWidgetStateUpdates(id, (state) => {
@@ -320,6 +333,13 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     if (state.mapBuildingState !== undefined) {
       if (mapBuildingState !== state.mapBuildingState) {
         setMapBuildingState(state.mapBuildingState);
+      }
+    }
+
+    if (state.trackWidth !== undefined) {
+      const newTrackWidth = Number(state.trackWidth);
+      if (trackWidthRef.current !== newTrackWidth) {
+        setTrackWidth(newTrackWidth);
       }
     }
   });
@@ -524,12 +544,21 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
       if (widget.state.mapBuildingState !== undefined) {
         setMapBuildingState(widget.state.mapBuildingState);
       }
+
+      // Sync trackWidth from WidgetManager
+      if (widget.state.trackWidth !== undefined) {
+        const storedTrackWidth = Number(widget.state.trackWidth);
+        if (storedTrackWidth !== trackWidthRef.current) {
+          setTrackWidth(storedTrackWidth);
+        }
+      }
     } else {
       // Initialize widget state if it doesn't exist
       WidgetManager.updateWidgetState(id, {
         width: widthRef.current,
         height: heightRef.current,
-        mapBuildingState: 'idle'
+        mapBuildingState: 'idle',
+        trackWidth: trackWidthRef.current
       });
     }
     
@@ -553,6 +582,13 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
         if (event.state.mapBuildingState !== undefined) {
           setMapBuildingState(event.state.mapBuildingState);
         }
+
+        if (event.state.trackWidth !== undefined) {
+          const newTrackWidth = Number(event.state.trackWidth);
+          if (trackWidthRef.current !== newTrackWidth) {
+            setTrackWidth(newTrackWidth);
+          }
+        }
       }
     });
     
@@ -571,6 +607,11 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     if (heightRef.current === height) return;
     WidgetManager.updateWidgetState(id, { height });
   }, [height, id]);
+
+  useEffect(() => {
+    if (trackWidthRef.current === trackWidth) return;
+    WidgetManager.updateWidgetState(id, { trackWidth });
+  }, [trackWidth, id]);
 
   // Function to find position at a lap distance
   const findPositionAtLapDistance = useCallback((lapDistPct: number): TrackPoint | null => {
@@ -713,6 +754,10 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     const firstPoint = transformPoint(points[0]);
     
+    // Calculate white line width (always thicker than black line)
+    const blackLineWidth = trackWidthRef.current;
+    const whiteLineWidth = blackLineWidth + 2; // 2px wider for white border
+    
     // Draw the thick white line for the border
     ctx.beginPath();
     ctx.moveTo(firstPoint.x, firstPoint.y);
@@ -729,7 +774,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     }
     
     ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 6.0; // Thicker white line for the border
+    ctx.lineWidth = whiteLineWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -750,7 +795,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     }
     
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4.0; // Thinner black line to leave white borders
+    ctx.lineWidth = blackLineWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -977,6 +1022,7 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
   const width = widgetState.width || 480;
   const height = widgetState.height || 300;
   const mapBuildingState = widgetState.mapBuildingState || 'idle';
+  const trackWidth = widgetState.trackWidth || 4;
   
   const controls: WidgetControlDefinition[] = [
     {
@@ -1023,6 +1069,29 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
         
         try {
           dispatchWidgetStateUpdate(widgetState.id || 'unknown', { height: numericValue });
+        } catch (err) {
+          console.error(`[Controls] Error in direct update:`, err);
+        }
+      }
+    },
+    {
+      id: 'trackWidth',
+      type: 'slider' as WidgetControlType,
+      label: `Track Width: ${trackWidth}px`,
+      value: trackWidth,
+      options: [
+        { value: 6, label: '6px' },
+        { value: 8, label: '8px' },
+        { value: 10, label: '10px' },
+        { value: 12, label: '12px' },
+        { value: 14, label: '14px' },
+      ],
+      onChange: (value) => {
+        const numericValue = Number(value);
+        updateWidget({ trackWidth: numericValue });
+        
+        try {
+          dispatchWidgetStateUpdate(widgetState.id || 'unknown', { trackWidth: numericValue });
         } catch (err) {
           console.error(`[Controls] Error in direct update:`, err);
         }
