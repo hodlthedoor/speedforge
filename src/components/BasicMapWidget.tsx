@@ -611,8 +611,11 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
       ctx.lineTo(point.x, point.y);
     }
     
-    // Close the path by connecting to the first point
-    ctx.lineTo(firstPoint.x, firstPoint.y);
+    // Only close the path if the map is complete
+    if (mapBuildingState === 'complete') {
+      // Close the path by connecting to the first point
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+    }
     
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 6.0; // Thicker white line for the border
@@ -629,8 +632,11 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
       ctx.lineTo(point.x, point.y);
     }
     
-    // Close the path
-    ctx.lineTo(firstPoint.x, firstPoint.y);
+    // Only close the path if the map is complete
+    if (mapBuildingState === 'complete') {
+      // Close the path
+      ctx.lineTo(firstPoint.x, firstPoint.y);
+    }
     
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4.0; // Thinner black line to leave white borders
@@ -639,7 +645,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     ctx.stroke();
     
     // Draw the start/finish line
-    if (points.length > 0) {
+    if (points.length > 0 && mapBuildingState === 'complete') {
       // Find the point with lap distance closest to 0
       let startPoint = points[0];
       let nextPoint = points[1];
@@ -712,7 +718,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     // Reset global alpha
     ctx.globalAlpha = 1.0;
-  }, [telemetryData, findPositionAtLapDistance]);
+  }, [telemetryData, findPositionAtLapDistance, mapBuildingState]);
 
   // Resize canvas function
   useEffect(() => {
