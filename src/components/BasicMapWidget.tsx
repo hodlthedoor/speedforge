@@ -297,25 +297,50 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
         newX = lastX + worldDx;
         newY = lastY + worldDy;
         
-        if (trackPointsRef.current.length > 20) {
-          const distFromStart = Math.min(
-            Math.abs(lapDistPct - startLapDistPctRef.current),
-            Math.abs(lapDistPct - startLapDistPctRef.current + 1),
-            Math.abs(lapDistPct - startLapDistPctRef.current - 1)
-          );
-          if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
-            const firstPoint = trackPointsRef.current[0];
-            const distX = newX - firstPoint.x;
-            const distY = newY - firstPoint.y;
-            const dist = Math.sqrt(distX * distX + distY * distY);
-            if (dist < 50) {
-              const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
-              newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
-              newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
-              if (dist < 10 && trackPointsRef.current.length > 50) {
-                stopRecording();
-                animationFrameId.current = null;
-                return;
+        // Minimum number of points required before we consider auto-completing the track
+        const MIN_POINTS_FOR_COMPLETION = 100;
+        
+        // We need enough track points and should have traveled a significant distance around the track
+        // before considering auto-completion near the starting point
+        if (trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
+          // Check if we've made significant progress around the track (crossed at least 50% of the lap)
+          let madeSignificantProgress = false;
+          
+          if (startLapDistPctRef.current <= 0.5) {
+            // If we started in the first half of the lap, we should have crossed into the second half
+            madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct > 0.5);
+          } else {
+            // If we started in the second half of the lap, we should have crossed into the first half
+            madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct < 0.5);
+          }
+          
+          if (madeSignificantProgress) {
+            const distFromStart = Math.min(
+              Math.abs(lapDistPct - startLapDistPctRef.current),
+              Math.abs(lapDistPct - startLapDistPctRef.current + 1),
+              Math.abs(lapDistPct - startLapDistPctRef.current - 1)
+            );
+            
+            // Only consider proximity to start if we're very close to our starting lap percentage
+            if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
+              const firstPoint = trackPointsRef.current[0];
+              const distX = newX - firstPoint.x;
+              const distY = newY - firstPoint.y;
+              const dist = Math.sqrt(distX * distX + distY * distY);
+              
+              // If we're close to the starting point in 3D space
+              if (dist < 50) {
+                const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
+                newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
+                newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+                
+                // Even stricter requirement for auto-completing
+                if (dist < 10 && trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
+                  console.log(`[BasicMap:${id}] Lap completed - proximity to start point with ${trackPointsRef.current.length} points`);
+                  stopRecording();
+                  animationFrameId.current = null;
+                  return;
+                }
               }
             }
           }
@@ -335,7 +360,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
       lastPositionRef.current = newPoint;
       
       // Check if we've completed a lap (crossing start/finish line)
-      if (trackPointsRef.current.length > 20) {
+      if (trackPointsRef.current.length > 50) {
         let completedLap = false;
         if (lastPositionRef.current) {
           const lastLapPct = lastPositionRef.current.lapDistPct;
