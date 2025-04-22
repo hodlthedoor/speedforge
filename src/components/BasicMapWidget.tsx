@@ -756,7 +756,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     // Calculate white line width (always thicker than black line)
     const blackLineWidth = trackWidthRef.current;
-    const whiteLineWidth = blackLineWidth + 2; // 2px wider for white border
+    const whiteLineWidth = blackLineWidth + ((blackLineWidth / 2) - 1); // wider for white border
     
     // Draw the thick white line for the border
     ctx.beginPath();
