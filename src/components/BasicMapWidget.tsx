@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Widget from './Widget';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
@@ -27,10 +27,36 @@ interface TrackPosition {
 
 type MapBuildingState = 'idle' | 'recording' | 'complete';
 
+// Utility function for efficient animation frame management
+const useAnimationFrame = (deps: any[] = []) => {
+  const frameIdRef = useRef<number | null>(null);
+  
+  const requestFrame = useCallback((callback: () => void) => {
+    if (frameIdRef.current) return;
+    
+    frameIdRef.current = requestAnimationFrame(() => {
+      callback();
+      frameIdRef.current = null;
+    });
+  }, deps);
+  
+  const cancelFrame = useCallback(() => {
+    if (frameIdRef.current) {
+      cancelAnimationFrame(frameIdRef.current);
+      frameIdRef.current = null;
+    }
+  }, []);
+  
+  useEffect(() => {
+    return cancelFrame;
+  }, [cancelFrame]);
+  
+  return { requestFrame, cancelFrame, frameIdRef };
+};
+
 const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose }) => {
   // Canvas and animation refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationFrameId = useRef<number | null>(null);
   const trackPointsRef = useRef<TrackPoint[]>([]);
   const lastPositionRef = useRef<TrackPoint | null>(null);
   const mapCompleteRef = useRef<boolean>(false);
@@ -47,6 +73,9 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
   const [currentPositionIndex, setCurrentPositionIndex] = useState<number>(-1);
   const [lapInvalidated, setLapInvalidated] = useState<boolean>(false);
+  
+  // Use the animation frame hook
+  const { requestFrame, cancelFrame, frameIdRef } = useAnimationFrame([]);
   
   // Refs to store current values
   const widthRef = useRef<number>(480);
@@ -149,12 +178,14 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
 
   const normalizeTrack = useCallback((points: TrackPoint[]): TrackPoint[] => {
     if (points.length < 10) return points;
-    const firstPoint = points[0];
-    const lastPoint = points[points.length - 1];
+    
+    // First, clone the array to avoid mutating the original
+    const workingPoints = [...points];
+    
+    const firstPoint = workingPoints[0];
+    const lastPoint = workingPoints[workingPoints.length - 1];
     
     // Only auto-complete the circuit if we've actually completed a lap
-    // This means the last point should be near the end of the lap (close to 1.0)
-    // and the first point should be near the start of the lap (close to 0.0)
     const isLapComplete = 
       (lastPoint.lapDistPct > 0.98 && firstPoint.lapDistPct < 0.1) ||
       (lastPoint.lapDistPct < 0.1 && firstPoint.lapDistPct > 0.98);
@@ -163,43 +194,107 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     // Only add the closing point if the lap is actually completed AND the track isn't already closed
     if (isLapComplete && distToClose > 2) {
-      points.push({ ...firstPoint, lapDistPct: 1.0 });
+      workingPoints.push({ ...firstPoint, lapDistPct: 1.0 });
     }
     
+    // Smooth the track points with a moving average filter
+    // This is more efficient than the previous approach
     const smoothedPoints: TrackPoint[] = [];
-    const windowSize = 2;
-    for (let i = 0; i < points.length; i++) {
-      const neighbors: TrackPoint[] = [];
-      for (let j = Math.max(0, i - windowSize); j <= Math.min(points.length - 1, i + windowSize); j++) {
-        if (j !== i) neighbors.push(points[j]);
-      }
-      if (neighbors.length > 0) {
-        const avgX = neighbors.reduce((sum, p) => sum + p.x, 0) / neighbors.length;
-        const avgY = neighbors.reduce((sum, p) => sum + p.y, 0) / neighbors.length;
-        const dist = Math.sqrt((points[i].x - avgX) ** 2 + (points[i].y - avgY) ** 2);
-        const distThreshold = 5;
-        if (dist > distThreshold) {
-          smoothedPoints.push({
-            ...points[i],
-            x: points[i].x * 0.7 + avgX * 0.3,
-            y: points[i].y * 0.7 + avgY * 0.3
-          });
-        } else {
-          smoothedPoints.push(points[i]);
-        }
+    const windowSize = 2; // Points on each side to consider
+    
+    // Pre-calculate some values for the first and last points
+    // which will be used multiple times in the loop
+    const startWindowIndices = Array.from(
+      { length: Math.min(windowSize, workingPoints.length) }, 
+      (_, i) => i + 1
+    );
+    
+    const endWindowIndices = Array.from(
+      { length: Math.min(windowSize, workingPoints.length) },
+      (_, i) => workingPoints.length - 1 - i
+    );
+    
+    for (let i = 0; i < workingPoints.length; i++) {
+      const currentPoint = workingPoints[i];
+      
+      // Determine window indices efficiently based on position in array
+      let windowIndices: number[];
+      
+      if (i === 0) {
+        // First point - use cached start window
+        windowIndices = startWindowIndices;
+      } else if (i === workingPoints.length - 1) {
+        // Last point - use cached end window
+        windowIndices = endWindowIndices;
       } else {
-        smoothedPoints.push(points[i]);
+        // Middle points - calculate window efficiently
+        const startIdx = Math.max(0, i - windowSize);
+        const endIdx = Math.min(workingPoints.length - 1, i + windowSize);
+        
+        windowIndices = [];
+        for (let j = startIdx; j <= endIdx; j++) {
+          if (j !== i) windowIndices.push(j);
+        }
+      }
+      
+      // Skip smoothing if no neighbors
+      if (windowIndices.length === 0) {
+        smoothedPoints.push(currentPoint);
+        continue;
+      }
+      
+      // Calculate average position of neighbors
+      let sumX = 0, sumY = 0;
+      for (const idx of windowIndices) {
+        sumX += workingPoints[idx].x;
+        sumY += workingPoints[idx].y;
+      }
+      
+      const avgX = sumX / windowIndices.length;
+      const avgY = sumY / windowIndices.length;
+      
+      // Calculate distance from average
+      const dx = currentPoint.x - avgX;
+      const dy = currentPoint.y - avgY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      // Apply smoothing based on distance - use more smoothing for outliers
+      const distThreshold = 5;
+      if (dist > distThreshold) {
+        // Apply more smoothing to outliers
+        const smoothingFactor = 0.3; // 30% smoothing
+        smoothedPoints.push({
+          ...currentPoint,
+          x: currentPoint.x * (1 - smoothingFactor) + avgX * smoothingFactor,
+          y: currentPoint.y * (1 - smoothingFactor) + avgY * smoothingFactor
+        });
+      } else {
+        // Keep points that are already smooth
+        smoothedPoints.push(currentPoint);
       }
     }
-    const xVals = smoothedPoints.map(p => p.x);
-    const yVals = smoothedPoints.map(p => p.y);
-    const minX = Math.min(...xVals);
-    const maxX = Math.max(...xVals);
-    const minY = Math.min(...yVals);
-    const maxY = Math.max(...yVals);
+    
+    // Center the track on (0,0) for better rendering and scaling
+    // Calculate bounds in a single pass to improve performance
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+    
+    for (const point of smoothedPoints) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+    
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    return smoothedPoints.map(p => ({ ...p, x: p.x - centerX, y: p.y - centerY }));
+    
+    // Center all points in one pass
+    return smoothedPoints.map(p => ({ 
+      ...p, 
+      x: p.x - centerX, 
+      y: p.y - centerY 
+    }));
   }, []);
   
   // Expose functions via static properties
@@ -245,152 +340,157 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   // Recording telemetry data to build the track
   useEffect(() => {
     if (!telemetryData || mapBuildingState !== 'recording') return;
-    if (animationFrameId.current) return;
+    if (frameIdRef.current) return;
     
-    animationFrameId.current = requestAnimationFrame(() => {
-      const now = performance.now();
-      const lapDistPct = telemetryData.lap_dist_pct || 0;
-      const velocity = telemetryData.velocity_ms || 0;
-      const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
-      const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
-      const velForward = telemetryData.VelocityX || 0;
-      const velSide = telemetryData.VelocityY || 0;
-      const trackSurface = telemetryData.PlayerTrackSurface as number;
-      
-      if (trackSurface !== TrackSurface.OnTrack) {
-        offTrackCountRef.current += 1;
-        if (offTrackCountRef.current >= 4) {
-          cancelRecording();
-          animationFrameId.current = null;
+    requestFrame(() => {
+      try {
+        const now = performance.now();
+        const lapDistPct = telemetryData.lap_dist_pct || 0;
+        const velocity = telemetryData.velocity_ms || 0;
+        const lateralAccel = telemetryData.lateral_accel_ms2 || 0;
+        const longitudinalAccel = telemetryData.longitudinal_accel_ms2 || 0;
+        const velForward = telemetryData.VelocityX || 0;
+        const velSide = telemetryData.VelocityY || 0;
+        const trackSurface = telemetryData.PlayerTrackSurface as number;
+        
+        // Check track surface first to minimize unnecessary processing
+        if (trackSurface !== TrackSurface.OnTrack) {
+          offTrackCountRef.current += 1;
+          if (offTrackCountRef.current >= 4) {
+            cancelRecording();
+            return;
+          }
+        } else {
+          offTrackCountRef.current = 0;
+        }
+        
+        // Skip low speeds or when off track
+        if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) {
           return;
         }
-      } else {
-        offTrackCountRef.current = 0;
-      }
-      
-      if (velocity < 5 || trackSurface !== TrackSurface.OnTrack) {
-        animationFrameId.current = null;
-        return;
-      }
-      
-      let timeDelta = 0.05;
-      if (lastTimeRef.current !== null) {
-        timeDelta = (now - lastTimeRef.current) / 1000;
-        if (timeDelta > 0.2) timeDelta = 0.05;
-      }
-      lastTimeRef.current = now;
-      let curvature = 0;
-      if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
-      
-      let newX = 0, newY = 0, currentHeading = 0;
-      if (trackPointsRef.current.length === 0) {
-        newX = 0; newY = 0; currentHeading = 0;
-      } else if (lastPositionRef.current) {
-        const lastX = lastPositionRef.current.x;
-        const lastY = lastPositionRef.current.y;
-        const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
-        const yawRateRadSec = (yawRateDegSec * Math.PI) / 180;
-        currentHeading = lastPositionRef.current.heading || 0;
-        currentHeading += yawRateRadSec * timeDelta;
-        const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
-        const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
-        newX = lastX + worldDx;
-        newY = lastY + worldDy;
         
-        // Minimum number of points required before we consider auto-completing the track
-        const MIN_POINTS_FOR_COMPLETION = 100;
+        // Calculate time delta with safety bounds
+        let timeDelta = 0.05;
+        if (lastTimeRef.current !== null) {
+          timeDelta = Math.min(0.2, Math.max(0.01, (now - lastTimeRef.current) / 1000));
+        }
+        lastTimeRef.current = now;
         
-        // We need enough track points and should have traveled a significant distance around the track
-        // before considering auto-completion near the starting point
-        if (trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
-          // Check if we've made significant progress around the track (crossed at least 50% of the lap)
-          let madeSignificantProgress = false;
+        // Calculate curvature
+        let curvature = 0;
+        if (velocity > 10) curvature = lateralAccel / (velocity * velocity);
+        
+        // Calculate new position
+        let newX = 0, newY = 0, currentHeading = 0;
+        if (trackPointsRef.current.length === 0) {
+          newX = 0; newY = 0; currentHeading = 0;
+        } else if (lastPositionRef.current) {
+          const lastX = lastPositionRef.current.x;
+          const lastY = lastPositionRef.current.y;
+          const yawRateDegSec = telemetryData.yaw_rate_deg_s || 0;
+          const yawRateRadSec = (yawRateDegSec * Math.PI) / 180;
+          currentHeading = lastPositionRef.current.heading || 0;
+          currentHeading += yawRateRadSec * timeDelta;
           
-          if (startLapDistPctRef.current <= 0.5) {
-            // If we started in the first half of the lap, we should have crossed into the second half
-            madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct > 0.5);
-          } else {
-            // If we started in the second half of the lap, we should have crossed into the first half
-            madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct < 0.5);
-          }
+          // Calculate position updates with world coordinates
+          const worldDx = (velForward * Math.cos(currentHeading) - velSide * Math.sin(currentHeading)) * timeDelta;
+          const worldDy = (velForward * Math.sin(currentHeading) + velSide * Math.cos(currentHeading)) * timeDelta;
+          newX = lastX + worldDx;
+          newY = lastY + worldDy;
           
-          if (madeSignificantProgress) {
-            const distFromStart = Math.min(
-              Math.abs(lapDistPct - startLapDistPctRef.current),
-              Math.abs(lapDistPct - startLapDistPctRef.current + 1),
-              Math.abs(lapDistPct - startLapDistPctRef.current - 1)
-            );
+          // Auto-completion check constants
+          const MIN_POINTS_FOR_COMPLETION = 100;
+          
+          // Only check for lap completion if we have enough points
+          if (trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
+            // Check if we've made significant progress around the track
+            let madeSignificantProgress = false;
             
-            // Only consider proximity to start if we're very close to our starting lap percentage
-            if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
-              const firstPoint = trackPointsRef.current[0];
-              const distX = newX - firstPoint.x;
-              const distY = newY - firstPoint.y;
-              const dist = Math.sqrt(distX * distX + distY * distY);
+            if (startLapDistPctRef.current <= 0.5) {
+              // If we started in the first half of the lap, we should have crossed into the second half
+              madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct > 0.5);
+            } else {
+              // If we started in the second half of the lap, we should have crossed into the first half
+              madeSignificantProgress = trackPointsRef.current.some(p => p.lapDistPct < 0.5);
+            }
+            
+            if (madeSignificantProgress) {
+              const distFromStart = Math.min(
+                Math.abs(lapDistPct - startLapDistPctRef.current),
+                Math.abs(lapDistPct - startLapDistPctRef.current + 1),
+                Math.abs(lapDistPct - startLapDistPctRef.current - 1)
+              );
               
-              // If we're close to the starting point in 3D space
-              if (dist < 50) {
-                const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
-                newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
-                newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+              // Check if we're near our starting point to auto-complete
+              if (distFromStart < 0.02 && Math.abs(lapDistPct - lastPositionRef.current.lapDistPct) < 0.05) {
+                const firstPoint = trackPointsRef.current[0];
+                const distX = newX - firstPoint.x;
+                const distY = newY - firstPoint.y;
+                const dist = Math.sqrt(distX * distX + distY * distY);
                 
-                // Even stricter requirement for auto-completing
-                if (dist < 10 && trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
-                  console.log(`[BasicMap:${id}] Lap completed - proximity to start point with ${trackPointsRef.current.length} points`);
-                  stopRecording();
-                  animationFrameId.current = null;
-                  return;
+                // If we're close to the starting point in 3D space, assist lap completion
+                if (dist < 50) {
+                  // Apply a closing correction factor to smooth track completion
+                  const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
+                  newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
+                  newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
+                  
+                  // Auto-complete if extremely close
+                  if (dist < 10 && trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
+                    console.log(`[BasicMap:${id}] Lap completed - proximity to start point with ${trackPointsRef.current.length} points`);
+                    stopRecording();
+                    return;
+                  }
                 }
               }
             }
           }
         }
-      }
-      
-      const newPoint: TrackPoint = {
-        x: newX,
-        y: newY,
-        lapDistPct,
-        curvature,
-        longitudinalAccel,
-        heading: currentHeading
-      };
-      
-      trackPointsRef.current = [...trackPointsRef.current, newPoint];
-      lastPositionRef.current = newPoint;
-      
-      // Check if we've completed a lap (crossing start/finish line)
-      if (trackPointsRef.current.length > 50) {
-        let completedLap = false;
-        if (lastPositionRef.current) {
-          const lastLapPct = lastPositionRef.current.lapDistPct;
-          // We've completed a lap if we cross from near the end (>0.98) to near the beginning (<0.1)
-          // This is a more reliable way to detect crossing the start/finish line
-          if (lastLapPct > 0.98 && lapDistPct < 0.1) {
-            completedLap = true;
-            console.log(`[BasicMap:${id}] Lap completed - crossed start/finish line`);
+        
+        // Create the new track point
+        const newPoint: TrackPoint = {
+          x: newX,
+          y: newY,
+          lapDistPct,
+          curvature,
+          longitudinalAccel,
+          heading: currentHeading
+        };
+        
+        // Add to track points array
+        trackPointsRef.current = [...trackPointsRef.current, newPoint];
+        lastPositionRef.current = newPoint;
+        
+        // Check for lap completion by crossing start/finish line
+        if (trackPointsRef.current.length > 50) {
+          let completedLap = false;
+          if (lastPositionRef.current) {
+            const lastLapPct = lastPositionRef.current.lapDistPct;
+            // We've completed a lap if we cross from near the end (>0.98) to near the beginning (<0.1)
+            if (lastLapPct > 0.98 && lapDistPct < 0.1) {
+              completedLap = true;
+              console.log(`[BasicMap:${id}] Lap completed - crossed start/finish line`);
+            }
+          }
+          if (completedLap) {
+            stopRecording();
+            return;
           }
         }
-        if (completedLap) {
-          stopRecording();
-          animationFrameId.current = null;
-          return;
-        }
+        
+        // Update state for rendering
+        setTrackPoints([...trackPointsRef.current]);
+        setCurrentPosition({ lapDistPct });
+      } catch (error) {
+        console.error(`[BasicMap:${id}] Error in recording loop:`, error);
       }
-      
-      setTrackPoints([...trackPointsRef.current]);
-      setCurrentPosition({ lapDistPct });
-      
-      animationFrameId.current = null;
     });
     
+    // Cleanup frame on unmount or change
     return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-        animationFrameId.current = null;
-      }
+      cancelFrame();
     };
-  }, [telemetryData, mapBuildingState, stopRecording, cancelRecording]);
+  }, [telemetryData, mapBuildingState, stopRecording, cancelRecording, id, requestFrame, cancelFrame]);
 
   // Update current position when map is complete
   useEffect(() => {
@@ -544,6 +644,25 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     return interpolatedPoint;
   }, []);
 
+  // Cached transformation for track points to avoid recalculating during rendering
+  const mapTransformData = useMemo(() => {
+    const points = trackPointsRef.current;
+    if (points.length < 2) return null;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    points.forEach(point => {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    });
+    
+    const trackCenterX = (minX + maxX) / 2;
+    const trackCenterY = (minY + maxY) / 2;
+    
+    return { minX, minY, maxX, maxY, trackCenterX, trackCenterY };
+  }, [trackPoints]);
+
   // Map rendering logic
   const renderMap = useCallback(() => {
     const canvas = canvasRef.current;
@@ -563,14 +682,9 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     // Apply parent opacity to all canvas drawing
     ctx.globalAlpha = parentOpacity;
     
-    // Calculate bounds to determine scale
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    points.forEach(point => {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    });
+    if (!mapTransformData) return;
+    
+    const { minX, minY, maxX, maxY, trackCenterX, trackCenterY } = mapTransformData;
     
     const padding = 20; // Padding around the track
     const width = canvas.width - padding * 2;
@@ -587,9 +701,6 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     // Function to transform track coordinates to canvas coordinates with proper centering
     const transformPoint = (point: { x: number, y: number }) => {
-      const trackCenterX = (minX + maxX) / 2;
-      const trackCenterY = (minY + maxY) / 2;
-      
       return {
         x: centerX + (point.x - trackCenterX) * baseScale,
         y: centerY + (point.y - trackCenterY) * baseScale
@@ -718,7 +829,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
     
     // Reset global alpha
     ctx.globalAlpha = 1.0;
-  }, [telemetryData, findPositionAtLapDistance, mapBuildingState]);
+  }, [telemetryData, findPositionAtLapDistance, mapBuildingState, mapTransformData]);
 
   // Resize canvas function
   useEffect(() => {
@@ -758,21 +869,20 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
 
   // Debounced rendering function
   const debouncedRenderMap = useCallback(() => {
-    if (!animationFrameId.current) {
-      animationFrameId.current = requestAnimationFrame(() => {
+    if (!frameIdRef.current) {
+      requestFrame(() => {
         renderMap();
-        animationFrameId.current = null;
       });
     }
-  }, [renderMap]);
+  }, [renderMap, requestFrame]);
 
   // Trigger rendering when key dependencies change
   useEffect(() => {
     debouncedRenderMap();
     return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-        animationFrameId.current = null;
+      if (frameIdRef.current) {
+        cancelFrame();
+        frameIdRef.current = null;
       }
     };
   }, [debouncedRenderMap, width, height, telemetryData]);
@@ -780,8 +890,8 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
   // Clean up when component unmounts
   useEffect(() => {
     return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
+      if (frameIdRef.current) {
+        cancelFrame();
       }
       if (canvasRef.current) {
         canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -880,7 +990,14 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
         { value: 500, label: '500px' },
         { value: 600, label: '600px' },
         { value: 700, label: '700px' },
-        { value: 800, label: '800px' }
+        { value: 800, label: '800px' },
+        { value: 900, label: '900px' },
+        { value: 1000, label: '1000px' },
+        { value: 1100, label: '1100px' },
+        { value: 1200, label: '1200px' },
+        { value: 1300, label: '1300px' },
+        { value: 1400, label: '1400px' },
+        
       ],
       onChange: (value) => {
         const numericValue = Number(value);
@@ -904,7 +1021,13 @@ const getBasicMapControls = (widgetState: any, updateWidget: (updates: any) => v
         { value: 300, label: '300px' },
         { value: 350, label: '350px' },
         { value: 400, label: '400px' },
-        { value: 500, label: '500px' }
+        { value: 500, label: '500px' },
+        { value: 600, label: '600px' },
+        { value: 700, label: '700px' },
+        { value: 800, label: '800px' },
+        { value: 900, label: '900px' },
+        { value: 1000, label: '1000px' },
+        
       ],
       onChange: (value) => {
         const numericValue = Number(value);
