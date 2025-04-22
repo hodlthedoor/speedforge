@@ -466,11 +466,17 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'clutch_pct':
     case 'fuel_pct':
     case 'shift_indicator_pct':
+    case 'humidity_pct':
+    case 'fog_level_pct':
       return `${value.toFixed(1)}%`;
     case 'gear':
+    case 'gear_num':
       return String(value);
     case 'car_left_right':
       return formatCarLeftRight(value);
+    case 'skies':
+    case 'track_surface':
+      return String(value);
     case 'g_force_lat':
     case 'g_force_lon':
       return `${value.toFixed(2)}G`;
@@ -483,8 +489,12 @@ export function formatTelemetryValue(metric: string, value: any): string {
       return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
     case 'fuel_level':
       return `${value.toFixed(1)}L`;
+    case 'fuel_use_per_hour':
+      return `${value.toFixed(1)}L/h`;
     case 'position':
     case 'lap_completed':
+    case 'incident_count':
+    case 'session_flags':
       return `${value}`;
     case 'lat':
     case 'lon':
@@ -495,11 +505,61 @@ export function formatTelemetryValue(metric: string, value: any): string {
       return `${(value * 100).toFixed(1)}%`;
     case 'lateral_accel_ms2':
     case 'longitudinal_accel_ms2':
+    case 'vertical_accel_ms2':
       return `${value.toFixed(2)} m/s²`;
+    case 'velocity_ms':
     case 'VelocityX':
     case 'VelocityY':
     case 'VelocityZ':
-      return `${value.toFixed(3)} m/s`;
+    case 'wind_vel_ms':
+      return `${value.toFixed(2)} m/s`;
+    case 'yaw_rate_deg_s':
+    case 'steering_angle_deg':
+    case 'car_slip_angle_deg':
+      return `${value.toFixed(1)}°`;
+    case 'wind_dir_rad':
+      // Convert radians to degrees for display
+      return `${(value * 180 / Math.PI).toFixed(1)}°`;
+    case 'PlayerTrackSurface':
+      return getTrackSurfaceName(value);
+    case 'on_pit_road':
+      return value ? 'In Pits' : 'On Track';
+    case 'water_temp_c':
+    case 'oil_temp_c':
+    case 'track_temp_c':
+    case 'air_temp_c':
+    case 'tire_temps_c_lf':
+    case 'tire_temps_c_rf':
+    case 'tire_temps_c_lr':
+    case 'tire_temps_c_rr':
+    case 'brake_temps_c_lf':
+    case 'brake_temps_c_rf':
+    case 'brake_temps_c_lr':
+    case 'brake_temps_c_rr':
+      return `${value.toFixed(1)}°C`;
+    case 'tire_pressures_kpa_lf':
+    case 'tire_pressures_kpa_rf':
+    case 'tire_pressures_kpa_lr':
+    case 'tire_pressures_kpa_rr':
+      return `${value.toFixed(1)} kPa`;
+    case 'ride_height_mm_lf':
+    case 'ride_height_mm_rf':
+    case 'ride_height_mm_lr':
+    case 'ride_height_mm_rr':
+    case 'shock_defl_mm_lf':
+    case 'shock_defl_mm_rf':
+    case 'shock_defl_mm_lr':
+    case 'shock_defl_mm_rr':
+      return `${value.toFixed(1)} mm`;
+    case 'delta_best':
+    case 'delta_session_best':
+    case 'delta_optimal':
+      // Add + for positive deltas
+      const sign = value >= 0 ? '+' : '';
+      return `${sign}${value.toFixed(3)}s`;
+    case 'repair_required_sec':
+    case 'opt_repair_sec':
+      return `${value.toFixed(1)}s`;
     default:
       return `${value}`;
   }
@@ -577,4 +637,24 @@ export function getMetricName(metric: string): string {
   };
   
   return metricNames[metric] || metric;
+}
+
+/**
+ * Helper function to get a readable track surface name from the numeric value
+ */
+function getTrackSurfaceName(value: number): string {
+  switch (value) {
+    case TrackSurface.OnTrack:
+      return 'On Track';
+    case TrackSurface.OffTrack:
+      return 'Off Track';
+    case TrackSurface.PitLane:
+      return 'Pit Lane';
+    case TrackSurface.PitStall:
+      return 'Pit Stall';
+    case TrackSurface.NotInWorld:
+      return 'Not In World';
+    default:
+      return `Unknown (${value})`;
+  }
 } 

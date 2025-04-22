@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
-import { WebSocketService } from '../services/WebSocketService';
-import { useTelemetryData } from '../hooks/useTelemetryData';
+import { v4 as uuidv4 } from 'uuid';
 import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
-import { availableMetrics } from './SimpleTelemetryWidget';
-import ConfigService from '../services/ConfigService';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 import WidgetManager from '../services/WidgetManager';
+import { ConfigService } from '../services/ConfigService';
+import { availableMetrics } from './SimpleTelemetryWidget';
+import { WebSocketService } from '../services/WebSocketService';
 
 // Define the state shape and action types for our widget appearance reducer
 type WidgetAppearanceState = {
@@ -105,6 +105,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   // At the top of the component, add a state to track mounted widgets
   const [mountedWidgets, setMountedWidgets] = useState<Set<string>>(new Set());
   const pendingWidgetSettings = useRef<Map<string, any>>(new Map());
+
+  // Add state for telemetry section visibility
+  const [showTelemetrySection, setShowTelemetrySection] = useState(false);
+
+  // Add state for telemetry search
+  const [telemetrySearch, setTelemetrySearch] = useState('');
+
+  // Toggle telemetry section visibility
+  const toggleTelemetrySection = useCallback(() => {
+    setShowTelemetrySection(prev => !prev);
+  }, []);
 
   // Ensure functions are declared before they're used in memoization
   
@@ -525,29 +536,126 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     return widgetControls.map(control => renderWidgetControl(control));
   }, [widgetControls]);
 
+  // Group telemetry metrics by category
+  const telemetryMetricsByCategory = useMemo(() => {
+    const categories: Record<string, any[]> = {
+      'Car State': [],
+      'Vehicle Dynamics': [],
+      'Driver Inputs': [],
+      'Timing': [],
+      'Track Position': [],
+      'Tire & Brakes': [],
+      'Environment': [],
+      'Miscellaneous': []
+    };
+    
+    // Categorize the metrics
+    availableMetrics.forEach(metric => {
+      // Car State
+      if (['speed_kph', 'speed_mph', 'rpm', 'gear', 'gear_num', 'velocity_ms', 'shift_indicator_pct', 
+           'on_pit_road', 'track_surface', 'car_left_right', 'PlayerTrackSurface'].includes(metric.id)) {
+        categories['Car State'].push(metric);
+      }
+      // Vehicle Dynamics
+      else if (['lateral_accel_ms2', 'longitudinal_accel_ms2', 'vertical_accel_ms2', 'yaw_rate_deg_s',
+                'g_force_lat', 'g_force_lon', 'car_slip_angle_deg', 'VelocityX', 'VelocityY', 'VelocityZ'].includes(metric.id)) {
+        categories['Vehicle Dynamics'].push(metric);
+      }
+      // Driver Inputs
+      else if (['throttle_pct', 'brake_pct', 'clutch_pct', 'steering_angle_deg'].includes(metric.id)) {
+        categories['Driver Inputs'].push(metric);
+      }
+      // Timing
+      else if (['current_lap_time', 'last_lap_time', 'best_lap_time', 'lap_completed', 
+                'delta_best', 'delta_session_best', 'delta_optimal', 'position', 'incident_count'].includes(metric.id)) {
+        categories['Timing'].push(metric);
+      }
+      // Track Position
+      else if (['lap_dist_pct', 'lap_dist', 'lat', 'lon'].includes(metric.id)) {
+        categories['Track Position'].push(metric);
+      }
+      // Tire & Brakes
+      else if (metric.id.includes('tire_') || metric.id.includes('brake_') || 
+               metric.id.includes('ride_height_') || metric.id.includes('shock_defl_')) {
+        categories['Tire & Brakes'].push(metric);
+      }
+      // Environment
+      else if (['track_temp_c', 'air_temp_c', 'humidity_pct', 'fog_level_pct', 
+                'wind_vel_ms', 'wind_dir_rad', 'skies'].includes(metric.id)) {
+        categories['Environment'].push(metric);
+      }
+      // Everything else
+      else {
+        categories['Miscellaneous'].push(metric);
+      }
+    });
+    
+    // Remove empty categories
+    Object.keys(categories).forEach(key => {
+      if (categories[key].length === 0) {
+        delete categories[key];
+      }
+    });
+    
+    return categories;
+  }, []);
+
+  // Filter metrics by search term
+  const filteredTelemetryMetrics = useMemo(() => {
+    if (!telemetrySearch.trim()) {
+      return telemetryMetricsByCategory;
+    }
+    
+    const searchTerm = telemetrySearch.toLowerCase().trim();
+    const filteredCategories: Record<string, any[]> = {};
+    
+    Object.entries(telemetryMetricsByCategory).forEach(([category, metrics]) => {
+      const filteredMetrics = metrics.filter(metric => 
+        metric.name.toLowerCase().includes(searchTerm) || 
+        metric.id.toLowerCase().includes(searchTerm)
+      );
+      
+      if (filteredMetrics.length > 0) {
+        filteredCategories[category] = filteredMetrics;
+      }
+    });
+    
+    return filteredCategories;
+  }, [telemetryMetricsByCategory, telemetrySearch]);
+
   // Memoize the telemetry widgets rendering
   const renderedTelemetryWidgets = useMemo(() => {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        {availableMetrics.map(metric => (
-          <div 
-            key={metric.id} 
-            style={{
-              padding: '8px',
-              backgroundColor: 'rgba(30, 41, 59, 0.8)',
-              borderRadius: '8px',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onClick={() => addTelemetryWidget(metric.id, metric.name)}
-          >
-            <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
+      <div className="telemetry-categories">
+        {Object.entries(telemetryMetricsByCategory).map(([category, metrics]) => (
+          <div key={category} style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{category}</h4>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              {metrics.map(metric => (
+                <div 
+                  key={metric.id} 
+                  style={{
+                    padding: '8px',
+                    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onClick={() => addTelemetryWidget(metric.id, metric.name)}
+                >
+                  <div style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 500, color: 'white' }}>{metric.name}</div>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
     );
-  }, [addTelemetryWidget]);
+  }, [telemetryMetricsByCategory, addTelemetryWidget]);
 
   // Memoize the widget categories rendering
   const renderedWidgetCategories = useMemo(() => {
@@ -1303,6 +1411,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     };
   }, [dispatchWidgetAppearance, updateWidgetState]);
 
+  // Make sure we return JSX at the end of the component
   return (
     <>
       {/* Debug indicator */}
@@ -1791,17 +1900,62 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 paddingRight: '10px',
                 marginRight: '-10px'
               }}>
-                {/* Telemetry Widgets */}
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <h4 style={{ fontSize: '12px', fontWeight: 500, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetry Data</h4>
-                    <svg style={{ width: '16px', height: '16px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {/* Telemetry Widgets Section Header - Clickable */}
+                <div 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderRadius: '8px',
+                    border: showTelemetrySection ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    marginBottom: '12px'
+                  }}
+                  onClick={toggleTelemetrySection}
+                >
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#60a5fa'
+                  }}>
+                    <svg style={{ width: '16px', height: '16px', marginRight: '8px', color: '#60a5fa' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
+                    Telemetry Data
                   </div>
-                  
-                  {renderedTelemetryWidgets}
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      color: '#60a5fa',
+                      transform: showTelemetrySection ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease' 
+                    }} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
+                
+                {/* Telemetry Widgets - Only shown when expanded */}
+                {showTelemetrySection && (
+                  <div style={{ 
+                    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    {renderedTelemetryWidgets}
+                  </div>
+                )}
                 
                 {/* Other Widget Types */}
                 {renderedWidgetCategories}
