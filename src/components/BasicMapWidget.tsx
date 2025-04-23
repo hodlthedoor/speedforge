@@ -419,7 +419,7 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
           newY = lastY + worldDy;
           
           // Auto-completion check constants
-          const MIN_POINTS_FOR_COMPLETION = 100;
+          const MIN_POINTS_FOR_COMPLETION = 300;
           
           // Only check for lap completion if we have enough points
           if (trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
@@ -449,14 +449,14 @@ const BasicMapWidgetComponent: React.FC<BasicMapWidgetProps> = ({ id, onClose })
                 const dist = Math.sqrt(distX * distX + distY * distY);
                 
                 // If we're close to the starting point in 3D space, assist lap completion
-                if (dist < 50) {
+                if (dist < 150) {
                   // Apply a closing correction factor to smooth track completion
                   const closingFactor = Math.max(0, Math.min(1, 1 - distFromStart / 0.02));
                   newX = newX * (1 - closingFactor) + firstPoint.x * closingFactor;
                   newY = newY * (1 - closingFactor) + firstPoint.y * closingFactor;
                   
                   // Auto-complete if extremely close
-                  if (dist < 10 && trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
+                  if (dist < 50 && trackPointsRef.current.length > MIN_POINTS_FOR_COMPLETION) {
                     console.log(`[BasicMap:${id}] Lap completed - proximity to start point with ${trackPointsRef.current.length} points`);
                     stopRecording();
                     return;
