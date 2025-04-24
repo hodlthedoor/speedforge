@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer, useLayoutEffect } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { v4 as uuidv4 } from 'uuid';
 import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
@@ -72,8 +72,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   // State
   const [showWidgetMenu, setShowWidgetMenu] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<any>(null);
-  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnecting, setReconnecting] = useState<boolean>(false);
   const [showActiveWidgets, setShowActiveWidgets] = useState(false);
+  // Add a ref to track initialization
+  const configInitialized = useRef<boolean>(false);
   
   // Replace individual state variables with reducer
   const [widgetAppearance, dispatchWidgetAppearance] = useReducer(
@@ -1195,6 +1197,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Initialize configuration and get display ID
   useEffect(() => {
+    // Prevent duplicate initialization with strict mode
+    if (configInitialized.current) {
+      console.log('ControlPanel: Configuration already initialized, skipping');
+      return;
+    }
+    
+    configInitialized.current = true;
     console.log('ControlPanel: Initializing configuration and getting display ID');
     
     // Get current display ID
