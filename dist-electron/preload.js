@@ -1,45 +1,55 @@
-var o = require("electron");
-o.contextBridge.exposeInMainWorld("electronAPI", {
+var import_electron = require("electron");
+import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   // Basic info and communication functions
-  isElectron: !0,
+  isElectron: true,
   platform: process.platform,
   // Send message to main process
-  send: (e, r) => {
-    [
+  send: (channel, data) => {
+    const validChannels = [
       "telemetry:update",
       "telemetry:connectionChange",
       "widget:closeByEscape",
       "widget:registerForUpdates"
-    ].includes(e) ? o.ipcRenderer.send(e, r) : console.warn(`Channel ${e} is not allowed for sending`);
+    ];
+    if (validChannels.includes(channel)) {
+      import_electron.ipcRenderer.send(channel, data);
+    } else {
+      console.warn(`Channel ${channel} is not allowed for sending`);
+    }
   },
   // Add event listener to receive messages from main process
-  on: (e, r) => {
-    if ([
+  on: (channel, callback) => {
+    const validChannels = [
       "main-process-message",
       "app:toggle-click-through",
       "app:initial-state",
       "app:before-quit",
       "display:id"
-    ].includes(e)) {
-      const i = (t, a) => r(a);
-      return o.ipcRenderer.on(e, i), () => {
-        o.ipcRenderer.removeListener(e, i);
+    ];
+    if (validChannels.includes(channel)) {
+      const subscription = (_event, data) => callback(data);
+      import_electron.ipcRenderer.on(channel, subscription);
+      return () => {
+        import_electron.ipcRenderer.removeListener(channel, subscription);
       };
     }
   },
   // Remove all listeners for a channel
-  removeAllListeners: (e) => {
-    [
+  removeAllListeners: (channel) => {
+    const validChannels = [
       "main-process-message",
       "app:toggle-click-through",
       "app:initial-state",
       "app:before-quit",
       "display:id"
-    ].includes(e) && o.ipcRenderer.removeAllListeners(e);
+    ];
+    if (validChannels.includes(channel)) {
+      import_electron.ipcRenderer.removeAllListeners(channel);
+    }
   },
   // Invoke a function in the main process
-  invoke: async (e, r) => {
-    if ([
+  invoke: async (channel, data) => {
+    const validChannels = [
       "app:quit",
       "app:toggleClickThrough",
       "app:getCurrentDisplayId",
@@ -50,121 +60,146 @@ o.contextBridge.exposeInMainWorld("electronAPI", {
       "config:list",
       "config:delete",
       "debug:listConfigFiles"
-    ].includes(e))
-      return await o.ipcRenderer.invoke(e, r);
-    throw new Error(`Invoke not allowed for channel: ${e}`);
+    ];
+    if (validChannels.includes(channel)) {
+      return await import_electron.ipcRenderer.invoke(channel, data);
+    }
+    throw new Error(`Invoke not allowed for channel: ${channel}`);
   },
   // Application control functions
   app: {
     // Quit the application
-    quit: async () => await o.ipcRenderer.invoke("app:quit"),
+    quit: async () => {
+      return await import_electron.ipcRenderer.invoke("app:quit");
+    },
     // Toggle click-through mode
-    toggleClickThrough: async (e) => {
-      console.log(`Preload: Requesting toggleClickThrough with state=${e}`);
+    toggleClickThrough: async (state) => {
+      console.log(`Preload: Requesting toggleClickThrough with state=${state}`);
       try {
-        const r = await o.ipcRenderer.invoke("app:toggleClickThrough", e);
-        return console.log("Preload: Toggle response received:", r), r;
-      } catch (r) {
-        throw console.error("Preload: Error in toggleClickThrough:", r), r;
+        const result = await import_electron.ipcRenderer.invoke("app:toggleClickThrough", state);
+        console.log("Preload: Toggle response received:", result);
+        return result;
+      } catch (error) {
+        console.error("Preload: Error in toggleClickThrough:", error);
+        throw error;
       }
     },
     // Get current display ID
-    getCurrentDisplayId: async () => await o.ipcRenderer.invoke("app:getCurrentDisplayId"),
+    getCurrentDisplayId: async () => {
+      return await import_electron.ipcRenderer.invoke("app:getCurrentDisplayId");
+    },
     // Get user data path
-    getUserDataPath: async () => await o.ipcRenderer.invoke("app:getUserDataPath"),
+    getUserDataPath: async () => {
+      return await import_electron.ipcRenderer.invoke("app:getUserDataPath");
+    },
     // Open DevTools
-    openDevTools: async () => await o.ipcRenderer.invoke("app:openDevTools"),
+    openDevTools: async () => {
+      return await import_electron.ipcRenderer.invoke("app:openDevTools");
+    },
     // Application control functions
     appControl: {
-      quit: () => o.ipcRenderer.invoke("app:quit"),
-      toggleClickThrough: () => o.ipcRenderer.invoke("app:toggleClickThrough"),
-      toggleAutoNewWindows: () => o.ipcRenderer.invoke("app:toggleAutoNewWindows"),
-      closeWindowForDisplay: (e) => o.ipcRenderer.invoke("app:closeWindowForDisplay", e),
-      getDisplays: () => o.ipcRenderer.invoke("app:getDisplays"),
-      getCurrentDisplayId: () => o.ipcRenderer.invoke("app:getCurrentDisplayId"),
-      getUserDataPath: () => o.ipcRenderer.invoke("app:getUserDataPath"),
-      openDevTools: () => o.ipcRenderer.invoke("app:openDevTools")
+      quit: () => import_electron.ipcRenderer.invoke("app:quit"),
+      toggleClickThrough: () => import_electron.ipcRenderer.invoke("app:toggleClickThrough"),
+      toggleAutoNewWindows: () => import_electron.ipcRenderer.invoke("app:toggleAutoNewWindows"),
+      closeWindowForDisplay: (displayId) => import_electron.ipcRenderer.invoke("app:closeWindowForDisplay", displayId),
+      getDisplays: () => import_electron.ipcRenderer.invoke("app:getDisplays"),
+      getCurrentDisplayId: () => import_electron.ipcRenderer.invoke("app:getCurrentDisplayId"),
+      getUserDataPath: () => import_electron.ipcRenderer.invoke("app:getUserDataPath"),
+      openDevTools: () => import_electron.ipcRenderer.invoke("app:openDevTools")
     }
   },
   // Configuration API
   config: {
     // Save a configuration
-    saveConfig: async (e, r, n) => {
+    saveConfig: async (type, name, data) => {
       try {
-        return await o.ipcRenderer.invoke("config:save", e, r, n);
-      } catch (i) {
-        return console.error("Error saving config:", i), !1;
+        return await import_electron.ipcRenderer.invoke("config:save", type, name, data);
+      } catch (error) {
+        console.error("Error saving config:", error);
+        return false;
       }
     },
     // Load a configuration
-    loadConfig: async (e, r) => {
+    loadConfig: async (type, name) => {
       try {
-        return await o.ipcRenderer.invoke("config:load", e, r);
-      } catch (n) {
-        return console.error("Error loading config:", n), null;
+        return await import_electron.ipcRenderer.invoke("config:load", type, name);
+      } catch (error) {
+        console.error("Error loading config:", error);
+        return null;
       }
     },
     // List available configurations
-    listConfigs: async (e) => {
+    listConfigs: async (type) => {
       try {
-        return await o.ipcRenderer.invoke("config:list", e);
-      } catch (r) {
-        return console.error("Error listing configs:", r), [];
+        return await import_electron.ipcRenderer.invoke("config:list", type);
+      } catch (error) {
+        console.error("Error listing configs:", error);
+        return [];
       }
     },
     // Delete a configuration
-    deleteConfig: async (e, r) => {
+    deleteConfig: async (type, name) => {
       try {
-        return await o.ipcRenderer.invoke("config:delete", e, r);
-      } catch (n) {
-        return console.error("Error deleting config:", n), !1;
+        return await import_electron.ipcRenderer.invoke("config:delete", type, name);
+      } catch (error) {
+        console.error("Error deleting config:", error);
+        return false;
       }
     }
   },
   // Debug API
   debug: {
     // List all config files
-    listConfigFiles: async () => await o.ipcRenderer.invoke("debug:listConfigFiles")
+    listConfigFiles: async () => {
+      return await import_electron.ipcRenderer.invoke("debug:listConfigFiles");
+    }
   }
 });
-o.contextBridge.exposeInMainWorld("electronSpeech", {
+import_electron.contextBridge.exposeInMainWorld("electronSpeech", {
   // Get available voices
   getVoices: async () => {
     try {
-      return await o.ipcRenderer.invoke("speech:getVoices");
-    } catch (e) {
-      return console.error("Error getting voices:", e), [];
+      return await import_electron.ipcRenderer.invoke("speech:getVoices");
+    } catch (error) {
+      console.error("Error getting voices:", error);
+      return [];
     }
   },
   // Speak text with specified voice and parameters
-  speak: async (e, r, n, i) => {
+  speak: async (text, voice, rate, volume) => {
     try {
-      return console.log(`Preload: Speaking "${e}" with voice=${r}, rate=${n}, volume=${i}`), await o.ipcRenderer.invoke("speech:speak", e, r, n, i);
-    } catch (t) {
-      throw console.error("Error speaking:", t), t;
+      console.log(`Preload: Speaking "${text}" with voice=${voice}, rate=${rate}, volume=${volume}`);
+      return await import_electron.ipcRenderer.invoke("speech:speak", text, voice, rate, volume);
+    } catch (error) {
+      console.error("Error speaking:", error);
+      throw error;
     }
   },
   // Stop speech
-  stop: async (e) => {
+  stop: async (id) => {
     try {
-      return await o.ipcRenderer.invoke("speech:stop", e);
-    } catch (r) {
-      throw console.error("Error stopping speech:", r), r;
+      return await import_electron.ipcRenderer.invoke("speech:stop", id);
+    } catch (error) {
+      console.error("Error stopping speech:", error);
+      throw error;
     }
   },
   // Add listener for speech completion
-  onSpeechComplete: (e) => {
-    const r = (n, i) => e(i);
-    return o.ipcRenderer.on("speech:complete", r), () => {
-      o.ipcRenderer.removeListener("speech:complete", r);
+  onSpeechComplete: (callback) => {
+    const wrappedCallback = (_event, data) => callback(data);
+    import_electron.ipcRenderer.on("speech:complete", wrappedCallback);
+    return () => {
+      import_electron.ipcRenderer.removeListener("speech:complete", wrappedCallback);
     };
   },
   // Add listener for speech errors
-  onSpeechError: (e) => {
-    const r = (n, i) => e(i);
-    return o.ipcRenderer.on("speech:error", r), () => {
-      o.ipcRenderer.removeListener("speech:error", r);
+  onSpeechError: (callback) => {
+    const wrappedCallback = (_event, data) => callback(data);
+    import_electron.ipcRenderer.on("speech:error", wrappedCallback);
+    return () => {
+      import_electron.ipcRenderer.removeListener("speech:error", wrappedCallback);
     };
   }
 });
 console.log("Preload script executed successfully");
+//# sourceMappingURL=preload.js.map

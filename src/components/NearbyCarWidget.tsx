@@ -4,7 +4,7 @@ import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { WidgetManager } from '../services/WidgetManager';
 import { useWidgetStateUpdates, dispatchWidgetStateUpdate } from './BaseWidget';
-import { useTelemetry } from '../hooks/useTelemetry';
+import { useTelemetryData } from '../hooks/useTelemetryData';
 
 interface NearbyCarWidgetProps {
   id: string;
@@ -19,7 +19,7 @@ const NearbyCarWidgetComponent: React.FC<NearbyCarWidgetProps> = ({ id, onClose 
   const [isClickThrough, setIsClickThrough] = useState<boolean>(false);
   
   // Get telemetry data
-  const telemetry = useTelemetry();
+  const { data: telemetry } = useTelemetryData(id);
   
   // Refs to store current values
   const widthRef = useRef<number>(200);

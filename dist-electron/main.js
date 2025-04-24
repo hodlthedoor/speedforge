@@ -1,30 +1,43 @@
-import { ipcMain as d, BrowserWindow as k, app as m, globalShortcut as V, screen as v, dialog as q } from "electron";
-import * as p from "path";
-import { fileURLToPath as ee } from "url";
-import J, { spawn as K } from "child_process";
-import * as S from "fs";
+import { ipcMain, BrowserWindow, app, globalShortcut, screen, dialog } from "electron";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import require$$0, { spawn } from "child_process";
+import * as fs from "fs";
 import "os";
-function re(r) {
-  return r && r.__esModule && Object.prototype.hasOwnProperty.call(r, "default") ? r.default : r;
+function getDefaultExportFromCjs(x) {
+  return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
-var T = { exports: {} }, A, H;
-function te() {
-  return H || (H = 1, A = function(e) {
-    var s = 0, o;
-    function t() {
-      return s || (s = 1, o = e.apply(this, arguments), e = null), o;
+var say$1 = { exports: {} };
+var oneTime;
+var hasRequiredOneTime;
+function requireOneTime() {
+  if (hasRequiredOneTime) return oneTime;
+  hasRequiredOneTime = 1;
+  oneTime = function one(fn) {
+    var called = 0, value;
+    function onetime() {
+      if (called) return value;
+      called = 1;
+      value = fn.apply(this, arguments);
+      fn = null;
+      return value;
     }
-    return t.displayName = e.displayName || e.name || t.displayName || t.name, t;
-  }), A;
+    onetime.displayName = fn.displayName || fn.name || onetime.displayName || onetime.name;
+    return onetime;
+  };
+  return oneTime;
 }
-var O, M;
-function _() {
-  if (M) return O;
-  M = 1;
-  const r = J, e = te();
-  class s {
+var base;
+var hasRequiredBase;
+function requireBase() {
+  if (hasRequiredBase) return base;
+  hasRequiredBase = 1;
+  const childProcess = require$$0;
+  const once = requireOneTime();
+  class SayPlatformBase {
     constructor() {
-      this.child = null, this.baseSpeed = 0;
+      this.child = null;
+      this.baseSpeed = 0;
     }
     /**
      * Uses system libraries to speak text via the speakers.
@@ -34,19 +47,33 @@ function _() {
      * @param {number|null} speed Speed of text (e.g. 1.0 for normal, 0.5 half, 2.0 double)
      * @param {Function|null} callback A callback of type function(err) to return.
      */
-    speak(t, n, c, a) {
-      if (typeof a != "function" && (a = () => {
-      }), a = e(a), !t)
+    speak(text, voice, speed, callback) {
+      if (typeof callback !== "function") {
+        callback = () => {
+        };
+      }
+      callback = once(callback);
+      if (!text) {
         return setImmediate(() => {
-          a(new TypeError("say.speak(): must provide text parameter"));
+          callback(new TypeError("say.speak(): must provide text parameter"));
         });
-      let { command: l, args: u, pipedData: f, options: w } = this.buildSpeakCommand({ text: t, voice: n, speed: c });
-      this.child = r.spawn(l, u, w), this.child.stdin.setEncoding("ascii"), this.child.stderr.setEncoding("ascii"), f && this.child.stdin.end(f), this.child.stderr.once("data", (b) => {
-        a(new Error(b));
-      }), this.child.addListener("exit", (b, y) => {
-        if (b === null || y !== null)
-          return a(new Error(`say.speak(): could not talk, had an error [code: ${b}] [signal: ${y}]`));
-        this.child = null, a(null);
+      }
+      let { command, args, pipedData, options } = this.buildSpeakCommand({ text, voice, speed });
+      this.child = childProcess.spawn(command, args, options);
+      this.child.stdin.setEncoding("ascii");
+      this.child.stderr.setEncoding("ascii");
+      if (pipedData) {
+        this.child.stdin.end(pipedData);
+      }
+      this.child.stderr.once("data", (data) => {
+        callback(new Error(data));
+      });
+      this.child.addListener("exit", (code, signal) => {
+        if (code === null || signal !== null) {
+          return callback(new Error(`say.speak(): could not talk, had an error [code: ${code}] [signal: ${signal}]`));
+        }
+        this.child = null;
+        callback(null);
       });
     }
     /**
@@ -58,29 +85,44 @@ function _() {
      * @param {string} filename Path to file to write audio to, e.g. "greeting.wav"
      * @param {Function|null} callback A callback of type function(err) to return.
      */
-    export(t, n, c, a, l) {
-      if (typeof l != "function" && (l = () => {
-      }), l = e(l), !t)
+    export(text, voice, speed, filename, callback) {
+      if (typeof callback !== "function") {
+        callback = () => {
+        };
+      }
+      callback = once(callback);
+      if (!text) {
         return setImmediate(() => {
-          l(new TypeError("say.export(): must provide text parameter"));
-        });
-      if (!a)
-        return setImmediate(() => {
-          l(new TypeError("say.export(): must provide filename parameter"));
-        });
-      try {
-        var { command: u, args: f, pipedData: w, options: b } = this.buildExportCommand({ text: t, voice: n, speed: c, filename: a });
-      } catch (y) {
-        return setImmediate(() => {
-          l(y);
+          callback(new TypeError("say.export(): must provide text parameter"));
         });
       }
-      this.child = r.spawn(u, f, b), this.child.stdin.setEncoding("ascii"), this.child.stderr.setEncoding("ascii"), w && this.child.stdin.end(w), this.child.stderr.once("data", (y) => {
-        l(new Error(y));
-      }), this.child.addListener("exit", (y, C) => {
-        if (y === null || C !== null)
-          return l(new Error(`say.export(): could not talk, had an error [code: ${y}] [signal: ${C}]`));
-        this.child = null, l(null);
+      if (!filename) {
+        return setImmediate(() => {
+          callback(new TypeError("say.export(): must provide filename parameter"));
+        });
+      }
+      try {
+        var { command, args, pipedData, options } = this.buildExportCommand({ text, voice, speed, filename });
+      } catch (error) {
+        return setImmediate(() => {
+          callback(error);
+        });
+      }
+      this.child = childProcess.spawn(command, args, options);
+      this.child.stdin.setEncoding("ascii");
+      this.child.stderr.setEncoding("ascii");
+      if (pipedData) {
+        this.child.stdin.end(pipedData);
+      }
+      this.child.stderr.once("data", (data) => {
+        callback(new Error(data));
+      });
+      this.child.addListener("exit", (code, signal) => {
+        if (code === null || signal !== null) {
+          return callback(new Error(`say.export(): could not talk, had an error [code: ${code}] [signal: ${signal}]`));
+        }
+        this.child = null;
+        callback(null);
       });
     }
     /**
@@ -90,54 +132,90 @@ function _() {
      *
      * @param {Function|null} callback A callback of type function(err) to return.
      */
-    stop(t) {
-      if (typeof t != "function" && (t = () => {
-      }), t = e(t), !this.child)
+    stop(callback) {
+      if (typeof callback !== "function") {
+        callback = () => {
+        };
+      }
+      callback = once(callback);
+      if (!this.child) {
         return setImmediate(() => {
-          t(new Error("say.stop(): no speech to kill"));
+          callback(new Error("say.stop(): no speech to kill"));
         });
-      this.runStopCommand(), this.child = null, t(null);
+      }
+      this.runStopCommand();
+      this.child = null;
+      callback(null);
     }
-    convertSpeed(t) {
-      return Math.ceil(this.baseSpeed * t);
+    convertSpeed(speed) {
+      return Math.ceil(this.baseSpeed * speed);
     }
     /**
      * Get Installed voices on system
      * @param {Function} callback A callback of type function(err,voices) to return.
      */
-    getInstalledVoices(t) {
-      typeof t != "function" && (t = () => {
-      }), t = e(t);
-      let { command: n, args: c } = this.getVoices();
-      var a = [];
-      this.child = r.spawn(n, c), this.child.stdin.setEncoding("ascii"), this.child.stderr.setEncoding("ascii"), this.child.stderr.once("data", (l) => {
-        t(new Error(l));
-      }), this.child.stdout.on("data", function(l) {
-        a += l;
-      }), this.child.addListener("exit", (l, u) => {
-        if (l === null || u !== null)
-          return t(new Error(`say.getInstalledVoices(): could not get installed voices, had an error [code: ${l}] [signal: ${u}]`));
-        a.length > 0 && (a = a.split(`\r
-`), a = a[a.length - 1] === "" ? a.slice(0, a.length - 1) : a), this.child = null, t(null, a);
-      }), this.child.stdin.end();
+    getInstalledVoices(callback) {
+      if (typeof callback !== "function") {
+        callback = () => {
+        };
+      }
+      callback = once(callback);
+      let { command, args } = this.getVoices();
+      var voices = [];
+      this.child = childProcess.spawn(command, args);
+      this.child.stdin.setEncoding("ascii");
+      this.child.stderr.setEncoding("ascii");
+      this.child.stderr.once("data", (data) => {
+        callback(new Error(data));
+      });
+      this.child.stdout.on("data", function(data) {
+        voices += data;
+      });
+      this.child.addListener("exit", (code, signal) => {
+        if (code === null || signal !== null) {
+          return callback(new Error(`say.getInstalledVoices(): could not get installed voices, had an error [code: ${code}] [signal: ${signal}]`));
+        }
+        if (voices.length > 0) {
+          voices = voices.split("\r\n");
+          voices = voices[voices.length - 1] === "" ? voices.slice(0, voices.length - 1) : voices;
+        }
+        this.child = null;
+        callback(null, voices);
+      });
+      this.child.stdin.end();
     }
   }
-  return O = s, O;
+  base = SayPlatformBase;
+  return base;
 }
-var B, L;
-function oe() {
-  if (L) return B;
-  L = 1;
-  const r = _(), e = 100, s = "festival";
-  class o extends r {
+var linux;
+var hasRequiredLinux;
+function requireLinux() {
+  if (hasRequiredLinux) return linux;
+  hasRequiredLinux = 1;
+  const SayPlatformBase = requireBase();
+  const BASE_SPEED = 100;
+  const COMMAND = "festival";
+  class SayPlatformLinux extends SayPlatformBase {
     constructor() {
-      super(), this.baseSpeed = e;
+      super();
+      this.baseSpeed = BASE_SPEED;
     }
-    buildSpeakCommand({ text: n, voice: c, speed: a }) {
-      let l = [], u = "", f = {};
-      return l.push("--pipe"), a && (u += `(Parameter.set 'Audio_Command "aplay -q -c 1 -t raw -f s16 -r $(($SR*${this.convertSpeed(a)}/100)) $FILE") `), c && (u += `(${c}) `), u += `(SayText "${n}")`, { command: s, args: l, pipedData: u, options: f };
+    buildSpeakCommand({ text, voice, speed }) {
+      let args = [];
+      let pipedData = "";
+      let options = {};
+      args.push("--pipe");
+      if (speed) {
+        pipedData += `(Parameter.set 'Audio_Command "aplay -q -c 1 -t raw -f s16 -r $(($SR*${this.convertSpeed(speed)}/100)) $FILE") `;
+      }
+      if (voice) {
+        pipedData += `(${voice}) `;
+      }
+      pipedData += `(SayText "${text}")`;
+      return { command: COMMAND, args, pipedData, options };
     }
-    buildExportCommand({ text: n, voice: c, speed: a, filename: l }) {
+    buildExportCommand({ text, voice, speed, filename }) {
       throw new Error(`say.export(): does not support platform ${this.platform}`);
     }
     runStopCommand() {
@@ -147,101 +225,175 @@ function oe() {
       throw new Error(`say.export(): does not support platform ${this.platform}`);
     }
   }
-  return B = o, B;
+  linux = SayPlatformLinux;
+  return linux;
 }
-var j, U;
-function se() {
-  if (U) return j;
-  U = 1;
-  const r = _(), e = 175, s = "say";
-  class o extends r {
+var darwin;
+var hasRequiredDarwin;
+function requireDarwin() {
+  if (hasRequiredDarwin) return darwin;
+  hasRequiredDarwin = 1;
+  const SayPlatformBase = requireBase();
+  const BASE_SPEED = 175;
+  const COMMAND = "say";
+  class SayPlatformDarwin extends SayPlatformBase {
     constructor() {
-      super(), this.baseSpeed = e;
+      super();
+      this.baseSpeed = BASE_SPEED;
     }
-    buildSpeakCommand({ text: n, voice: c, speed: a }) {
-      let l = [], u = "", f = {};
-      return c ? l.push("-v", c, n) : l.push(n), a && l.push("-r", this.convertSpeed(a)), { command: s, args: l, pipedData: u, options: f };
+    buildSpeakCommand({ text, voice, speed }) {
+      let args = [];
+      let pipedData = "";
+      let options = {};
+      if (!voice) {
+        args.push(text);
+      } else {
+        args.push("-v", voice, text);
+      }
+      if (speed) {
+        args.push("-r", this.convertSpeed(speed));
+      }
+      return { command: COMMAND, args, pipedData, options };
     }
-    buildExportCommand({ text: n, voice: c, speed: a, filename: l }) {
-      let u = [], f = "", w = {};
-      return c ? u.push("-v", c, n) : u.push(n), a && u.push("-r", this.convertSpeed(a)), l && u.push("-o", l, "--data-format=LEF32@32000"), { command: s, args: u, pipedData: f, options: w };
+    buildExportCommand({ text, voice, speed, filename }) {
+      let args = [];
+      let pipedData = "";
+      let options = {};
+      if (!voice) {
+        args.push(text);
+      } else {
+        args.push("-v", voice, text);
+      }
+      if (speed) {
+        args.push("-r", this.convertSpeed(speed));
+      }
+      if (filename) {
+        args.push("-o", filename, "--data-format=LEF32@32000");
+      }
+      return { command: COMMAND, args, pipedData, options };
     }
     runStopCommand() {
-      this.child.stdin.pause(), this.child.kill();
+      this.child.stdin.pause();
+      this.child.kill();
     }
     getVoices() {
       throw new Error(`say.export(): does not support platform ${this.platform}`);
     }
   }
-  return j = o, j;
+  darwin = SayPlatformDarwin;
+  return darwin;
 }
-var N, z;
-function ne() {
-  if (z) return N;
-  z = 1;
-  const r = J, e = _(), s = 0, o = "powershell";
-  class t extends e {
+var win32;
+var hasRequiredWin32;
+function requireWin32() {
+  if (hasRequiredWin32) return win32;
+  hasRequiredWin32 = 1;
+  const childProcess = require$$0;
+  const SayPlatformBase = requireBase();
+  const BASE_SPEED = 0;
+  const COMMAND = "powershell";
+  class SayPlatformWin32 extends SayPlatformBase {
     constructor() {
-      super(), this.baseSpeed = s;
+      super();
+      this.baseSpeed = BASE_SPEED;
     }
-    buildSpeakCommand({ text: c, voice: a, speed: l }) {
-      let u = [], f = "", w = {}, b = "Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;";
-      if (a && (b += `$speak.SelectVoice('${a}');`), l) {
-        let y = this.convertSpeed(l || 1);
-        b += `$speak.Rate = ${y};`;
+    buildSpeakCommand({ text, voice, speed }) {
+      let args = [];
+      let pipedData = "";
+      let options = {};
+      let psCommand = `Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;`;
+      if (voice) {
+        psCommand += `$speak.SelectVoice('${voice}');`;
       }
-      return b += "$speak.Speak([Console]::In.ReadToEnd())", f += c, u.push(b), w.shell = !0, { command: o, args: u, pipedData: f, options: w };
+      if (speed) {
+        let adjustedSpeed = this.convertSpeed(speed || 1);
+        psCommand += `$speak.Rate = ${adjustedSpeed};`;
+      }
+      psCommand += `$speak.Speak([Console]::In.ReadToEnd())`;
+      pipedData += text;
+      args.push(psCommand);
+      options.shell = true;
+      return { command: COMMAND, args, pipedData, options };
     }
-    buildExportCommand({ text: c, voice: a, speed: l, filename: u }) {
-      let f = [], w = "", b = {}, y = "Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;";
-      if (a && (y += `$speak.SelectVoice('${a}');`), l) {
-        let C = this.convertSpeed(l || 1);
-        y += `$speak.Rate = ${C};`;
+    buildExportCommand({ text, voice, speed, filename }) {
+      let args = [];
+      let pipedData = "";
+      let options = {};
+      let psCommand = `Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;`;
+      if (voice) {
+        psCommand += `$speak.SelectVoice('${voice}');`;
       }
-      if (u) y += `$speak.SetOutputToWaveFile('${u}');`;
-      else
-        throw new Error("Filename must be provided in export();");
-      return y += "$speak.Speak([Console]::In.ReadToEnd());$speak.Dispose()", w += c, f.push(y), b.shell = !0, { command: o, args: f, pipedData: w, options: b };
+      if (speed) {
+        let adjustedSpeed = this.convertSpeed(speed || 1);
+        psCommand += `$speak.Rate = ${adjustedSpeed};`;
+      }
+      if (!filename) throw new Error("Filename must be provided in export();");
+      else {
+        psCommand += `$speak.SetOutputToWaveFile('${filename}');`;
+      }
+      psCommand += `$speak.Speak([Console]::In.ReadToEnd());$speak.Dispose()`;
+      pipedData += text;
+      args.push(psCommand);
+      options.shell = true;
+      return { command: COMMAND, args, pipedData, options };
     }
     runStopCommand() {
-      this.child.stdin.pause(), r.exec(`taskkill /pid ${this.child.pid} /T /F`);
+      this.child.stdin.pause();
+      childProcess.exec(`taskkill /pid ${this.child.pid} /T /F`);
     }
-    convertSpeed(c) {
-      return Math.max(-10, Math.min(Math.round(9.0686 * Math.log(c) - 0.1806), 10));
+    convertSpeed(speed) {
+      return Math.max(-10, Math.min(Math.round(9.0686 * Math.log(speed) - 0.1806), 10));
     }
     getVoices() {
-      let c = [];
-      return c.push("Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;$speak.GetInstalledVoices() | % {$_.VoiceInfo.Name}"), { command: o, args: c };
+      let args = [];
+      let psCommand = "Add-Type -AssemblyName System.speech;$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;$speak.GetInstalledVoices() | % {$_.VoiceInfo.Name}";
+      args.push(psCommand);
+      return { command: COMMAND, args };
     }
   }
-  return N = t, N;
+  win32 = SayPlatformWin32;
+  return win32;
 }
-var G;
-function ie() {
-  if (G) return T.exports;
-  G = 1;
-  const r = oe(), e = se(), s = ne(), o = "darwin", t = "linux", n = "win32";
-  class c {
-    constructor(l) {
-      if (l || (l = process.platform), l === o)
-        return new e();
-      if (l === t)
-        return new r();
-      if (l === n)
-        return new s();
-      throw new Error(`new Say(): unsupported platorm! ${l}`);
+var hasRequiredSay;
+function requireSay() {
+  if (hasRequiredSay) return say$1.exports;
+  hasRequiredSay = 1;
+  const SayLinux = requireLinux();
+  const SayMacos = requireDarwin();
+  const SayWin32 = requireWin32();
+  const MACOS = "darwin";
+  const LINUX = "linux";
+  const WIN32 = "win32";
+  class Say {
+    constructor(platform) {
+      if (!platform) {
+        platform = process.platform;
+      }
+      if (platform === MACOS) {
+        return new SayMacos();
+      } else if (platform === LINUX) {
+        return new SayLinux();
+      } else if (platform === WIN32) {
+        return new SayWin32();
+      }
+      throw new Error(`new Say(): unsupported platorm! ${platform}`);
     }
   }
-  return T.exports = new c(), T.exports.Say = c, T.exports.platforms = {
-    WIN32: n,
-    MACOS: o,
-    LINUX: t
-  }, T.exports;
+  say$1.exports = new Say();
+  say$1.exports.Say = Say;
+  say$1.exports.platforms = {
+    WIN32,
+    MACOS,
+    LINUX
+  };
+  return say$1.exports;
 }
-var ae = ie();
-const W = /* @__PURE__ */ re(ae);
-let $ = [], D = /* @__PURE__ */ new Map(), ce = 1;
-const le = [
+var sayExports = requireSay();
+const say = /* @__PURE__ */ getDefaultExportFromCjs(sayExports);
+let voiceCache = [];
+let speakingInstances = /* @__PURE__ */ new Map();
+let nextSpeakId = 1;
+const prohibitedWords = [
   "fuck",
   "shit",
   "ass",
@@ -254,215 +406,322 @@ const le = [
   "twat",
   "prick"
 ];
-function de(r) {
-  if (process.platform !== "darwin") return r;
-  let e = r;
-  return le.forEach((s) => {
-    const o = new RegExp(`\\b${s}\\b`, "gi");
-    if (o.test(e))
-      switch (s) {
+function bypassProfanityFilters(text) {
+  if (process.platform !== "darwin") return text;
+  let modifiedText = text;
+  prohibitedWords.forEach((word) => {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+    if (regex.test(modifiedText)) {
+      switch (word) {
         case "fuck":
-          e = e.replace(o, "f​uck");
+          modifiedText = modifiedText.replace(regex, "f​uck");
           break;
         case "shit":
-          e = e.replace(o, "sh​it");
+          modifiedText = modifiedText.replace(regex, "sh​it");
           break;
         case "ass":
-          e = e.replace(o, "a​s");
+          modifiedText = modifiedText.replace(regex, "a​s");
           break;
         case "damn":
-          e = e.replace(o, "d​amn");
+          modifiedText = modifiedText.replace(regex, "d​amn");
           break;
         case "bitch":
-          e = e.replace(o, "b​itch");
+          modifiedText = modifiedText.replace(regex, "b​itch");
           break;
         default:
-          const t = Math.floor(s.length / 2), n = s.slice(0, t) + "​" + s.slice(t);
-          e = e.replace(o, n);
+          const middleIndex = Math.floor(word.length / 2);
+          const modifiedWord = word.slice(0, middleIndex) + "​" + word.slice(middleIndex);
+          modifiedText = modifiedText.replace(regex, modifiedWord);
       }
-  }), e;
+    }
+  });
+  return modifiedText;
 }
-function ue(r) {
-  let e = r;
-  return e = e.replace(/\s+/g, " ").trim(), process.platform === "darwin" && (e = e.replace(/\b([A-Z]{2,})\b/g, "[[emph +]]$1[[emph -]]"), e = e.replace(/([^!]+)(!+)/g, "$1[[rate +0.1]]$2[[rate -0.1]]"), e = e.replace(/([^?]+)(\?+)/g, "$1[[inpt EMPH]]$2"), process.platform !== "darwin" && (e = e.replace(/\[\[.*?\]\]/g, ""))), e;
+function processTextForNaturalSpeech(text) {
+  let processedText = text;
+  processedText = processedText.replace(/\s+/g, " ").trim();
+  if (process.platform === "darwin") {
+    processedText = processedText.replace(/\b([A-Z]{2,})\b/g, "[[emph +]]$1[[emph -]]");
+    processedText = processedText.replace(/([^!]+)(!+)/g, "$1[[rate +0.1]]$2[[rate -0.1]]");
+    processedText = processedText.replace(/([^?]+)(\?+)/g, "$1[[inpt EMPH]]$2");
+    if (process.platform !== "darwin") {
+      processedText = processedText.replace(/\[\[.*?\]\]/g, "");
+    }
+  }
+  return processedText;
 }
-function pe() {
+function initSpeechModule() {
   try {
-    console.log("Initializing native speech module..."), Q().catch((r) => {
-      console.error("Error refreshing voice cache:", r);
-    }), d.handle("speech:getVoices", fe), d.handle("speech:speak", (r, e, s, o, t) => ge(e, s, o, t)), d.handle("speech:stop", (r, e) => he(e)), console.log("Speech module initialized");
-  } catch (r) {
-    console.error("Error initializing speech module:", r);
+    console.log("Initializing native speech module...");
+    refreshVoiceCache().catch((err) => {
+      console.error("Error refreshing voice cache:", err);
+    });
+    ipcMain.handle("speech:getVoices", getVoices);
+    ipcMain.handle("speech:speak", (event, text, voice, rate, volume) => speak(text, voice, rate, volume));
+    ipcMain.handle("speech:stop", (event, id) => stop(id));
+    console.log("Speech module initialized");
+  } catch (error) {
+    console.error("Error initializing speech module:", error);
   }
 }
-async function Q() {
-  return new Promise((r) => {
+async function refreshVoiceCache() {
+  return new Promise((resolve) => {
     try {
       if (!process.platform || !["darwin", "win32", "linux"].includes(process.platform)) {
-        console.error(`Unsupported platform: ${process.platform}`), $ = [], r([]);
+        console.error(`Unsupported platform: ${process.platform}`);
+        voiceCache = [];
+        resolve([]);
         return;
       }
-      W.getInstalledVoices((e, s) => {
-        if (e) {
-          console.error("Error getting installed voices:", e), $ = [], r([]);
+      say.getInstalledVoices((err, voices) => {
+        if (err) {
+          console.error("Error getting installed voices:", err);
+          voiceCache = [];
+          resolve([]);
           return;
         }
-        Array.isArray(s) ? (console.log(`Found ${s.length} voices`), $ = s) : (console.log("No voices found or voices are not in expected format"), console.log("Voices:", s), $ = []), r($);
+        if (Array.isArray(voices)) {
+          console.log(`Found ${voices.length} voices`);
+          voiceCache = voices;
+        } else {
+          console.log("No voices found or voices are not in expected format");
+          console.log("Voices:", voices);
+          voiceCache = [];
+        }
+        resolve(voiceCache);
       });
-    } catch (e) {
-      console.error("Exception in refreshVoiceCache:", e), $ = [], r([]);
+    } catch (error) {
+      console.error("Exception in refreshVoiceCache:", error);
+      voiceCache = [];
+      resolve([]);
     }
   });
 }
-async function fe() {
-  return $.length === 0 && await Q(), $;
+async function getVoices() {
+  if (voiceCache.length === 0) {
+    await refreshVoiceCache();
+  }
+  return voiceCache;
 }
-async function ge(r, e, s = 1, o = 1) {
-  const t = ce++;
+async function speak(text, voice, rate = 1, volume = 1) {
+  const speakId = nextSpeakId++;
   try {
-    let n = de(r);
-    return n = ue(n), new Promise((a, l) => {
+    let processedText = bypassProfanityFilters(text);
+    processedText = processTextForNaturalSpeech(processedText);
+    const speechPromise = new Promise((resolve, reject) => {
       try {
-        const u = process.platform === "darwin" ? Math.min(Math.max(s, 0.5), 2) : s;
-        console.log(`Speaking with voice: ${e}, rate: ${s}, id: ${t}`), W.speak(n, e, u, (f) => {
-          if (f) {
-            console.error(`Error speaking (id: ${t}):`, f);
-            for (const w of k.getAllWindows())
-              w.isDestroyed() || w.webContents.send("speech:error", { id: t, error: f.toString() });
-            l(f);
+        const speed = process.platform === "darwin" ? Math.min(Math.max(rate, 0.5), 2) : rate;
+        console.log(`Speaking with voice: ${voice}, rate: ${rate}, id: ${speakId}`);
+        say.speak(processedText, voice, speed, (err) => {
+          if (err) {
+            console.error(`Error speaking (id: ${speakId}):`, err);
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed()) {
+                window.webContents.send("speech:error", { id: speakId, error: err.toString() });
+              }
+            }
+            reject(err);
           } else {
-            console.log(`Speech completed (id: ${t})`);
-            for (const w of k.getAllWindows())
-              w.isDestroyed() || w.webContents.send("speech:complete", { id: t });
-            D.has(t) && D.delete(t), a();
+            console.log(`Speech completed (id: ${speakId})`);
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed()) {
+                window.webContents.send("speech:complete", { id: speakId });
+              }
+            }
+            if (speakingInstances.has(speakId)) {
+              speakingInstances.delete(speakId);
+            }
+            resolve();
           }
-        }), D.set(t, { voice: e, text: n });
-      } catch (u) {
-        console.error(`Exception in speech (id: ${t}):`, u), l(u);
+        });
+        speakingInstances.set(speakId, { voice, text: processedText });
+      } catch (error) {
+        console.error(`Exception in speech (id: ${speakId}):`, error);
+        reject(error);
       }
-    }).catch((a) => {
-      console.error(`Speech promise rejected (id: ${t}):`, a);
-    }), { id: t, success: !0 };
-  } catch (n) {
-    return console.error("Error in speak function:", n), { id: -1, success: !1, error: n.message };
+    });
+    speechPromise.catch((error) => {
+      console.error(`Speech promise rejected (id: ${speakId}):`, error);
+    });
+    return { id: speakId, success: true };
+  } catch (error) {
+    console.error("Error in speak function:", error);
+    return { id: -1, success: false, error: error.message };
   }
 }
-function he(r) {
+function stop(id) {
   try {
-    return r && D.has(r) ? (console.log(`Stopping speech with id: ${r}`), D.delete(r)) : (console.log("Stopping all speech"), D.clear()), W.stop(), { success: !0 };
-  } catch (e) {
-    return console.error("Error stopping speech:", e), { success: !1, error: e.message };
+    if (id && speakingInstances.has(id)) {
+      console.log(`Stopping speech with id: ${id}`);
+      speakingInstances.delete(id);
+    } else {
+      console.log("Stopping all speech");
+      speakingInstances.clear();
+    }
+    say.stop();
+    return { success: true };
+  } catch (error) {
+    console.error("Error stopping speech:", error);
+    return { success: false, error: error.message };
   }
 }
-function we() {
-  W.stop(), D.clear(), d.removeHandler("speech:getVoices"), d.removeHandler("speech:speak"), d.removeHandler("speech:stop");
+function cleanup() {
+  say.stop();
+  speakingInstances.clear();
+  ipcMain.removeHandler("speech:getVoices");
+  ipcMain.removeHandler("speech:speak");
+  ipcMain.removeHandler("speech:stop");
 }
-const me = ee(import.meta.url), x = p.dirname(me);
-process.env.DIST = p.join(x, "../dist");
-process.env.VITE_PUBLIC = m.isPackaged ? process.env.DIST : p.join(x, "../public");
-const h = [], E = /* @__PURE__ */ new Map();
-let R = null, X = !0, g = null, I = !1;
-function i(...r) {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+process.env.DIST = path.join(__dirname, "../dist");
+process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, "../public");
+const windows = [];
+const displayWindowMap = /* @__PURE__ */ new Map();
+let stayOnTopInterval = null;
+let autoCreateWindowsForNewDisplays = true;
+let rustBackendProcess = null;
+let isQuitting = false;
+function debugLog(...args) {
   try {
-    const e = (/* @__PURE__ */ new Date()).toISOString();
-    console.log(`[${e}] DEBUG:`, ...r);
-  } catch {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    console.log(`[${timestamp}] DEBUG:`, ...args);
+  } catch (error) {
     try {
-      const o = `[${(/* @__PURE__ */ new Date()).toISOString()}] DEBUG: ${r.map(
-        (t) => typeof t == "object" ? JSON.stringify(t) : String(t)
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+      const message = `[${timestamp}] DEBUG: ${args.map(
+        (arg) => typeof arg === "object" ? JSON.stringify(arg) : String(arg)
       ).join(" ")}
 `;
-      process.stderr.write(o);
-    } catch {
+      process.stderr.write(message);
+    } catch (stderr_error) {
     }
   }
 }
-async function ye(r) {
-  return new Promise((e) => {
-    import("net").then((s) => {
-      const o = new s.default.Socket();
-      o.setTimeout(1e3), o.on("connect", () => {
-        o.destroy(), console.log(`WebSocket server is running on port ${r}`), e(!0);
-      }), o.on("timeout", () => {
-        o.destroy(), console.log(`Timeout connecting to WebSocket server on port ${r}`), e(!1);
-      }), o.on("error", (t) => {
-        o.destroy(), console.log(`WebSocket server is not running on port ${r}: ${t.message}`), e(!1);
-      }), o.connect(r, "localhost");
-    }).catch((s) => {
-      console.error("Error importing net module:", s), e(!1);
+async function isWebSocketServerRunning(port) {
+  return new Promise((resolve) => {
+    import("net").then((net) => {
+      const client = new net.default.Socket();
+      client.setTimeout(1e3);
+      client.on("connect", () => {
+        client.destroy();
+        console.log(`WebSocket server is running on port ${port}`);
+        resolve(true);
+      });
+      client.on("timeout", () => {
+        client.destroy();
+        console.log(`Timeout connecting to WebSocket server on port ${port}`);
+        resolve(false);
+      });
+      client.on("error", (err) => {
+        client.destroy();
+        console.log(`WebSocket server is not running on port ${port}: ${err.message}`);
+        resolve(false);
+      });
+      client.connect(port, "localhost");
+    }).catch((err) => {
+      console.error("Error importing net module:", err);
+      resolve(false);
     });
   });
 }
-async function Se(r = 10) {
+async function waitForWebSocketServer(maxAttempts = 10) {
   console.log("Waiting for WebSocket server to start...");
-  for (let e = 1; e <= r; e++) {
-    if (console.log(`Checking WebSocket server (attempt ${e}/${r})...`), await ye(8080))
-      return console.log("WebSocket server is running!"), !0;
-    await new Promise((s) => setTimeout(s, 500));
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`Checking WebSocket server (attempt ${attempt}/${maxAttempts})...`);
+    if (await isWebSocketServerRunning(8080)) {
+      console.log("WebSocket server is running!");
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return console.error(`WebSocket server did not start after ${r} attempts`), !1;
+  console.error(`WebSocket server did not start after ${maxAttempts} attempts`);
+  return false;
 }
-function P(r, e, s) {
-  m.isReady() ? q.showErrorBox(r, `${e}
+function showErrorDialog(title, message, detail) {
+  if (app.isReady()) {
+    dialog.showErrorBox(title, `${message}
 
-${s || ""}`) : m.on("ready", () => {
-    q.showErrorBox(r, `${e}
+${detail || ""}`);
+  } else {
+    app.on("ready", () => {
+      dialog.showErrorBox(title, `${message}
 
-${s || ""}`);
-  });
+${detail || ""}`);
+    });
+  }
 }
-async function F(r = 3) {
+async function startRustBackend(retryCount = 3) {
   try {
-    i("Starting Rust backend initialization");
-    let e, s = !1;
-    if (i("Process environment:", {
+    debugLog("Starting Rust backend initialization");
+    let rustBinaryPath;
+    let binaryExists = false;
+    debugLog("Process environment:", {
       cwd: process.cwd(),
       resourcesPath: process.resourcesPath,
-      isPackaged: m.isPackaged,
+      isPackaged: app.isPackaged,
       platform: process.platform
-    }), m.isPackaged && (e = p.join(process.resourcesPath, "rust_backend", process.platform === "win32" ? "speedforge.exe" : "speedforge"), s = S.existsSync(e), i(`Production Rust binary path: ${e}, exists: ${s}`)), !m.isPackaged || !s) {
-      const o = [
+    });
+    if (app.isPackaged) {
+      rustBinaryPath = path.join(process.resourcesPath, "rust_backend", process.platform === "win32" ? "speedforge.exe" : "speedforge");
+      binaryExists = fs.existsSync(rustBinaryPath);
+      debugLog(`Production Rust binary path: ${rustBinaryPath}, exists: ${binaryExists}`);
+    }
+    if (!app.isPackaged || !binaryExists) {
+      const possiblePaths = [
         // Debug build
-        p.join(process.cwd(), "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        path.join(process.cwd(), "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
         // Release build
-        p.join(process.cwd(), "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        path.join(process.cwd(), "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
         // Relative paths from electron directory
-        p.join(x, "..", "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
-        p.join(x, "..", "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        path.join(__dirname, "..", "rust_app", "target", "debug", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
+        path.join(__dirname, "..", "rust_app", "target", "release", process.platform === "win32" ? "speedforge.exe" : "speedforge"),
         // Windows-specific paths that might be used
-        p.join("rust_app", "target", "debug", "speedforge.exe"),
-        p.join("rust_app", "target", "release", "speedforge.exe")
+        path.join("rust_app", "target", "debug", "speedforge.exe"),
+        path.join("rust_app", "target", "release", "speedforge.exe")
       ];
-      i("Checking for Rust binary at these locations:"), o.forEach((t) => {
-        const n = S.existsSync(t);
-        if (i(` - ${t} (exists: ${n})`), n)
+      debugLog("Checking for Rust binary at these locations:");
+      possiblePaths.forEach((p) => {
+        const exists = fs.existsSync(p);
+        debugLog(` - ${p} (exists: ${exists})`);
+        if (exists) {
           try {
-            const c = S.statSync(t);
-            i(`   - File stats: size=${c.size}, mode=${c.mode.toString(8)}, isExecutable=${c.mode & 73}`);
-          } catch (c) {
-            i(`   - Error getting file stats: ${c}`);
+            const stats = fs.statSync(p);
+            debugLog(`   - File stats: size=${stats.size}, mode=${stats.mode.toString(8)}, isExecutable=${stats.mode & 73}`);
+          } catch (err) {
+            debugLog(`   - Error getting file stats: ${err}`);
           }
+        }
       });
-      for (const t of o)
-        if (S.existsSync(t)) {
-          e = t, s = !0, i(`Found Rust binary at: ${e}`);
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          rustBinaryPath = p;
+          binaryExists = true;
+          debugLog(`Found Rust binary at: ${rustBinaryPath}`);
           break;
         }
+      }
     }
-    if (!s) {
-      const o = "ERROR: Rust binary not found at any expected location!";
-      return i(o), console.error(o), console.error("Current working directory:", process.cwd()), P(
+    if (!binaryExists) {
+      const errorMsg = "ERROR: Rust binary not found at any expected location!";
+      debugLog(errorMsg);
+      console.error(errorMsg);
+      console.error("Current working directory:", process.cwd());
+      showErrorDialog(
         "Rust Backend Not Found",
         "The application could not find the Rust backend executable.",
         "The application will continue to run, but some features may not work correctly."
-      ), !1;
+      );
+      return false;
     }
-    if (i(`Starting Rust backend from: ${e}`), i(`Working directory will be: ${p.dirname(e)}`), g = K(e, ["--verbose"], {
+    debugLog(`Starting Rust backend from: ${rustBinaryPath}`);
+    debugLog(`Working directory will be: ${path.dirname(rustBinaryPath)}`);
+    rustBackendProcess = spawn(rustBinaryPath, ["--verbose"], {
       stdio: "pipe",
       // Capture stdout and stderr
-      detached: !1,
+      detached: false,
       // Keep attached to the parent process
-      cwd: p.dirname(e),
+      cwd: path.dirname(rustBinaryPath),
       // Set working directory to binary location
       env: {
         ...process.env,
@@ -470,81 +729,125 @@ async function F(r = 3) {
         RUST_LOG: "debug",
         RUST_BACKTRACE: "1"
       },
-      windowsHide: !1
+      windowsHide: false
       // Show console window on Windows for debugging
-    }), !g || !g.pid)
+    });
+    if (!rustBackendProcess || !rustBackendProcess.pid) {
       throw new Error("Failed to start Rust process - no process handle or PID");
-    return i(`Rust process started with PID: ${g.pid}`), g.stdout ? g.stdout.on("data", (o) => {
-      const t = o.toString().trim();
-      console.log(`Rust backend stdout: ${t}`);
-    }) : i("WARNING: Rust process stdout is null"), g.stderr ? g.stderr.on("data", (o) => {
-      const t = o.toString().trim();
-      console.error(`Rust backend stderr: ${t}`);
-    }) : i("WARNING: Rust process stderr is null"), g.on("exit", (o, t) => {
-      i(`Rust backend exited with code ${o} and signal ${t}`), g = null;
-    }), g.on("error", (o) => {
-      i(`Failed to start Rust backend: ${o.message}`, o), console.error("Failed to start Rust backend:", o), g = null;
-    }), new Promise((o) => {
+    }
+    debugLog(`Rust process started with PID: ${rustBackendProcess.pid}`);
+    if (rustBackendProcess.stdout) {
+      rustBackendProcess.stdout.on("data", (data) => {
+        const output = data.toString().trim();
+        console.log(`Rust backend stdout: ${output}`);
+      });
+    } else {
+      debugLog("WARNING: Rust process stdout is null");
+    }
+    if (rustBackendProcess.stderr) {
+      rustBackendProcess.stderr.on("data", (data) => {
+        const output = data.toString().trim();
+        console.error(`Rust backend stderr: ${output}`);
+      });
+    } else {
+      debugLog("WARNING: Rust process stderr is null");
+    }
+    rustBackendProcess.on("exit", (code, signal) => {
+      debugLog(`Rust backend exited with code ${code} and signal ${signal}`);
+      rustBackendProcess = null;
+    });
+    rustBackendProcess.on("error", (err) => {
+      debugLog(`Failed to start Rust backend: ${err.message}`, err);
+      console.error("Failed to start Rust backend:", err);
+      rustBackendProcess = null;
+    });
+    return new Promise((resolve) => {
       setTimeout(() => {
-        g && g.exitCode === null ? (i("Rust process is running successfully"), o(!0)) : (i("Rust process failed to start or exited immediately"), r > 0 ? (i(`Retrying... (${r} attempts left)`), o(F(r - 1))) : (P(
-          "Rust Backend Failed",
-          "The Rust backend process failed to start after multiple attempts.",
-          "The application will continue to run, but some features may not work correctly."
-        ), o(!1)));
+        if (rustBackendProcess && rustBackendProcess.exitCode === null) {
+          debugLog("Rust process is running successfully");
+          resolve(true);
+        } else {
+          debugLog("Rust process failed to start or exited immediately");
+          if (retryCount > 0) {
+            debugLog(`Retrying... (${retryCount} attempts left)`);
+            resolve(startRustBackend(retryCount - 1));
+          } else {
+            showErrorDialog(
+              "Rust Backend Failed",
+              "The Rust backend process failed to start after multiple attempts.",
+              "The application will continue to run, but some features may not work correctly."
+            );
+            resolve(false);
+          }
+        }
       }, 1e3);
     });
-  } catch (e) {
-    return i(`Error starting Rust backend: ${e}`), console.error("Error starting Rust backend:", e), r > 0 ? (i(`Retrying... (${r} attempts left)`), F(r - 1)) : (P(
+  } catch (error) {
+    debugLog(`Error starting Rust backend: ${error}`);
+    console.error("Error starting Rust backend:", error);
+    if (retryCount > 0) {
+      debugLog(`Retrying... (${retryCount} attempts left)`);
+      return startRustBackend(retryCount - 1);
+    }
+    showErrorDialog(
       "Rust Backend Error",
       "There was an error starting the Rust backend.",
-      e instanceof Error ? e.message : String(e)
-    ), !1);
+      error instanceof Error ? error.message : String(error)
+    );
+    return false;
   }
 }
-function be() {
-  if (g) {
+function stopRustBackend() {
+  if (rustBackendProcess) {
     console.log("Stopping Rust backend...");
     try {
-      process.platform === "win32" ? K("taskkill", ["/pid", g.pid.toString(), "/f", "/t"]) : (g.kill("SIGTERM"), setTimeout(() => {
-        g && g.kill("SIGKILL");
-      }, 1e3));
-    } catch (r) {
-      console.error("Error stopping Rust backend:", r);
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", rustBackendProcess.pid.toString(), "/f", "/t"]);
+      } else {
+        rustBackendProcess.kill("SIGTERM");
+        setTimeout(() => {
+          if (rustBackendProcess) {
+            rustBackendProcess.kill("SIGKILL");
+          }
+        }, 1e3);
+      }
+    } catch (error) {
+      console.error("Error stopping Rust backend:", error);
     }
-    g = null;
+    rustBackendProcess = null;
   }
 }
-function Z() {
-  const r = v.getAllDisplays();
-  console.log(`Found ${r.length} displays`);
-  for (const e of r) {
-    console.log(`Creating window for display: ${e.id}`, {
-      bounds: e.bounds,
-      workArea: e.workArea
+function createWindows() {
+  const displays = screen.getAllDisplays();
+  console.log(`Found ${displays.length} displays`);
+  for (const display of displays) {
+    console.log(`Creating window for display: ${display.id}`, {
+      bounds: display.bounds,
+      workArea: display.workArea
     });
-    const s = new k({
-      x: e.bounds.x,
-      y: e.bounds.y,
-      width: e.bounds.width,
-      height: e.bounds.height,
+    const win = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
       webPreferences: {
-        preload: p.join(x, "preload.js"),
-        nodeIntegration: !1,
-        contextIsolation: !0,
-        backgroundThrottling: !1
+        preload: path.join(__dirname, "preload.js"),
+        nodeIntegration: false,
+        contextIsolation: true,
+        backgroundThrottling: false
       },
       // Make the window transparent
-      transparent: !0,
+      transparent: true,
       backgroundColor: "#00000000",
       // Fully transparent
-      frame: !1,
-      skipTaskbar: !0,
-      hasShadow: !1,
+      frame: false,
+      skipTaskbar: true,
+      hasShadow: false,
       titleBarStyle: "hidden",
-      titleBarOverlay: !1,
-      fullscreen: !1,
+      titleBarOverlay: false,
+      fullscreen: false,
       // Don't use simpleFullscreen as it can create issues on macOS
-      simpleFullscreen: !1,
+      simpleFullscreen: false,
       // Set to floating window type on macOS
       type: "panel",
       // Important for macOS transparency
@@ -552,380 +855,636 @@ function Z() {
       vibrancy: null,
       visualEffectState: null,
       // Ensure the window accepts focus when needed
-      focusable: !0,
+      focusable: true,
       // Always stay on top of other windows
-      alwaysOnTop: !0
+      alwaysOnTop: true
     });
-    process.platform === "darwin" ? (s.setWindowButtonVisibility(!1), s.setAlwaysOnTop(!0, "screen-saver", 1), s.setBackgroundColor("#00000000"), s.setOpacity(1)) : process.platform === "win32" ? s.setAlwaysOnTop(!0, "screen-saver") : s.setAlwaysOnTop(!0), s.setIgnoreMouseEvents(!0, { forward: !0 }), s.setTitle("Speedforge (click-through:true)");
-    const o = process.env.VITE_DEV_SERVER_URL || `file://${p.join(process.env.DIST, "index.html")}`;
-    s.loadURL(o), h.push(s), E.set(e.id, s), s.displayId = e.id, s.webContents.on("did-finish-load", () => {
+    if (process.platform === "darwin") {
+      win.setWindowButtonVisibility(false);
+      win.setAlwaysOnTop(true, "screen-saver", 1);
+      win.setBackgroundColor("#00000000");
+      win.setOpacity(1);
+    } else if (process.platform === "win32") {
+      win.setAlwaysOnTop(true, "screen-saver");
+    } else {
+      win.setAlwaysOnTop(true);
+    }
+    win.setIgnoreMouseEvents(true, { forward: true });
+    win.setTitle("Speedforge (click-through:true)");
+    const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
+    win.loadURL(mainUrl);
+    windows.push(win);
+    displayWindowMap.set(display.id, win);
+    win.displayId = display.id;
+    win.webContents.on("did-finish-load", () => {
       try {
-        if (s.isDestroyed()) {
+        if (win.isDestroyed()) {
           console.warn("Window was destroyed before we could send display:id");
           return;
         }
-        if (s.webContents.send("display:id", e.id, e.bounds), s.isDestroyed()) {
+        win.webContents.send("display:id", display.id, display.bounds);
+        if (win.isDestroyed()) {
           console.warn("Window was destroyed before we could send app:initial-state");
           return;
         }
-        s.webContents.send("app:initial-state", {
-          clickThrough: !0,
-          controlPanelHidden: !0
+        win.webContents.send("app:initial-state", {
+          clickThrough: true,
+          controlPanelHidden: true
         });
-      } catch (t) {
+      } catch (error) {
         try {
-          i("Error in did-finish-load handler:", t);
-        } catch {
-          process.stderr.write(`Error in did-finish-load handler: ${t}
+          debugLog("Error in did-finish-load handler:", error);
+        } catch (loggingError) {
+          process.stderr.write(`Error in did-finish-load handler: ${error}
 `);
         }
       }
-    }), process.env.VITE_DEV_SERVER_URL && e.id === v.getPrimaryDisplay().id && s.webContents.openDevTools({ mode: "detach" });
-  }
-}
-function Y(r) {
-  console.log(`Attempting to close window for display ID: ${r}`);
-  const e = E.get(r);
-  if (!e)
-    return console.log(`No window found for display ID: ${r}`), !1;
-  try {
-    if (e.isDestroyed()) {
-      console.log(`Window for display ID: ${r} was already destroyed`), E.delete(r);
-      const s = h.indexOf(e);
-      return s >= 0 && h.splice(s, 1), !0;
-    } else {
-      console.log(`Closing window for display ID: ${r}`), e.removeAllListeners(), e.setClosable(!0), e.hide(), e.webContents.setDevToolsWebContents(null), e.close(), e.destroy(), E.delete(r);
-      const s = h.indexOf(e);
-      return s >= 0 && h.splice(s, 1), console.log(`Successfully closed and destroyed window for display ID: ${r}`), !0;
+    });
+    if (process.env.VITE_DEV_SERVER_URL && display.id === screen.getPrimaryDisplay().id) {
+      win.webContents.openDevTools({ mode: "detach" });
     }
-  } catch (s) {
-    console.error(`Error closing window for display ID: ${r}`, s), E.delete(r);
-    const o = h.indexOf(e);
-    o >= 0 && h.splice(o, 1);
   }
-  return !1;
 }
-function ve(r, e, s) {
+function closeWindowForDisplay(displayId) {
+  console.log(`Attempting to close window for display ID: ${displayId}`);
+  const win = displayWindowMap.get(displayId);
+  if (!win) {
+    console.log(`No window found for display ID: ${displayId}`);
+    return false;
+  }
   try {
-    return !r || r.isDestroyed() || !r.webContents ? (i(`Cannot send ${e} - window is invalid`), !1) : (r.webContents.send(e, s), !0);
-  } catch (o) {
+    if (!win.isDestroyed()) {
+      console.log(`Closing window for display ID: ${displayId}`);
+      win.removeAllListeners();
+      win.setClosable(true);
+      win.hide();
+      win.webContents.setDevToolsWebContents(null);
+      win.close();
+      win.destroy();
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      console.log(`Successfully closed and destroyed window for display ID: ${displayId}`);
+      return true;
+    } else {
+      console.log(`Window for display ID: ${displayId} was already destroyed`);
+      displayWindowMap.delete(displayId);
+      const windowIndex = windows.indexOf(win);
+      if (windowIndex >= 0) {
+        windows.splice(windowIndex, 1);
+      }
+      return true;
+    }
+  } catch (error) {
+    console.error(`Error closing window for display ID: ${displayId}`, error);
+    displayWindowMap.delete(displayId);
+    const windowIndex = windows.indexOf(win);
+    if (windowIndex >= 0) {
+      windows.splice(windowIndex, 1);
+    }
+  }
+  return false;
+}
+function safelySendToRenderer(win, channel, data) {
+  try {
+    if (!win || win.isDestroyed() || !win.webContents) {
+      debugLog(`Cannot send ${channel} - window is invalid`);
+      return false;
+    }
+    win.webContents.send(channel, data);
+    return true;
+  } catch (error) {
     try {
-      i(`Error sending ${e} to renderer:`, o);
-    } catch {
-      process.stderr.write(`Error sending ${e} to renderer: ${o}
+      debugLog(`Error sending ${channel} to renderer:`, error);
+    } catch (loggingError) {
+      process.stderr.write(`Error sending ${channel} to renderer: ${error}
 `);
     }
-    return !1;
+    return false;
   }
 }
-function $e(r) {
+function toggleClickThroughForAllWindows(newState) {
   try {
-    let e = !0;
-    for (const s of h)
+    let allSucceeded = true;
+    for (const win of windows) {
       try {
-        if (s.isDestroyed()) continue;
-        s.setTitle(`Speedforge (click-through:${r})`), ve(s, "app:toggle-click-through", r) || (e = !1);
-      } catch (o) {
-        i("Error toggling click-through for window:", o), e = !1;
+        if (win.isDestroyed()) continue;
+        win.setTitle(`Speedforge (click-through:${newState})`);
+        const sendSuccess = safelySendToRenderer(win, "app:toggle-click-through", newState);
+        if (!sendSuccess) {
+          allSucceeded = false;
+        }
+      } catch (windowError) {
+        debugLog(`Error toggling click-through for window:`, windowError);
+        allSucceeded = false;
       }
-    return e;
-  } catch (e) {
-    return i("Error in toggleClickThroughForAllWindows:", e), !1;
+    }
+    return allSucceeded;
+  } catch (error) {
+    debugLog("Error in toggleClickThroughForAllWindows:", error);
+    return false;
   }
 }
-function Ee() {
-  d.handle("app:quit", () => {
+function setupIpcListeners() {
+  ipcMain.handle("app:quit", () => {
     console.log("Quitting application");
     try {
-      if (I)
-        return { success: !0 };
-      I = !0;
-      for (const r of h)
-        if (!r.isDestroyed())
+      if (isQuitting) {
+        return { success: true };
+      }
+      isQuitting = true;
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
           try {
-            r.webContents.send("app:before-quit");
-          } catch (e) {
-            console.error("Error sending before-quit notification:", e);
+            win.webContents.send("app:before-quit");
+          } catch (err) {
+            console.error("Error sending before-quit notification:", err);
           }
-      return setTimeout(() => {
-        for (const r of h)
-          r.isDestroyed() || r.close();
-        h.length = 0, setTimeout(() => {
+        }
+      }
+      setTimeout(() => {
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.close();
+          }
+        }
+        windows.length = 0;
+        setTimeout(() => {
           try {
             process.exit(0);
-          } catch (r) {
-            console.log("Error during process.exit():", r), process.exit(1);
+          } catch (error) {
+            console.log("Error during process.exit():", error);
+            process.exit(1);
           }
         }, 100);
-      }, 300), { success: !0 };
-    } catch (r) {
-      return console.error("Error during quit process:", r), process.exit(1), { success: !1, error: String(r) };
+      }, 300);
+      return { success: true };
+    } catch (error) {
+      console.error("Error during quit process:", error);
+      process.exit(1);
+      return { success: false, error: String(error) };
     }
-  }), d.handle("app:toggleAutoNewWindows", (r, e) => (console.log(`Toggling auto-create new windows for displays from main process to: ${e}`), X = e, { success: !0, state: e })), d.handle("app:toggleClickThrough", (r, e) => {
-    console.log(`Toggling click-through from main process to: ${e}`);
-    const s = k.fromWebContents(r.sender);
-    if (!s)
-      return console.error("Could not find window associated with this request"), { success: !1, error: "Window not found" };
+  });
+  ipcMain.handle("app:toggleAutoNewWindows", (event, state) => {
+    console.log(`Toggling auto-create new windows for displays from main process to: ${state}`);
+    autoCreateWindowsForNewDisplays = state;
+    return { success: true, state };
+  });
+  ipcMain.handle("app:toggleClickThrough", (event, state) => {
+    console.log(`Toggling click-through from main process to: ${state}`);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) {
+      console.error("Could not find window associated with this request");
+      return { success: false, error: "Window not found" };
+    }
     try {
-      e === !0 ? (console.log("Setting ignore mouse events with forwarding"), s.setIgnoreMouseEvents(!0, { forward: !0 }), s.focusOnWebView(), process.platform === "darwin" ? s.setAlwaysOnTop(!0, "screen-saver", 1) : process.platform === "win32" ? s.setAlwaysOnTop(!0, "screen-saver") : s.setAlwaysOnTop(!0), console.log("Click-through enabled with forwarding. UI controls use CSS to handle clicks.")) : (console.log("Disabling ignore mouse events"), s.setIgnoreMouseEvents(!1), process.platform === "darwin" ? s.setAlwaysOnTop(!0, "screen-saver", 1) : process.platform === "win32" ? s.setAlwaysOnTop(!0, "screen-saver") : s.setAlwaysOnTop(!0), console.log("Click-through disabled"));
-      const o = { success: !0, state: e };
-      return console.log("Returning response:", o), o;
-    } catch (o) {
-      console.error("Error toggling click-through:", o);
-      const t = { success: !1, error: String(o) };
-      return console.log("Returning error response:", t), t;
+      if (state === true) {
+        console.log("Setting ignore mouse events with forwarding");
+        win.setIgnoreMouseEvents(true, { forward: true });
+        win.focusOnWebView();
+        if (process.platform === "darwin") {
+          win.setAlwaysOnTop(true, "screen-saver", 1);
+        } else if (process.platform === "win32") {
+          win.setAlwaysOnTop(true, "screen-saver");
+        } else {
+          win.setAlwaysOnTop(true);
+        }
+        console.log("Click-through enabled with forwarding. UI controls use CSS to handle clicks.");
+      } else {
+        console.log("Disabling ignore mouse events");
+        win.setIgnoreMouseEvents(false);
+        if (process.platform === "darwin") {
+          win.setAlwaysOnTop(true, "screen-saver", 1);
+        } else if (process.platform === "win32") {
+          win.setAlwaysOnTop(true, "screen-saver");
+        } else {
+          win.setAlwaysOnTop(true);
+        }
+        console.log("Click-through disabled");
+      }
+      const response = { success: true, state };
+      console.log("Returning response:", response);
+      return response;
+    } catch (error) {
+      console.error("Error toggling click-through:", error);
+      const errorResponse = { success: false, error: String(error) };
+      console.log("Returning error response:", errorResponse);
+      return errorResponse;
     }
-  }), d.handle("app:closeWindowForDisplay", (r, e) => {
-    if (console.log(`Received request to close window for display ID: ${e}`), e === void 0) {
-      const o = k.fromWebContents(r.sender);
-      o && (e = o.displayId);
+  });
+  ipcMain.handle("app:closeWindowForDisplay", (event, displayId) => {
+    console.log(`Received request to close window for display ID: ${displayId}`);
+    if (displayId === void 0) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        displayId = win.displayId;
+      }
     }
-    return e === void 0 ? { success: !1, error: "No display ID provided or found" } : { success: Y(e) };
-  }), d.handle("app:getDisplays", () => {
+    if (displayId === void 0) {
+      return { success: false, error: "No display ID provided or found" };
+    }
+    const success = closeWindowForDisplay(displayId);
+    return { success };
+  });
+  ipcMain.handle("app:getDisplays", () => {
     try {
-      const r = v.getAllDisplays(), e = v.getPrimaryDisplay();
-      return { success: !0, displays: r.map((o) => ({
-        id: o.id,
-        bounds: o.bounds,
-        workArea: o.workArea,
-        isPrimary: o.id === e.id,
-        scaleFactor: o.scaleFactor,
-        rotation: o.rotation,
-        size: o.size,
-        label: o.label || `Display ${o.id}`
-      })) };
-    } catch (r) {
-      return console.error("Error getting displays:", r), { success: !1, error: String(r) };
+      const displays = screen.getAllDisplays();
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const displayInfo = displays.map((display) => ({
+        id: display.id,
+        bounds: display.bounds,
+        workArea: display.workArea,
+        isPrimary: display.id === primaryDisplay.id,
+        scaleFactor: display.scaleFactor,
+        rotation: display.rotation,
+        size: display.size,
+        label: display.label || `Display ${display.id}`
+      }));
+      return { success: true, displays: displayInfo };
+    } catch (error) {
+      console.error("Error getting displays:", error);
+      return { success: false, error: String(error) };
     }
-  }), d.handle("app:getCurrentDisplayId", (r) => {
+  });
+  ipcMain.handle("app:getCurrentDisplayId", (event) => {
     try {
-      const e = k.fromWebContents(r.sender);
-      if (e) {
-        const s = e.displayId, o = e.getBounds(), t = { x: o.x + o.width / 2, y: o.y + o.height / 2 }, c = v.getDisplayNearestPoint(t).bounds;
-        return console.log(`Returning display ID ${s} with bounds:`, c), {
-          success: !0,
-          displayId: s,
-          displayBounds: c
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        const displayId = win.displayId;
+        const winBounds = win.getBounds();
+        const pointInWindow = { x: winBounds.x + winBounds.width / 2, y: winBounds.y + winBounds.height / 2 };
+        const display = screen.getDisplayNearestPoint(pointInWindow);
+        const displayBounds = display.bounds;
+        console.log(`Returning display ID ${displayId} with bounds:`, displayBounds);
+        return {
+          success: true,
+          displayId,
+          displayBounds
         };
       }
-      return { success: !1, error: "No window found for web contents" };
-    } catch (e) {
-      return console.error("Error getting current display ID:", e), { success: !1, error: String(e) };
+      return { success: false, error: "No window found for web contents" };
+    } catch (error) {
+      console.error("Error getting current display ID:", error);
+      return { success: false, error: String(error) };
     }
-  }), d.handle("config:save", async (r, e, s, o) => {
+  });
+  ipcMain.handle("config:save", async (event, type, name, data) => {
     try {
-      i(`Saving config: type=${e}, name=${s}, size=${JSON.stringify(o).length}`);
-      const t = m.getPath("userData"), n = p.join(t, "configs", e);
-      S.existsSync(n) || S.mkdirSync(n, { recursive: !0 });
-      const c = p.join(n, `${s}.json`);
-      return S.writeFileSync(c, JSON.stringify(o, null, 2)), i(`Config saved successfully to ${c}`), !0;
-    } catch (t) {
-      return i("Error saving config:", t), !1;
+      debugLog(`Saving config: type=${type}, name=${name}, size=${JSON.stringify(data).length}`);
+      const userDataPath = app.getPath("userData");
+      const configDir = path.join(userDataPath, "configs", type);
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      const configPath = path.join(configDir, `${name}.json`);
+      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+      debugLog(`Config saved successfully to ${configPath}`);
+      return true;
+    } catch (error) {
+      debugLog("Error saving config:", error);
+      return false;
     }
-  }), d.handle("config:load", async (r, e, s) => {
+  });
+  ipcMain.handle("config:load", async (event, type, name) => {
     try {
-      i(`Loading config: type=${e}, name=${s}`);
-      const o = m.getPath("userData"), t = p.join(o, "configs", e, `${s}.json`);
-      if (!S.existsSync(t))
-        return i(`Config file does not exist: ${t}`), null;
-      const n = S.readFileSync(t, "utf8"), c = JSON.parse(n);
-      return i(`Config loaded successfully from ${t}`), c;
-    } catch (o) {
-      return i("Error loading config:", o), null;
+      debugLog(`Loading config: type=${type}, name=${name}`);
+      const userDataPath = app.getPath("userData");
+      const configPath = path.join(userDataPath, "configs", type, `${name}.json`);
+      if (!fs.existsSync(configPath)) {
+        debugLog(`Config file does not exist: ${configPath}`);
+        return null;
+      }
+      const data = fs.readFileSync(configPath, "utf8");
+      const result = JSON.parse(data);
+      debugLog(`Config loaded successfully from ${configPath}`);
+      return result;
+    } catch (error) {
+      debugLog("Error loading config:", error);
+      return null;
     }
-  }), d.handle("config:list", async (r, e) => {
+  });
+  ipcMain.handle("config:list", async (event, type) => {
     try {
-      i(`Listing configs for type: ${e}`);
-      const s = m.getPath("userData"), o = p.join(s, "configs", e);
-      if (!S.existsSync(o))
-        return i(`Config directory does not exist: ${o}`), [];
-      const t = S.readdirSync(o).filter((n) => n.endsWith(".json")).map((n) => n.replace(".json", ""));
-      return i(`Found ${t.length} config files: ${t.join(", ")}`), t;
-    } catch (s) {
-      return i("Error listing configs:", s), [];
+      debugLog(`Listing configs for type: ${type}`);
+      const userDataPath = app.getPath("userData");
+      const configDir = path.join(userDataPath, "configs", type);
+      if (!fs.existsSync(configDir)) {
+        debugLog(`Config directory does not exist: ${configDir}`);
+        return [];
+      }
+      const files = fs.readdirSync(configDir).filter((file) => file.endsWith(".json")).map((file) => file.replace(".json", ""));
+      debugLog(`Found ${files.length} config files: ${files.join(", ")}`);
+      return files;
+    } catch (error) {
+      debugLog("Error listing configs:", error);
+      return [];
     }
-  }), d.handle("config:delete", async (r, e, s) => {
+  });
+  ipcMain.handle("config:delete", async (event, type, name) => {
     try {
-      i(`Deleting config: type=${e}, name=${s}`);
-      const o = m.getPath("userData"), t = p.join(o, "configs", e, `${s}.json`);
-      return S.existsSync(t) ? (S.unlinkSync(t), i(`Config deleted successfully: ${t}`), !0) : (i(`Config file does not exist: ${t}`), !1);
-    } catch (o) {
-      return i("Error deleting config:", o), !1;
+      debugLog(`Deleting config: type=${type}, name=${name}`);
+      const userDataPath = app.getPath("userData");
+      const configPath = path.join(userDataPath, "configs", type, `${name}.json`);
+      if (!fs.existsSync(configPath)) {
+        debugLog(`Config file does not exist: ${configPath}`);
+        return false;
+      }
+      fs.unlinkSync(configPath);
+      debugLog(`Config deleted successfully: ${configPath}`);
+      return true;
+    } catch (error) {
+      debugLog("Error deleting config:", error);
+      return false;
     }
-  }), d.handle("app:getUserDataPath", async () => {
+  });
+  ipcMain.handle("app:getUserDataPath", async () => {
     try {
-      return m.getPath("userData");
-    } catch (r) {
-      return console.error("Error getting user data path:", r), "";
+      const userDataPath = app.getPath("userData");
+      return userDataPath;
+    } catch (error) {
+      console.error("Error getting user data path:", error);
+      return "";
     }
-  }), d.handle("debug:listConfigFiles", async () => {
+  });
+  ipcMain.handle("debug:listConfigFiles", async () => {
     try {
-      const r = m.getPath("userData"), e = p.join(r, "configs");
-      if (!S.existsSync(e))
-        return { success: !1, message: "Config directory does not exist", files: [] };
-      const s = S.readdirSync(e, { withFileTypes: !0 }).filter((t) => t.isDirectory()).map((t) => t.name), o = {};
-      for (const t of s) {
-        const n = p.join(e, t), c = S.readdirSync(n).filter((a) => a.endsWith(".json"));
-        o[t] = c;
+      const userDataPath = app.getPath("userData");
+      const configDir = path.join(userDataPath, "configs");
+      if (!fs.existsSync(configDir)) {
+        return { success: false, message: "Config directory does not exist", files: [] };
+      }
+      const subdirs = fs.readdirSync(configDir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
+      const result = {};
+      for (const subdir of subdirs) {
+        const subdirPath = path.join(configDir, subdir);
+        const files = fs.readdirSync(subdirPath).filter((file) => file.endsWith(".json"));
+        result[subdir] = files;
       }
       return {
-        success: !0,
-        path: e,
-        subdirectories: s,
-        files: o
+        success: true,
+        path: configDir,
+        subdirectories: subdirs,
+        files: result
       };
-    } catch (r) {
-      return console.error("Error listing config files:", r), {
-        success: !1,
-        message: r.message,
+    } catch (error) {
+      console.error("Error listing config files:", error);
+      return {
+        success: false,
+        message: error.message,
         files: {}
       };
     }
-  }), d.handle("app:openDevTools", async (r) => {
+  });
+  ipcMain.handle("app:openDevTools", async (event) => {
     try {
-      const e = r.sender;
-      return e ? (e.openDevTools({ mode: "detach" }), !0) : !1;
-    } catch (e) {
-      return console.error("Error opening developer tools:", e), !1;
+      const webContents = event.sender;
+      if (webContents) {
+        webContents.openDevTools({ mode: "detach" });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error opening developer tools:", error);
+      return false;
     }
   });
 }
-function ke() {
-  console.log("Cleaning up IPC handlers..."), d.removeHandler("app:quit"), d.removeHandler("app:toggleClickThrough"), d.removeHandler("app:toggleAutoNewWindows"), d.removeHandler("app:closeWindowForDisplay"), d.removeHandler("app:getDisplays"), d.removeHandler("app:getCurrentDisplayId"), d.removeHandler("app:getUserDataPath"), d.removeHandler("app:openDevTools"), d.removeHandler("widget:create"), d.removeHandler("widget:close"), d.removeHandler("widget:getAll"), d.removeHandler("widget:setPosition"), d.removeHandler("widget:setSize"), d.removeHandler("widget:setAlwaysOnTop"), d.removeHandler("widget:setOpacity"), d.removeHandler("widget:setVisible"), d.removeHandler("widget:updateParams"), d.removeHandler("config:save"), d.removeHandler("config:load"), d.removeHandler("config:list"), d.removeHandler("config:delete"), d.removeHandler("debug:listConfigFiles");
+function cleanupIpcHandlers() {
+  console.log("Cleaning up IPC handlers...");
+  ipcMain.removeHandler("app:quit");
+  ipcMain.removeHandler("app:toggleClickThrough");
+  ipcMain.removeHandler("app:toggleAutoNewWindows");
+  ipcMain.removeHandler("app:closeWindowForDisplay");
+  ipcMain.removeHandler("app:getDisplays");
+  ipcMain.removeHandler("app:getCurrentDisplayId");
+  ipcMain.removeHandler("app:getUserDataPath");
+  ipcMain.removeHandler("app:openDevTools");
+  ipcMain.removeHandler("widget:create");
+  ipcMain.removeHandler("widget:close");
+  ipcMain.removeHandler("widget:getAll");
+  ipcMain.removeHandler("widget:setPosition");
+  ipcMain.removeHandler("widget:setSize");
+  ipcMain.removeHandler("widget:setAlwaysOnTop");
+  ipcMain.removeHandler("widget:setOpacity");
+  ipcMain.removeHandler("widget:setVisible");
+  ipcMain.removeHandler("widget:updateParams");
+  ipcMain.removeHandler("config:save");
+  ipcMain.removeHandler("config:load");
+  ipcMain.removeHandler("config:list");
+  ipcMain.removeHandler("config:delete");
+  ipcMain.removeHandler("debug:listConfigFiles");
 }
-m.on("window-all-closed", () => {
-  V.unregisterAll(), process.platform !== "darwin" && m.quit();
+app.on("window-all-closed", () => {
+  globalShortcut.unregisterAll();
+  if (process.platform !== "darwin") app.quit();
 });
-m.on("activate", () => {
-  h.length === 0 && Z();
+app.on("activate", () => {
+  if (windows.length === 0) createWindows();
 });
-m.on("before-quit", (r) => {
-  if (!I) {
-    i("App before-quit event received"), I = !0;
-    for (const e of h)
-      if (!e.isDestroyed())
-        try {
-          e.webContents.send("app:before-quit"), i(`Sent app:before-quit to window ${e.displayId || "unknown"}`);
-        } catch (s) {
-          i("Error sending before-quit notification:", s);
-        }
-    console.log("App is quitting, cleaning up resources..."), be(), console.log("Performing cleanup before quit"), R && (clearInterval(R), R = null), V.unregisterAll(), ke(), we(), r.preventDefault(), setTimeout(() => {
-      i("Proceeding with app quit after delay"), process.exit(0);
-    }, 1500);
-  }
-});
-m.whenReady().then(async () => {
-  m.setName("Speedforge"), pe(), i("Starting Rust backend process");
-  const r = await F();
-  i(`Rust backend started: ${r}`), r ? (i("Waiting for WebSocket server to become available"), await Se(20) ? i("WebSocket server is running properly") : (i("WebSocket server didn't start, but continuing anyway..."), P(
-    "WebSocket Server Warning",
-    "The WebSocket server did not start properly.",
-    "The application will continue to run, but some features may not work correctly."
-  ))) : i("Skipping WebSocket server check since Rust backend failed to start"), Z(), Ee(), R = setInterval(() => {
-    for (const o of h)
-      o.isDestroyed() || (process.platform === "darwin" ? o.setAlwaysOnTop(!0, "screen-saver", 1) : process.platform === "win32" ? o.setAlwaysOnTop(!0, "screen-saver") : o.setAlwaysOnTop(!0));
-  }, 1e3), V.register("CommandOrControl+Space", () => {
-    try {
-      i("Global Ctrl+Space shortcut triggered");
-      let o = !0;
-      h.length > 0 && !h[0].isDestroyed() && (o = h[0].getTitle().includes("click-through:true"));
-      const t = !o;
-      i(`Global shortcut toggling click-through from ${o} to ${t}`), $e(t);
-    } catch (o) {
+app.on("before-quit", (event) => {
+  if (isQuitting) return;
+  debugLog("App before-quit event received");
+  isQuitting = true;
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
       try {
-        i("Error in global shortcut handler:", o);
-      } catch {
-        process.stderr.write(`Error in global shortcut handler: ${o}
+        win.webContents.send("app:before-quit");
+        debugLog(`Sent app:before-quit to window ${win.displayId || "unknown"}`);
+      } catch (err) {
+        debugLog("Error sending before-quit notification:", err);
+      }
+    }
+  }
+  console.log("App is quitting, cleaning up resources...");
+  stopRustBackend();
+  console.log("Performing cleanup before quit");
+  if (stayOnTopInterval) {
+    clearInterval(stayOnTopInterval);
+    stayOnTopInterval = null;
+  }
+  globalShortcut.unregisterAll();
+  cleanupIpcHandlers();
+  cleanup();
+  event.preventDefault();
+  setTimeout(() => {
+    debugLog("Proceeding with app quit after delay");
+    process.exit(0);
+  }, 1500);
+});
+app.whenReady().then(async () => {
+  app.setName("Speedforge");
+  initSpeechModule();
+  debugLog("Starting Rust backend process");
+  const rustStarted = await startRustBackend();
+  debugLog(`Rust backend started: ${rustStarted}`);
+  if (rustStarted) {
+    debugLog("Waiting for WebSocket server to become available");
+    const wsServerRunning = await waitForWebSocketServer(20);
+    if (!wsServerRunning) {
+      debugLog("WebSocket server didn't start, but continuing anyway...");
+      showErrorDialog(
+        "WebSocket Server Warning",
+        "The WebSocket server did not start properly.",
+        "The application will continue to run, but some features may not work correctly."
+      );
+    } else {
+      debugLog("WebSocket server is running properly");
+    }
+  } else {
+    debugLog("Skipping WebSocket server check since Rust backend failed to start");
+  }
+  createWindows();
+  setupIpcListeners();
+  stayOnTopInterval = setInterval(() => {
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        if (process.platform === "darwin") {
+          win.setAlwaysOnTop(true, "screen-saver", 1);
+        } else if (process.platform === "win32") {
+          win.setAlwaysOnTop(true, "screen-saver");
+        } else {
+          win.setAlwaysOnTop(true);
+        }
+      }
+    }
+  }, 1e3);
+  globalShortcut.register("CommandOrControl+Space", () => {
+    try {
+      debugLog("Global Ctrl+Space shortcut triggered");
+      let isCurrentlyClickThrough = true;
+      if (windows.length > 0 && !windows[0].isDestroyed()) {
+        isCurrentlyClickThrough = windows[0].getTitle().includes("click-through:true");
+      }
+      const newState = !isCurrentlyClickThrough;
+      debugLog(`Global shortcut toggling click-through from ${isCurrentlyClickThrough} to ${newState}`);
+      toggleClickThroughForAllWindows(newState);
+    } catch (error) {
+      try {
+        debugLog("Error in global shortcut handler:", error);
+      } catch (loggingError) {
+        process.stderr.write(`Error in global shortcut handler: ${error}
 `);
       }
     }
-  }), v.on("display-added", (o, t) => {
+  });
+  screen.on("display-added", (event, display) => {
     try {
-      if (i("New display detected:", t), !X) {
-        i("Auto-create new windows is disabled, skipping window creation for new display");
+      debugLog("New display detected:", display);
+      if (!autoCreateWindowsForNewDisplays) {
+        debugLog("Auto-create new windows is disabled, skipping window creation for new display");
         return;
       }
-      const n = new k({
-        x: t.bounds.x,
-        y: t.bounds.y,
-        width: t.bounds.width,
-        height: t.bounds.height,
+      const win = new BrowserWindow({
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
         webPreferences: {
-          preload: p.join(x, "preload.js"),
-          nodeIntegration: !1,
-          contextIsolation: !0,
-          backgroundThrottling: !1
+          preload: path.join(__dirname, "preload.js"),
+          nodeIntegration: false,
+          contextIsolation: true,
+          backgroundThrottling: false
         },
-        transparent: !0,
+        transparent: true,
         backgroundColor: "#00000000",
-        frame: !1,
-        skipTaskbar: !0,
-        hasShadow: !1,
+        frame: false,
+        skipTaskbar: true,
+        hasShadow: false,
         titleBarStyle: "hidden",
-        titleBarOverlay: !1,
-        fullscreen: !1,
+        titleBarOverlay: false,
+        fullscreen: false,
         type: "panel",
         vibrancy: null,
         visualEffectState: null,
-        focusable: !0,
-        alwaysOnTop: !0
+        focusable: true,
+        alwaysOnTop: true
       });
-      process.platform === "darwin" ? (n.setWindowButtonVisibility(!1), n.setAlwaysOnTop(!0, "screen-saver", 1), n.setBackgroundColor("#00000000"), n.setOpacity(1)) : process.platform === "win32" ? n.setAlwaysOnTop(!0, "screen-saver") : n.setAlwaysOnTop(!0), n.setIgnoreMouseEvents(!0, { forward: !0 }), n.setTitle("Speedforge (click-through:true)");
-      const c = process.env.VITE_DEV_SERVER_URL || `file://${p.join(process.env.DIST, "index.html")}`;
-      n.loadURL(c), n.webContents.on("did-finish-load", () => {
+      if (process.platform === "darwin") {
+        win.setWindowButtonVisibility(false);
+        win.setAlwaysOnTop(true, "screen-saver", 1);
+        win.setBackgroundColor("#00000000");
+        win.setOpacity(1);
+      } else if (process.platform === "win32") {
+        win.setAlwaysOnTop(true, "screen-saver");
+      } else {
+        win.setAlwaysOnTop(true);
+      }
+      win.setIgnoreMouseEvents(true, { forward: true });
+      win.setTitle("Speedforge (click-through:true)");
+      const mainUrl = process.env.VITE_DEV_SERVER_URL || `file://${path.join(process.env.DIST, "index.html")}`;
+      win.loadURL(mainUrl);
+      win.webContents.on("did-finish-load", () => {
         try {
-          if (n.isDestroyed()) {
+          if (win.isDestroyed()) {
             console.warn("Window was destroyed before we could send display:id");
             return;
           }
-          if (n.webContents.send("display:id", t.id, t.bounds), n.isDestroyed()) {
+          win.webContents.send("display:id", display.id, display.bounds);
+          if (win.isDestroyed()) {
             console.warn("Window was destroyed before we could send app:initial-state");
             return;
           }
-          n.webContents.send("app:initial-state", {
-            clickThrough: !0,
-            controlPanelHidden: !0
+          win.webContents.send("app:initial-state", {
+            clickThrough: true,
+            controlPanelHidden: true
           });
-        } catch (a) {
+        } catch (error) {
           try {
-            i("Error in did-finish-load handler:", a);
-          } catch {
-            process.stderr.write(`Error in did-finish-load handler: ${a}
+            debugLog("Error in did-finish-load handler:", error);
+          } catch (loggingError) {
+            process.stderr.write(`Error in did-finish-load handler: ${error}
 `);
           }
         }
-      }), h.push(n), E.set(t.id, n), n.displayId = t.id, i(`Created new window for display ${t.id}`);
-    } catch (n) {
+      });
+      windows.push(win);
+      displayWindowMap.set(display.id, win);
+      win.displayId = display.id;
+      debugLog(`Created new window for display ${display.id}`);
+    } catch (error) {
       try {
-        i("Error handling display-added event:", n);
-      } catch {
-        process.stderr.write(`Error handling display-added event: ${n}
-`);
-      }
-    }
-  }), v.on("display-removed", (o, t) => {
-    try {
-      i("Display removed:", t);
-      const n = E.get(t.id), c = Y(t.id);
-      if (i(`Window for removed display ${t.id} was ${c ? "closed" : "not found or could not be closed"}`), !c && n && !n.isDestroyed()) {
-        i(`Forcing additional cleanup for display ${t.id}`);
-        try {
-          n.removeAllListeners(), n.hide(), n.destroy(), E.delete(t.id);
-          const a = h.indexOf(n);
-          a >= 0 && h.splice(a, 1);
-        } catch (a) {
-          i(`Error during forced cleanup for display ${t.id}:`, a);
-        }
-      }
-    } catch (n) {
-      try {
-        i("Error handling display-removed event:", n);
-      } catch {
-        process.stderr.write(`Error handling display-removed event: ${n}
+        debugLog("Error handling display-added event:", error);
+      } catch (loggingError) {
+        process.stderr.write(`Error handling display-added event: ${error}
 `);
       }
     }
   });
-  const e = v.getAllDisplays(), s = v.getPrimaryDisplay();
-  console.log("Primary display:", s), console.log("All displays:", e);
+  screen.on("display-removed", (event, display) => {
+    try {
+      debugLog("Display removed:", display);
+      const win = displayWindowMap.get(display.id);
+      const result = closeWindowForDisplay(display.id);
+      debugLog(`Window for removed display ${display.id} was ${result ? "closed" : "not found or could not be closed"}`);
+      if (!result && win && !win.isDestroyed()) {
+        debugLog(`Forcing additional cleanup for display ${display.id}`);
+        try {
+          win.removeAllListeners();
+          win.hide();
+          win.destroy();
+          displayWindowMap.delete(display.id);
+          const windowIndex = windows.indexOf(win);
+          if (windowIndex >= 0) {
+            windows.splice(windowIndex, 1);
+          }
+        } catch (cleanupError) {
+          debugLog(`Error during forced cleanup for display ${display.id}:`, cleanupError);
+        }
+      }
+    } catch (error) {
+      try {
+        debugLog("Error handling display-removed event:", error);
+      } catch (loggingError) {
+        process.stderr.write(`Error handling display-removed event: ${error}
+`);
+      }
+    }
+  });
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  console.log("Primary display:", primary);
+  console.log("All displays:", displays);
 });
+//# sourceMappingURL=main.js.map
