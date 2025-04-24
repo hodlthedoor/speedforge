@@ -29,6 +29,17 @@ export class ConfigService {
   private widgetManager: typeof WidgetManager;
   private configDirectory = '';
 
+  // Helper function to create a consistent hash from a string
+  private stringToHash(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
   constructor() {
     this.widgetManager = WidgetManager;
     // Use type assertion to prevent TypeScript errors
@@ -57,9 +68,38 @@ export class ConfigService {
         if (api.app && typeof api.app.getCurrentDisplayId === 'function') {
           api.app.getCurrentDisplayId().then((response: any) => {
             console.log('ConfigService: getCurrentDisplayId response:', response);
-            if (response.success && response.displayId) {
-              console.log(`ConfigService: Set current display ID to ${response.displayId}`);
-              this.currentDisplayId = response.displayId;
+            if (response.success) {
+              // Use the same resolution-based ID calculation as in ControlPanel
+              if (response.displayBounds) {
+                const { width, height } = response.displayBounds;
+                
+                // Round dimensions to nearest 10 pixels to account for minor OS reporting differences
+                const roundedWidth = Math.round(width / 10) * 10;
+                const roundedHeight = Math.round(height / 10) * 10;
+                
+                // Create a string-based resolution identifier
+                const resolutionId = `${roundedWidth}x${roundedHeight}`;
+                
+                // Convert to number for backward compatibility
+                const stringToHash = (str: string): number => {
+                  let hash = 0;
+                  for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32bit integer
+                  }
+                  return Math.abs(hash);
+                };
+                
+                const calculatedDisplayId = stringToHash(resolutionId);
+                
+                console.log(`ConfigService: Using resolution ID: ${resolutionId} -> ${calculatedDisplayId}`);
+                this.currentDisplayId = calculatedDisplayId;
+              } else if (response.displayId) {
+                // Fallback to system ID if display bounds not available
+                console.log(`ConfigService: Falling back to system display ID ${response.displayId}`);
+                this.currentDisplayId = response.displayId;
+              }
             }
           }).catch((err: Error) => {
             console.error('Error getting current display ID:', err);
@@ -68,9 +108,30 @@ export class ConfigService {
 
         // Listen for display ID changes
         if (typeof api.on === 'function') {
-          api.on('display:id', (displayId: number) => {
-            console.log(`ConfigService: Received display:id event, updating to ${displayId}`);
-            this.currentDisplayId = displayId;
+          api.on('display:id', (displayId: number, displayBounds?: { width: number, height: number }) => {
+            console.log(`ConfigService: Received display:id event with ID: ${displayId}`);
+            
+            // Use the same resolution-based ID calculation as before
+            if (displayBounds) {
+              const { width, height } = displayBounds;
+              
+              // Round dimensions to nearest 10 pixels to account for minor OS reporting differences
+              const roundedWidth = Math.round(width / 10) * 10;
+              const roundedHeight = Math.round(height / 10) * 10;
+              
+              // Create a string-based resolution identifier
+              const resolutionId = `${roundedWidth}x${roundedHeight}`;
+              
+              // Use the same hash function defined earlier
+              const calculatedDisplayId = this.stringToHash(resolutionId);
+              
+              console.log(`ConfigService: Using resolution ID: ${resolutionId} -> ${calculatedDisplayId}`);
+              this.currentDisplayId = calculatedDisplayId;
+            } else {
+              // Fallback to system ID if display bounds not available
+              console.log(`ConfigService: Falling back to system display ID ${displayId}`);
+              this.currentDisplayId = displayId;
+            }
           });
         }
       } catch (error) {
