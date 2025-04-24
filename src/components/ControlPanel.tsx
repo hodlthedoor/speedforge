@@ -1192,11 +1192,32 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             // Calculate a consistent display ID based on dimensions instead of using the system-provided ID
             // This ensures the ID remains the same across reboots
             if (response.displayBounds) {
-              // Calculate ID as height × width + width
+              // Get the dimensions and create a normalized resolution string
+              // that will be consistent across reboots and different systems
               const { width, height } = response.displayBounds;
-              const calculatedDisplayId = (height * width) + width;
               
-              console.log(`ControlPanel: Using calculated display ID: ${calculatedDisplayId} from dimensions ${width}x${height}`);
+              // Round dimensions to nearest 10 pixels to account for minor OS reporting differences
+              const roundedWidth = Math.round(width / 10) * 10;
+              const roundedHeight = Math.round(height / 10) * 10;
+              
+              // Create a string-based resolution identifier
+              const resolutionId = `${roundedWidth}x${roundedHeight}`;
+              
+              // Convert to number for backward compatibility if needed
+              // Using a hash function that creates consistent numeric IDs from strings
+              const stringToHash = (str: string): number => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                  const char = str.charCodeAt(i);
+                  hash = ((hash << 5) - hash) + char;
+                  hash = hash & hash; // Convert to 32bit integer
+                }
+                return Math.abs(hash);
+              };
+              
+              const calculatedDisplayId = stringToHash(resolutionId);
+              
+              console.log(`ControlPanel: Using resolution ID: ${resolutionId} -> ${calculatedDisplayId}`);
               setCurrentDisplayId(calculatedDisplayId);
               
               // Load list of saved panels for this display
@@ -1241,8 +1262,29 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         // Calculate consistent ID based on dimensions if available
         if (displayBounds) {
           const { width, height } = displayBounds;
-          const calculatedDisplayId = (height * width) + width;
-          console.log(`ControlPanel: Using calculated display ID: ${calculatedDisplayId} from dimensions ${width}x${height}`);
+          
+          // Round dimensions to nearest 10 pixels to account for minor OS reporting differences
+          const roundedWidth = Math.round(width / 10) * 10;
+          const roundedHeight = Math.round(height / 10) * 10;
+          
+          // Create a string-based resolution identifier
+          const resolutionId = `${roundedWidth}x${roundedHeight}`;
+          
+          // Convert to number for backward compatibility if needed
+          // Using a hash function that creates consistent numeric IDs from strings
+          const stringToHash = (str: string): number => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+              const char = str.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+          };
+          
+          const calculatedDisplayId = stringToHash(resolutionId);
+          
+          console.log(`ControlPanel: Using resolution ID: ${resolutionId} -> ${calculatedDisplayId}`);
           setCurrentDisplayId(calculatedDisplayId);
         } else {
           // Fallback to system ID
