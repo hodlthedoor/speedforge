@@ -65,6 +65,7 @@ pub struct TelemetryData {
     pub track_surface: String,
     pub PlayerTrackSurface: i32,  // Raw numeric value
     pub car_left_right: CarLeftRight, // Cars to left/right indicator
+    pub car_left_right_raw: i32,  // Raw numeric value for car_left_right
     
     // Engine Warnings
     pub engine_warnings: EngineWarnings,
@@ -204,6 +205,7 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         if let Ok(car_lr_val) = TryInto::<i32>::try_into(car_left_right) {
             // Store raw value
             raw_values.insert("CarLeftRight".to_string(), serde_json::json!(car_lr_val));
+            data.car_left_right_raw = car_lr_val;
             
             // Convert to our enum representation
             data.car_left_right = match car_lr_val {
@@ -516,7 +518,7 @@ pub fn format_telemetry_display(data: &TelemetryData) -> String {
         CarLeftRight::TwoCarsLeft => "Two Cars Left",
         CarLeftRight::TwoCarsRight => "Two Cars Right",
     };
-    display.push_str(&format!("Cars: {}\n", car_status));
+    display.push_str(&format!("Cars: {} ({})\n", car_status, data.car_left_right_raw));
     
     if data.shift_indicator_pct > 0.0 {
         display.push_str(&format!("Shift Indicator: {:.0}%\n", data.shift_indicator_pct));

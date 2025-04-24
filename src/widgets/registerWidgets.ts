@@ -12,6 +12,7 @@ import SpeedWidget from '../components/SpeedWidget';
 import SessionInfoWidget from '../components/SessionInfoWidget';
 import NumberWidget from '../components/NumberWidget';
 import BasicMapWidget from '../components/BasicMapWidget';
+import NearbyCarWidget from '../components/NearbyCarWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -152,6 +153,20 @@ WidgetRegistry.register('basic-map', {
   },
   description: 'Display a simple track map with car position',
   category: 'Visualization'
+});
+
+// Register Nearby Car Widget
+WidgetRegistry.register('nearby-car', {
+  component: NearbyCarWidget,
+  defaultTitle: 'Nearby Car Indicator',
+  defaultOptions: {},
+  defaultState: {
+    width: 200,
+    height: 200,
+    side: 'left'
+  },
+  description: 'Display indicator when cars are nearby on your selected side',
+  category: 'Spotter Aids'
 });
 
 export default WidgetRegistry; 
