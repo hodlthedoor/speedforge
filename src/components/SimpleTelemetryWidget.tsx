@@ -170,7 +170,7 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
         value: data[m]
       }));
       
-      console.log(`[SimpleTelemetryWidget] Checking telemetry data for newly added metrics:`, fieldsPresent);
+      // console.log(`[SimpleTelemetryWidget] Checking telemetry data for newly added metrics:`, fieldsPresent);
     }
   }, [data]);
   
