@@ -11,6 +11,7 @@ export class WebSocketService {
   private lastReceivedData: any = null;
   private url: string;
   private isWidgetWindow: boolean;
+  private connectionInProgress: boolean = false;
 
   private constructor(url: string = 'ws://localhost:8080') {
     this.url = url;
@@ -48,6 +49,14 @@ export class WebSocketService {
       return;
     }
     
+    // Prevent duplicate connection attempts
+    if (this.connectionInProgress) {
+      console.log('WebSocketService: Connection attempt already in progress, skipping');
+      return;
+    }
+    
+    this.connectionInProgress = true;
+    
     try {
       console.log('WebSocketService: Connecting to', this.url);
       this.ws = new WebSocket(this.url);
@@ -55,6 +64,7 @@ export class WebSocketService {
       this.ws.onopen = () => {
         console.log('WebSocketService: Connected');
         this.connected = true;
+        this.connectionInProgress = false;
         this.notifyConnectionListeners(true);
         
         // Broadcast connection status to widget windows
@@ -81,6 +91,7 @@ export class WebSocketService {
       this.ws.onclose = () => {
         console.log('WebSocketService: Disconnected');
         this.connected = false;
+        this.connectionInProgress = false;
         this.notifyConnectionListeners(false);
         
         // Broadcast connection status to widget windows
@@ -123,12 +134,22 @@ export class WebSocketService {
       return;
     }
     
+    // Skip if connection is already in progress
+    if (this.connectionInProgress) {
+      console.log('WebSocketService: Connection already in progress, skipping manual reconnection');
+      return;
+    }
+    
     // Close existing connection if any
     if (this.ws) {
       console.log('WebSocketService: Closing existing connection');
       // Only close if it's already in an open state
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close();
+        try {
+          this.ws.close();
+        } catch (err) {
+          console.error('WebSocketService: Error closing WebSocket:', err);
+        }
       }
       this.ws = null;
     }

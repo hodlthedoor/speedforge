@@ -1145,9 +1145,26 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   // Auto-reconnect when connection is lost
   useEffect(() => {
+    // Add a debounce to prevent rapid reconnection attempts
+    let reconnectionTimeout: number | null = null;
+    
     if (!isConnected && !reconnecting) {
-      handleReconnect();
+      if (reconnectionTimeout) {
+        clearTimeout(reconnectionTimeout);
+      }
+      
+      // Delay reconnection attempt to avoid racing conditions
+      reconnectionTimeout = window.setTimeout(() => {
+        console.log('ControlPanel: Debounced reconnection attempt');
+        handleReconnect();
+      }, 1000);
     }
+    
+    return () => {
+      if (reconnectionTimeout) {
+        clearTimeout(reconnectionTimeout);
+      }
+    };
   }, [isConnected, reconnecting, handleReconnect]);
 
   // Listen for widget click events
