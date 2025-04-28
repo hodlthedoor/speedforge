@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Widget from './Widget';
-import { TelemetryMetric } from '../hooks/useTelemetryData';
+import { useTelemetryData, formatTelemetryValue, getMetricName, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition } from '../widgets/WidgetRegistry';
 import { WidgetManager } from '../services/WidgetManager';
@@ -30,6 +30,24 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     name = 'Race Data',
     ...otherProps
   } = props;
+
+  // Use the telemetry hook to get car index data
+  const { data: telemetryData, sessionData } = useTelemetryData(id, {
+    metrics: [
+      'CarIdxPosition',
+      'CarIdxLap',
+      'CarIdxLapCompleted',
+      'CarIdxLastLapTime',
+      'CarIdxBestLapTime',
+      'CarIdxClass',
+      'CarIdxClassPosition',
+      'CarIdxGear',
+      'CarIdxRPM',
+      'CarIdxOnPitRoad',
+      'CarIdxLapDistPct',
+      selectedMetric, // Always include the currently selected metric
+    ],
+  });
 
   // Log ALL props received
   console.log(`[SimpleRaceTelemetryWidget ${id}] FULL PROPS OBJECT:`, props);
@@ -65,50 +83,185 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     console.log(`[SimpleRaceTelemetryWidget ${id}] maxItems changed to:`, maxItems);
   }, [id, maxItems]);
 
+  // Process the telemetry data to create the table rows
+  const formattedCarData = useMemo(() => {
+    if (!telemetryData || !sessionData) return [];
+
+    // Extract driver information from session data
+    const driverInfo = sessionData.drivers?.other_drivers || [];
+    const playerInfo = sessionData.drivers?.player || null;
+
+    // Get array of car indices (0 to max car index)
+    const carIndices = telemetryData[selectedMetric] 
+      ? Array.from({ length: telemetryData[selectedMetric].length }, (_, i) => i)
+      : [];
+
+    // Create a row for each car with all the relevant data
+    const carRows = carIndices.map(carIdx => {
+      // Find driver info for this car
+      const driver = driverInfo.find(d => d.car_idx === carIdx) || playerInfo;
+      const isPlayer = playerInfo && playerInfo.car_idx === carIdx;
+
+      // Create data object for this car
+      return {
+        carIdx,
+        isPlayer,
+        driverName: driver?.user_name || `Car #${carIdx}`,
+        carNumber: driver?.car_number || carIdx.toString(),
+        carClass: telemetryData.CarIdxClass?.[carIdx] || '',
+        position: telemetryData.CarIdxPosition?.[carIdx] || 999,
+        classPosition: telemetryData.CarIdxClassPosition?.[carIdx] || 999,
+        currentLap: telemetryData.CarIdxLap?.[carIdx] || 0,
+        lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
+        lastLapTime: telemetryData.CarIdxLastLapTime?.[carIdx] || 0,
+        bestLapTime: telemetryData.CarIdxBestLapTime?.[carIdx] || 0,
+        gear: telemetryData.CarIdxGear?.[carIdx] || '-',
+        rpm: telemetryData.CarIdxRPM?.[carIdx] || 0,
+        onPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx] || false,
+        trackPos: telemetryData.CarIdxLapDistPct?.[carIdx] || 0,
+        // Add the selected metric value
+        metricValue: telemetryData[selectedMetric]?.[carIdx] || 0,
+      };
+    });
+    
+    // Filter out invalid entries (position 0 or 999 usually means no car there)
+    const validCars = carRows.filter(car => car.position > 0 && car.position < 999);
+    
+    // Sort the data based on the selected sort method
+    let sortedCars = [...validCars];
+    switch (sortBy) {
+      case 'position':
+        sortedCars.sort((a, b) => a.position - b.position);
+        break;
+      case 'laptime':
+        // Sort by best lap time, but put 0 times at the end
+        sortedCars.sort((a, b) => {
+          if (a.bestLapTime === 0) return 1;
+          if (b.bestLapTime === 0) return -1;
+          return a.bestLapTime - b.bestLapTime;
+        });
+        break;
+      case 'name':
+        sortedCars.sort((a, b) => a.driverName.localeCompare(b.driverName));
+        break;
+      case 'number':
+        sortedCars.sort((a, b) => a.carNumber.localeCompare(b.carNumber));
+        break;
+      case 'class':
+        sortedCars.sort((a, b) => {
+          // First sort by class
+          const classCompare = a.carClass.localeCompare(b.carClass);
+          // Then by position within class
+          return classCompare !== 0 ? classCompare : a.classPosition - b.classPosition;
+        });
+        break;
+      case 'metric':
+        // Sort by the selected metric value
+        sortedCars.sort((a, b) => {
+          // For boolean values, true comes first
+          if (typeof a.metricValue === 'boolean') {
+            return a.metricValue === b.metricValue ? 0 : a.metricValue ? -1 : 1;
+          }
+          // For numeric values, sort numerically
+          return b.metricValue - a.metricValue;
+        });
+        break;
+    }
+    
+    // Limit to maxItems
+    return sortedCars.slice(0, maxItems);
+  }, [telemetryData, sessionData, selectedMetric, sortBy, maxItems]);
+
+  // Helper function to generate a color for car classes
+  const getClassColor = (className: string) => {
+    if (!className) return 'bg-gray-700';
+    
+    // Simple hash function to generate colors from class names
+    let hash = 0;
+    for (let i = 0; i < className.length; i++) {
+      hash = className.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Generate HSL color with consistent saturation and lightness
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 40%)`;
+  };
+
   return (
     <Widget 
       id={id} 
-      title={name || 'Race Data Controls Test'}
+      title={name || 'Race Data'}
       onClose={onClose}
       className="w-full h-full"
     >
-      <div className="w-full h-full min-h-[240px] min-w-[240px] flex flex-col items-center justify-center p-4">
-        <h2 className="text-lg font-bold mb-4 text-center">Control Values</h2>
-        
-        <div className="w-full space-y-4 bg-slate-800/50 p-4 rounded">
-          <div className="flex justify-between">
-            <span className="font-medium text-slate-300">Metric:</span>
-            <span className="font-mono text-slate-100">{selectedMetric}</span>
+      <div className="w-full h-full min-h-[240px] min-w-[240px] flex flex-col overflow-hidden p-2">
+        {telemetryData && formattedCarData.length > 0 ? (
+          <div className="w-full h-full overflow-auto scrollbar-thin">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-slate-800 text-gray-300 text-xs">
+                <tr>
+                  <th className="py-1 px-2">Pos</th>
+                  {showDetails && <th className="py-1 px-2">Car</th>}
+                  <th className="py-1 px-2">Driver</th>
+                  {highlightClass && <th className="py-1 px-2">Class</th>}
+                  {showDetails && <th className="py-1 px-2">Lap</th>}
+                  <th className="py-1 px-2">
+                    {getMetricName(selectedMetric)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {formattedCarData.map((car) => (
+                  <tr 
+                    key={car.carIdx} 
+                    className={`${car.isPlayer ? 'bg-blue-900/30' : 'hover:bg-slate-700/50'} border-b border-slate-700/50`}
+                  >
+                    <td className="py-1 px-2 font-medium">
+                      {car.position}
+                    </td>
+                    
+                    {showDetails && (
+                      <td className="py-1 px-2">
+                        {car.carNumber}
+                      </td>
+                    )}
+                    
+                    <td className="py-1 px-2">
+                      {car.driverName}
+                    </td>
+                    
+                    {highlightClass && (
+                      <td className="py-1 px-2">
+                        <span
+                          className="inline-block px-1.5 py-0.5 rounded text-white text-xs font-medium"
+                          style={{ backgroundColor: getClassColor(car.carClass) }}
+                        >
+                          {car.carClass}
+                        </span>
+                      </td>
+                    )}
+                    
+                    {showDetails && (
+                      <td className="py-1 px-2">
+                        {car.currentLap}
+                      </td>
+                    )}
+                    
+                    <td className="py-1 px-2 font-mono">
+                      {formatTelemetryValue(selectedMetric, car.metricValue)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          
-          <div className="flex justify-between">
-            <span className="font-medium text-slate-300">Sort By:</span>
-            <span className="font-mono text-slate-100">{sortBy}</span>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4">
+            <div className="text-slate-400">
+              {telemetryData ? 'No car data available' : 'Waiting for telemetry data...'}
+            </div>
           </div>
-          
-          <div className="flex justify-between">
-            <span className="font-medium text-slate-300">Show Details:</span>
-            <span className="font-mono text-slate-100">{showDetails ? 'Yes' : 'No'}</span>
-          </div>
-          
-          <div className="flex justify-between">
-            <span className="font-medium text-slate-300">Highlight Class:</span>
-            <span className="font-mono text-slate-100">{highlightClass ? 'Yes' : 'No'}</span>
-          </div>
-          
-          <div className="flex justify-between">
-            <span className="font-medium text-slate-300">Max Items:</span>
-            <span className="font-mono text-slate-100">{maxItems}</span>
-          </div>
-        </div>
-        
-        <div className="mt-6 text-sm text-slate-400 text-center">
-          This is a test widget to verify control values are passing through.
-          <br />
-          Try changing the controls in the Control Panel.
-          <br />
-          Check the browser console for detailed logs.
-        </div>
+        )}
       </div>
     </Widget>
   );
