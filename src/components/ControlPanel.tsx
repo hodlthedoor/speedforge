@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
 import BaseDraggableComponent from './BaseDraggableComponent';
 import { v4 as uuidv4 } from 'uuid';
 import WidgetRegistry, { WidgetControlType } from '../widgets/WidgetRegistry';
@@ -408,30 +408,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'select':
         return (
-          <div key={control.id} className="mt-3">
+          <div key={control.id} className="mt-3 relative">
             <label className="detail-label text-sm text-gray-300 mb-1.5 block">{control.label}:</label>
-            <div className="relative">
-              <select
-                className="w-full py-1.5 px-2 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none"
-                value={control.value}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  control.onChange(e.target.value);
-                }}
-              >
-                {control.options.map((option: any) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-            </div>
+            <SelectDropdown 
+              value={control.value}
+              options={control.options}
+              onChange={(value) => control.onChange(value)}
+            />
           </div>
         );
       
@@ -2102,6 +2085,81 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </div>
       </BaseDraggableComponent>
     </>
+  );
+};
+
+// Add this new component at the end of the file, before the export default statement
+// Define the interface for the SelectDropdown component
+interface SelectDropdownProps {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}
+
+const SelectDropdown: React.FC<SelectDropdownProps> = ({ value, options, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // Handle selection
+  const handleSelect = (selectedValue) => {
+    onChange(selectedValue);
+    setIsOpen(false);
+  };
+
+  // Find current selected label
+  const selectedOption = options.find(option => option.value === value) || options[0];
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <div
+        className="w-full py-1.5 px-2 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer flex justify-between items-center"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+      >
+        <span>{selectedOption?.label}</span>
+        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </div>
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+          {options.map((option) => (
+            <div
+              key={option.value}
+              className={`px-2 py-1.5 cursor-pointer hover:bg-gray-700 text-sm ${option.value === value ? 'bg-blue-600 text-white' : 'text-gray-200'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSelect(option.value);
+              }}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
