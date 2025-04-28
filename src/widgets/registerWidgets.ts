@@ -13,6 +13,10 @@ import SessionInfoWidget from '../components/SessionInfoWidget';
 import NumberWidget from '../components/NumberWidget';
 import BasicMapWidget from '../components/BasicMapWidget';
 import NearbyCarWidget from '../components/NearbyCarWidget';
+import CarIndexTelemetryWidget from '../components/CarIndexTelemetryWidget';
+import RacePositionWidget from '../components/RacePositionWidget';
+import TrackPositionWidget from '../components/TrackPositionWidget';
+import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -167,6 +171,66 @@ WidgetRegistry.register('nearby-car', {
   },
   description: 'Display indicator when cars are nearby on your selected side',
   category: 'Spotter Aids'
+});
+
+// Register Car Index Telemetry Widget
+WidgetRegistry.register('car-index-telemetry', {
+  component: CarIndexTelemetryWidget,
+  defaultTitle: 'Car Data',
+  defaultOptions: {},
+  defaultState: {
+    width: 250,
+    height: 180,
+    metric: 'CarIdxPosition',
+    carIndex: 0,
+    showAllCars: false
+  },
+  description: 'Display telemetry data for any car in the race',
+  category: 'Race Data'
+});
+
+// Register Race Position Widget
+WidgetRegistry.register('race-positions', {
+  component: RacePositionWidget,
+  defaultTitle: 'Race Positions',
+  defaultOptions: {},
+  defaultState: {
+    width: 300,
+    height: 400,
+    highlightPlayerCar: true,
+    maxCarsToShow: 20
+  },
+  description: 'Display race positions and gaps for all cars',
+  category: 'Race Data'
+});
+
+// Register Track Position Widget
+WidgetRegistry.register('track-positions', {
+  component: TrackPositionWidget,
+  defaultTitle: 'Track Map',
+  defaultOptions: {},
+  defaultState: {
+    width: 350,
+    height: 250
+  },
+  description: 'Visualize car positions on the track',
+  category: 'Race Data'
+});
+
+// Register Simple Race Telemetry Widget
+WidgetRegistry.register('simple-race-telemetry', {
+  component: SimpleRaceTelemetryWidget,
+  defaultTitle: 'Race Car Data',
+  defaultOptions: {
+    metric: 'CarIdxPosition',
+    maxItems: 15
+  },
+  defaultState: {
+    width: 300,
+    height: 350
+  },
+  description: 'Display telemetry data for all cars in a race',
+  category: 'Race Data'
 });
 
 export default WidgetRegistry; 

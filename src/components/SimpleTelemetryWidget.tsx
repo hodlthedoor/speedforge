@@ -88,7 +88,34 @@ const availableMetrics = [
   { id: 'shock_defl_mm_lf', name: 'LF Shock Defl (mm)' },
   { id: 'shock_defl_mm_rf', name: 'RF Shock Defl (mm)' },
   { id: 'shock_defl_mm_lr', name: 'LR Shock Defl (mm)' },
-  { id: 'shock_defl_mm_rr', name: 'RR Shock Defl (mm)' }
+  { id: 'shock_defl_mm_rr', name: 'RR Shock Defl (mm)' },
+  // Car Index metrics (arrays with data for each car)
+  { id: 'CarIdxBestLapNum', name: 'Cars Best Lap Number' },
+  { id: 'CarIdxBestLapTime', name: 'Cars Best Lap Time' },
+  { id: 'CarIdxClass', name: 'Cars Class' },
+  { id: 'CarIdxClassPosition', name: 'Cars Class Position' },
+  { id: 'CarIdxEstTime', name: 'Cars Estimated Lap Time' },
+  { id: 'CarIdxF2Time', name: 'Cars Gap Time' },
+  { id: 'CarIdxFastRepairsUsed', name: 'Cars Fast Repairs Used' },
+  { id: 'CarIdxGear', name: 'Cars Current Gear' },
+  { id: 'CarIdxLap', name: 'Cars Current Lap' },
+  { id: 'CarIdxLapCompleted', name: 'Cars Last Completed Lap' },
+  { id: 'CarIdxLapDistPct', name: 'Cars Track Position %' },
+  { id: 'CarIdxLastLapTime', name: 'Cars Last Lap Time' },
+  { id: 'CarIdxOnPitRoad', name: 'Cars On Pit Road' },
+  { id: 'CarIdxP2P_Count', name: 'Cars Push-to-Pass Left' },
+  { id: 'CarIdxP2P_Status', name: 'Cars Push-to-Pass Active' },
+  { id: 'CarIdxPaceFlags', name: 'Cars Pace Flags' },
+  { id: 'CarIdxPaceLine', name: 'Cars Pace Line' },
+  { id: 'CarIdxPaceRow', name: 'Cars Pace Row' },
+  { id: 'CarIdxPosition', name: 'Cars Overall Position' },
+  { id: 'CarIdxQualTireCompound', name: 'Cars Qualifying Tire' },
+  { id: 'CarIdxQualTireCompoundLocked', name: 'Cars Qual Tire Locked' },
+  { id: 'CarIdxRPM', name: 'Cars RPM' },
+  { id: 'CarIdxSteer', name: 'Cars Steering Angle' },
+  { id: 'CarIdxTireCompound', name: 'Cars Tire Compound' },
+  { id: 'CarIdxTrackSurface', name: 'Cars Track Surface' },
+  { id: 'CarIdxTrackSurfaceMaterial', name: 'Cars Surface Material' }
 ];
 
 export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({ 
@@ -146,6 +173,9 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
       transformed.shock_defl_mm_lr = data.shock_defl_mm[2];
       transformed.shock_defl_mm_rr = data.shock_defl_mm[3];
     }
+    
+    // For Car Index arrays, preserve the full arrays - don't extract just the player's car
+    // These will be used by race widgets that need data for all cars
     
     return transformed;
   }, [data]);

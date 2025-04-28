@@ -171,7 +171,35 @@ export type TelemetryMetric =
   | 'weekend_info'
   
   // Session info
-  | 'session_info';
+  | 'session_info'
+  
+  // Car Index metrics (arrays with data for each car)
+  | 'CarIdxBestLapNum'
+  | 'CarIdxBestLapTime'
+  | 'CarIdxClass'
+  | 'CarIdxClassPosition'
+  | 'CarIdxEstTime'
+  | 'CarIdxF2Time'
+  | 'CarIdxFastRepairsUsed'
+  | 'CarIdxGear'
+  | 'CarIdxLap'
+  | 'CarIdxLapCompleted'
+  | 'CarIdxLapDistPct'
+  | 'CarIdxLastLapTime'
+  | 'CarIdxOnPitRoad'
+  | 'CarIdxP2P_Count'
+  | 'CarIdxP2P_Status'
+  | 'CarIdxPaceFlags'
+  | 'CarIdxPaceLine'
+  | 'CarIdxPaceRow'
+  | 'CarIdxPosition'
+  | 'CarIdxQualTireCompound'
+  | 'CarIdxQualTireCompoundLocked'
+  | 'CarIdxRPM'
+  | 'CarIdxSteer'
+  | 'CarIdxTireCompound'
+  | 'CarIdxTrackSurface'
+  | 'CarIdxTrackSurfaceMaterial';
 
 interface UseTelemetryDataOptions {
   metrics?: TelemetryMetric[];
@@ -460,6 +488,7 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'speed_mph':
       return `${value.toFixed(1)} mph`;
     case 'rpm':
+    case 'CarIdxRPM':
       return `${value.toFixed(0)} RPM`;
     case 'throttle_pct':
     case 'brake_pct':
@@ -471,11 +500,16 @@ export function formatTelemetryValue(metric: string, value: any): string {
       return `${value.toFixed(1)}%`;
     case 'gear':
     case 'gear_num':
+    case 'CarIdxGear':
       return String(value);
     case 'car_left_right':
       return formatCarLeftRight(value);
     case 'skies':
     case 'track_surface':
+    case 'CarIdxTrackSurface':
+    case 'CarIdxTrackSurfaceMaterial':
+    case 'CarIdxTireCompound':
+    case 'CarIdxQualTireCompound':
       return String(value);
     case 'g_force_lat':
     case 'g_force_lon':
@@ -483,6 +517,10 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'current_lap_time':
     case 'last_lap_time':
     case 'best_lap_time':
+    case 'CarIdxLastLapTime':
+    case 'CarIdxBestLapTime':
+    case 'CarIdxEstTime':
+    case 'CarIdxF2Time':
       // Format time as mm:ss.ms
       const minutes = Math.floor(value / 60);
       const seconds = value % 60;
@@ -495,13 +533,28 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'lap_completed':
     case 'incident_count':
     case 'session_flags':
+    case 'CarIdxPosition':
+    case 'CarIdxLap':
+    case 'CarIdxLapCompleted':
+    case 'CarIdxBestLapNum':
+    case 'CarIdxClass':
+    case 'CarIdxClassPosition':
+    case 'CarIdxFastRepairsUsed':
+    case 'CarIdxP2P_Count':
+    case 'CarIdxPaceRow':
+    case 'CarIdxPaceLine':
       return `${value}`;
+    case 'CarIdxP2P_Status':
+    case 'CarIdxQualTireCompoundLocked':
+    case 'CarIdxOnPitRoad':
+      return value ? 'Yes' : 'No';
     case 'lat':
     case 'lon':
       return `${value.toFixed(6)}`;
     case 'lap_dist':
       return `${value.toFixed(1)}m`;
     case 'lap_dist_pct':
+    case 'CarIdxLapDistPct':
       return `${(value * 100).toFixed(1)}%`;
     case 'lateral_accel_ms2':
     case 'longitudinal_accel_ms2':
@@ -516,6 +569,7 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'yaw_rate_deg_s':
     case 'steering_angle_deg':
     case 'car_slip_angle_deg':
+    case 'CarIdxSteer':
       return `${value.toFixed(1)}°`;
     case 'wind_dir_rad':
       // Convert radians to degrees for display
@@ -561,6 +615,10 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'opt_repair_sec':
       return `${value.toFixed(1)}s`;
     default:
+      // For any CarIdx metrics not specially handled above
+      if (metric.startsWith('CarIdx')) {
+        return `${value}`;
+      }
       return `${value}`;
   }
 }
@@ -634,6 +692,34 @@ export function getMetricName(metric: string): string {
     'wind_dir_rad': 'Wind Direction',
     'skies': 'Skies',
     'weekend_info': 'Weekend Info',
+    
+    // Car Index metrics
+    'CarIdxBestLapNum': 'Best Lap Number',
+    'CarIdxBestLapTime': 'Best Lap Time',
+    'CarIdxClass': 'Car Class',
+    'CarIdxClassPosition': 'Class Position',
+    'CarIdxEstTime': 'Estimated Lap Time',
+    'CarIdxF2Time': 'Gap Time',
+    'CarIdxFastRepairsUsed': 'Fast Repairs Used',
+    'CarIdxGear': 'Current Gear',
+    'CarIdxLap': 'Current Lap',
+    'CarIdxLapCompleted': 'Last Completed Lap',
+    'CarIdxLapDistPct': 'Track Position %',
+    'CarIdxLastLapTime': 'Last Lap Time',
+    'CarIdxOnPitRoad': 'On Pit Road',
+    'CarIdxP2P_Count': 'Push-to-Pass Left',
+    'CarIdxP2P_Status': 'Push-to-Pass Active',
+    'CarIdxPaceFlags': 'Pace Flags',
+    'CarIdxPaceLine': 'Pace Line',
+    'CarIdxPaceRow': 'Pace Row',
+    'CarIdxPosition': 'Overall Position',
+    'CarIdxQualTireCompound': 'Qualifying Tire',
+    'CarIdxQualTireCompoundLocked': 'Qual Tire Locked',
+    'CarIdxRPM': 'RPM',
+    'CarIdxSteer': 'Steering Angle',
+    'CarIdxTireCompound': 'Tire Compound',
+    'CarIdxTrackSurface': 'Track Surface',
+    'CarIdxTrackSurfaceMaterial': 'Surface Material'
   };
   
   return metricNames[metric] || metric;

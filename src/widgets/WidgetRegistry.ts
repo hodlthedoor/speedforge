@@ -110,4 +110,5 @@ class WidgetRegistryClass {
 export const WidgetRegistry = new WidgetRegistryClass();
 
 // Export the registry
-export default WidgetRegistry; 
+export default WidgetRegistry;
+
