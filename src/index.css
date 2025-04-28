@@ -126,6 +126,18 @@ h1 {
   display: none;
 }
 
+/* Ensure proper spacing in widget controls */
+.widget-controls-spacing > div {
+  margin-top: 0 !important; /* Reset any conflicting margins */
+  margin-bottom: 0 !important;
+}
+
+.widget-controls-spacing {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 20px !important; /* Force spacing between controls */
+}
+
 /* Utility for animation */
 @keyframes widget-pulse {
   0% { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3); }

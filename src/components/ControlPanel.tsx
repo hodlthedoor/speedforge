@@ -408,8 +408,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'select':
         return (
-          <div key={control.id} className="mt-5 relative">
-            <label className="detail-label text-sm text-gray-300 mb-2.5 block">{control.label}:</label>
+          <div key={control.id} style={{ marginTop: '16px', position: 'relative' }}>
+            <label style={{ fontSize: '0.875rem', color: '#d1d5db', marginBottom: '10px', display: 'block' }}>{control.label}:</label>
             <SelectDropdown 
               value={control.value}
               options={control.options}
@@ -420,14 +420,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       
       case 'slider':
         return (
-          <div key={control.id} className="mt-5">
-            <div className="flex justify-between items-center mb-2.5">
-              <label className="detail-label text-sm text-gray-300">{control.label}</label>
-              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
+          <div key={control.id} style={{ marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <label style={{ fontSize: '0.875rem', color: '#d1d5db' }}>{control.label}</label>
+              <span style={{ fontSize: '0.75rem', padding: '2px 8px', backgroundColor: 'rgba(55, 65, 81, 1)', borderRadius: '9999px', color: '#d1d5db' }}>
                 {control.value || 100}
               </span>
             </div>
-            <div className="pl-0 mt-2">
+            <div style={{ paddingLeft: '0', marginTop: '8px' }}>
               <input
                 type="range"
                 min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
@@ -439,14 +439,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
                   control.onChange(numericValue);
                 }}
-                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                style={{ 
+                  width: '100%', 
+                  height: '8px', 
+                  backgroundColor: 'rgba(75, 85, 99, 1)', 
+                  borderRadius: '8px', 
+                  appearance: 'none', 
+                  cursor: 'pointer',
+                  accentColor: '#3b82f6'
+                }}
               />
               {control.options && control.options.length > 0 && (
-                <div className="flex justify-between text-xs text-gray-400 mt-2">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af', marginTop: '8px' }}>
                   {control.options.map((option: any) => (
                     <span 
                       key={option.value} 
-                      className="cursor-pointer hover:text-blue-300 transition-colors" 
+                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                      onMouseOver={(e) => (e.target as HTMLElement).style.color = '#93c5fd'}
+                      onMouseOut={(e) => (e.target as HTMLElement).style.color = '#9ca3af'}
                       onClick={() => control.onChange(Number(option.value))}
                     >
                       {option.label}
@@ -460,19 +470,38 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'toggle':
         return (
-          <div key={control.id} className="mt-5 flex items-center justify-between">
-            <label className="detail-label text-sm text-gray-300">{control.label}</label>
+          <div key={control.id} style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label style={{ fontSize: '0.875rem', color: '#d1d5db' }}>{control.label}</label>
             <div
-              className={`relative inline-flex items-center w-11 h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${
-                control.value ? 'bg-blue-600' : 'bg-gray-700'
-              }`}
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                width: '2.75rem',
+                height: '1.5rem',
+                borderRadius: '9999px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s',
+                backgroundColor: control.value ? 'rgb(37, 99, 235)' : 'rgb(55, 65, 81)'
+              }}
               onClick={() => control.onChange(!control.value)}
             >
-              <span className="sr-only">Toggle {control.label}</span>
+              <span style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', borderWidth: '0' }}>
+                Toggle {control.label}
+              </span>
               <div
-                className={`absolute left-0.5 inline-block w-5 h-5 transform rounded-full bg-white shadow transition-transform duration-200 ease-in-out ${
-                  control.value ? 'translate-x-5' : 'translate-x-0'
-                }`}
+                style={{
+                  position: 'absolute',
+                  left: '0.125rem',
+                  display: 'inline-block',
+                  width: '1.25rem',
+                  height: '1.25rem',
+                  transform: control.value ? 'translateX(1.25rem)' : 'translateX(0)',
+                  borderRadius: '9999px',
+                  backgroundColor: 'white',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                  transition: 'transform 0.2s'
+                }}
               />
             </div>
           </div>
@@ -891,7 +920,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   backgroundColor: 'rgba(30, 41, 59, 0.6)', 
                   borderRadius: '8px'
                 }}>
-                  {renderedWidgetControls}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} className="widget-controls-spacing">
+                    {renderedWidgetControls}
+                  </div>
                 </div>
               </div>
             )}
