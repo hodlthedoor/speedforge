@@ -241,6 +241,58 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         }
     }
     
+    // Extract CarIdx (Car Index) fields - These are arrays with data for all cars
+    let car_idx_fields = [
+        "CarIdxPosition", "CarIdxLapDistPct", "CarIdxLap", "CarIdxLapCompleted",
+        "CarIdxF2Time", "CarIdxClassPosition", "CarIdxClass", "CarIdxGear",
+        "CarIdxRPM", "CarIdxOnPitRoad", "CarIdxP2P_Count", "CarIdxP2P_Status",
+        "CarIdxBestLapNum", "CarIdxBestLapTime", "CarIdxEstTime", "CarIdxFastRepairsUsed",
+        "CarIdxPaceFlags", "CarIdxPaceLine", "CarIdxPaceRow", "CarIdxQualTireCompound",
+        "CarIdxQualTireCompoundLocked", "CarIdxSteer", "CarIdxTireCompound",
+        "CarIdxTrackSurface", "CarIdxTrackSurfaceMaterial"
+    ];
+    
+    // Process each CarIdx field
+    for field_name in car_idx_fields.iter() {
+        if let Ok(value) = telem.get(field_name) {
+            match value {
+                Value::IntVec(values) => {
+                    // Only include fields with actual data (non-empty arrays)
+                    if !values.is_empty() {
+                        // Convert Vec<i32> to JSON array
+                        let json_array: Vec<i32> = values.clone();
+                        raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
+                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                    }
+                },
+                Value::FloatVec(values) => {
+                    // Only include fields with actual data (non-empty arrays)
+                    if !values.is_empty() {
+                        // Convert Vec<f32> to JSON array 
+                        let json_array: Vec<f32> = values.clone();
+                        raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
+                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                    }
+                },
+                Value::BoolVec(values) => {
+                    // Only include fields with actual data (non-empty arrays)
+                    if !values.is_empty() {
+                        // Convert Vec<bool> to JSON array
+                        let json_array: Vec<bool> = values.clone();
+                        raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
+                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                    }
+                },
+                _ => {
+                    // For non-array values, try processing them individually
+                    println!("[DEBUG] {} is not an array type: {:?}", field_name, value);
+                    // Add the raw value to the map
+                    raw_values.insert(field_name.to_string(), telemetry_value_to_json(value.clone()));
+                }
+            }
+        }
+    }
+    
     // RPM
     if let Ok(rpm) = telem.get("RPM") {
         if let Ok(rpm_val) = TryInto::<f32>::try_into(rpm) {

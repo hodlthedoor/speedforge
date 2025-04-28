@@ -148,6 +148,44 @@ impl TelemetryWebSocketServer {
             }
         }
         
+        // DEBUG: Check the data for CarIdx fields
+        static mut CAR_IDX_LOGGING_COOLDOWN: u64 = 0;
+        unsafe {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+                
+            if now - CAR_IDX_LOGGING_COOLDOWN > 10 {  // Log every 10 seconds
+                CAR_IDX_LOGGING_COOLDOWN = now;
+                
+                if let Some(obj) = data.as_object() {
+                    println!("\n[{}] WebSocket Data CarIdx Fields:", get_timestamp());
+                    let mut car_idx_exists = false;
+                    
+                    // Check for CarIdx keys
+                    for key in obj.keys() {
+                        if key.starts_with("CarIdx") {
+                            car_idx_exists = true;
+                            if let Some(array) = obj[key].as_array() {
+                                println!("  {} has {} items", key, array.len());
+                                if !array.is_empty() {
+                                    // Print an example value
+                                    println!("  Example value: {:?}", array[0]);
+                                }
+                            } else {
+                                println!("  {} is not an array", key);
+                            }
+                        }
+                    }
+                    
+                    if !car_idx_exists {
+                        println!("  No CarIdx fields found in telemetry data!");
+                    }
+                }
+            }
+        }
+        
         // Convert telemetry data to JSON string outside the lock
         let json_str = serde_json::to_string(data)?;
         let message = Message::Text(json_str);
