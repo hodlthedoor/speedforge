@@ -56,13 +56,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     ...otherProps
   } = props;
 
+  // Ensure we have a valid selectedColumns array
+  const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
+  
   // Reference to track width changes
   const widgetWidthRef = useRef<number>(widgetWidth);
   
   // Keep ref in sync with width prop
   useEffect(() => {
     widgetWidthRef.current = widgetWidth;
-    console.log(`[SimpleRaceTelemetryWidget ${id}] Width updated to: ${widgetWidth}px`);
   }, [id, widgetWidth]);
 
   // Use the telemetry hook to get car index data
@@ -83,36 +85,25 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     ],
   });
 
-  // Log ALL props received
-  console.log(`[SimpleRaceTelemetryWidget ${id}] FULL PROPS OBJECT:`, props);
-  
-  // Log props when component renders
-  console.log(`[SimpleRaceTelemetryWidget ${id}] Rendering with props:`, {
-    selectedMetric,
-    sortBy,
-    showDetails,
-    highlightClass,
-    maxItems,
-    name,
-    widgetWidth,
-    fontSize,
-    selectedColumns
+  // Log only the most important props - focused on columns
+  console.log(`[SimpleRaceTelemetryWidget] Rendering with columns:`, {
+    columnsSelected: actualColumns, 
+    columnCount: actualColumns.length
   });
   
-
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] fontSize changed to:`, fontSize);
-  }, [id, fontSize]);
-
   // Process the telemetry data to create the table rows
   const formattedCarData = useMemo(() => {
     if (!telemetryData || !sessionData) return [];
 
-    // Debug: Log session data to inspect available driver information
-    console.log('SESSION DATA:', sessionData);
-    console.log('DRIVERS INFO:', sessionData.drivers);
-    console.log('PLAYER INFO:', sessionData.drivers?.player);
-    console.log('OTHER DRIVERS:', sessionData.drivers?.other_drivers);
+    // Only log session data the first time
+    if (process.env.NODE_ENV === 'development' && !formattedCarData.length) {
+      console.log('SESSION DATA (abbreviated):', {
+        hasWeekend: !!sessionData.weekend,
+        hasSession: !!sessionData.session,
+        hasDrivers: !!sessionData.drivers, 
+        driverCount: sessionData.drivers?.other_drivers?.length
+      });
+    }
 
     // Extract driver information from session data
     // All drivers are in the other_drivers array
@@ -254,34 +245,34 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             <table className="w-full text-left table-fixed">
               <thead className="sticky top-0 bg-slate-800 text-gray-300">
                 <tr className="text-xs md:text-sm">
-                  {selectedColumns.includes('position') && (
+                  {actualColumns.includes('position') && (
                     <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Pos</th>
                   )}
-                  {showDetails && selectedColumns.includes('carNumber') && (
+                  {showDetails && actualColumns.includes('carNumber') && (
                     <th className="py-2 px-3 w-[50px] md:w-[60px] font-semibold">Car</th>
                   )}
-                  {showDetails && selectedColumns.includes('teamName') && (
+                  {showDetails && actualColumns.includes('teamName') && (
                     <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Team</th>
                   )}
-                  {selectedColumns.includes('driverName') && (
+                  {actualColumns.includes('driverName') && (
                     <th className="py-2 px-3 w-[25%] min-w-[100px] font-semibold">Driver</th>
                   )}
-                  {highlightClass && selectedColumns.includes('carClass') && (
+                  {highlightClass && actualColumns.includes('carClass') && (
                     <th className="py-2 px-3 w-[80px] md:w-[90px] font-semibold">Class</th>
                   )}
-                  {showDetails && selectedColumns.includes('currentLap') && (
+                  {showDetails && actualColumns.includes('currentLap') && (
                     <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Lap</th>
                   )}
-                  {showDetails && selectedColumns.includes('iRating') && (
+                  {showDetails && actualColumns.includes('iRating') && (
                     <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">iRating</th>
                   )}
-                  {showDetails && selectedColumns.includes('license') && (
+                  {showDetails && actualColumns.includes('license') && (
                     <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">License</th>
                   )}
-                  {showDetails && selectedColumns.includes('incidents') && (
+                  {showDetails && actualColumns.includes('incidents') && (
                     <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Inc</th>
                   )}
-                  {selectedColumns.includes('metricValue') && (
+                  {actualColumns.includes('metricValue') && (
                     <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">
                       {getMetricName(selectedMetric)}
                     </th>
@@ -294,31 +285,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     key={car.carIdx} 
                     className={`${car.isPlayer ? 'bg-blue-900/50' : 'hover:bg-slate-700/60'} border-b border-slate-700/50 text-ellipsis`}
                   >
-                    {selectedColumns.includes('position') && (
+                    {actualColumns.includes('position') && (
                       <td className="py-2 px-3 font-medium">
                         {car.position}
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('carNumber') && (
+                    {showDetails && actualColumns.includes('carNumber') && (
                       <td className="py-2 px-3">
                         {car.carNumber}
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('teamName') && (
+                    {showDetails && actualColumns.includes('teamName') && (
                       <td className="py-2 px-3 truncate" title={car.teamName}>
                         {car.teamName || '-'}
                       </td>
                     )}
                     
-                    {selectedColumns.includes('driverName') && (
+                    {actualColumns.includes('driverName') && (
                       <td className="py-2 px-3 truncate" title={car.driverName}>
                         {car.driverName}
                       </td>
                     )}
                     
-                    {highlightClass && selectedColumns.includes('carClass') && (
+                    {highlightClass && actualColumns.includes('carClass') && (
                       <td className="py-2 px-3">
                         <span
                           className="inline-block px-2 py-1 rounded text-white text-xs font-medium text-center"
@@ -329,31 +320,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('currentLap') && (
+                    {showDetails && actualColumns.includes('currentLap') && (
                       <td className="py-2 px-3 text-center">
                         {car.currentLap}
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('iRating') && (
+                    {showDetails && actualColumns.includes('iRating') && (
                       <td className="py-2 px-3 text-right">
                         {car.iRating || '-'}
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('license') && (
+                    {showDetails && actualColumns.includes('license') && (
                       <td className="py-2 px-3 text-center">
                         {car.license || '-'}
                       </td>
                     )}
                     
-                    {showDetails && selectedColumns.includes('incidents') && (
+                    {showDetails && actualColumns.includes('incidents') && (
                       <td className="py-2 px-3 text-center">
                         {car.incidents !== undefined ? car.incidents : '-'}
                       </td>
                     )}
                     
-                    {selectedColumns.includes('metricValue') && (
+                    {actualColumns.includes('metricValue') && (
                       <td className="py-2 px-3 font-mono">
                         {formatTelemetryValue(selectedMetric, car.metricValue)}
                       </td>
@@ -391,11 +382,12 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
   
   // Subscribe to widget state updates
   useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidgetComponent] Setting up subscription for widget ${id}`);
-    
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
-        console.log(`[SimpleRaceTelemetryWidgetComponent] Received state update for widget ${id}:`, event.state);
+        // Only log when selectedColumns change
+        if (event.state.selectedColumns !== undefined) {
+          console.log(`[SimpleRaceTelemetryWidget] Column selection updated:`, event.state.selectedColumns);
+        }
         
         // Update width if it changed
         if (event.state.widgetWidth !== undefined) {
@@ -408,7 +400,6 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     });
     
     return () => {
-      console.log(`[SimpleRaceTelemetryWidgetComponent] Cleaning up subscription for widget ${id}`);
       unsubscribe();
     };
   }, [id]);
@@ -417,8 +408,12 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
   const currentWidget = WidgetManager.getWidget(id);
   const currentState = currentWidget?.state || initialState;
   
-  console.log(`[SimpleRaceTelemetryWidgetComponent] Rendering widget ${id} with state:`, currentState);
-  console.log(`[SimpleRaceTelemetryWidgetComponent] State version: ${stateVersion}`);
+  // Only log column-related information
+  console.log(`[SimpleRaceTelemetryWidget] Column selection status:`, {
+    propsColumns: props.selectedColumns,
+    stateColumns: currentState.selectedColumns,
+    willUse: props.selectedColumns || currentState.selectedColumns || DEFAULT_COLUMNS
+  });
   
   // Combine props with current widget state
   const combinedProps = {
@@ -430,7 +425,7 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     maxItems: currentState.maxItems,
     widgetWidth: widgetWidth,
     fontSize: currentState.fontSize,
-    selectedColumns: currentState.selectedColumns
+    selectedColumns: props.selectedColumns || currentState.selectedColumns || DEFAULT_COLUMNS
   };
   
   return <SimpleRaceTelemetryWidgetInternal {...combinedProps} />;
@@ -438,15 +433,21 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
 
 // Create the control definitions for the widget
 const getControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
-  console.log('SimpleRaceTelemetryWidget getControls called with state:', widgetState);
+  // Only log column-related state
+  if (widgetState.selectedColumns) {
+    console.log('[SimpleRaceTelemetryWidget] getControls received selectedColumns:', widgetState.selectedColumns);
+  }
   
   // Get the current width (or use default)
   const widgetWidth = widgetState.widgetWidth || 600;
   
   const onChange = (id: string, value: any) => {
-    console.log(`[SimpleRaceTelemetryWidget Controls] Changing ${id} to:`, value);
+    // Only log column-related changes
+    if (id === 'selectedColumns') {
+      console.log(`[SimpleRaceTelemetryWidget] Columns selection onChange:`, value);
+    }
+    
     const update = { [id]: value };
-    console.log(`[SimpleRaceTelemetryWidget Controls] Updating widget with:`, update);
     updateWidget(update);
   };
   
@@ -464,7 +465,6 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
       ],
       onChange: (value) => {
         const newWidth = Number(value);
-        console.log(`[SimpleRaceTelemetryWidget] Width changed to ${newWidth}px`);
         
         // Directly update the widget state using WidgetManager
         WidgetManager.updateWidgetState(widgetState.id, { 
@@ -571,7 +571,21 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
       label: 'Display Columns',
       value: widgetState.selectedColumns || DEFAULT_COLUMNS,
       options: AVAILABLE_COLUMNS,
-      onChange: (value) => onChange('selectedColumns', value)
+      onChange: (value) => {
+        console.log(`[SimpleRaceTelemetryWidget] Column selection changing from:`, widgetState.selectedColumns);
+        console.log(`[SimpleRaceTelemetryWidget] Column selection changing to:`, value);
+        
+        // Make sure we have a valid array even if undefined is passed
+        const columnValues = Array.isArray(value) ? value : DEFAULT_COLUMNS;
+        
+        // Directly update the widget state using WidgetManager
+        WidgetManager.updateWidgetState(widgetState.id, { 
+          selectedColumns: columnValues
+        });
+        
+        // Also update through the control mechanism
+        updateWidget({ selectedColumns: columnValues });
+      }
     }
   ];
 };
