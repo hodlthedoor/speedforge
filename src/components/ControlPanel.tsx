@@ -408,8 +408,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'select':
         return (
-          <div key={control.id} style={{ marginTop: '16px', position: 'relative' }}>
-            <label style={{ fontSize: '0.875rem', color: '#d1d5db', marginBottom: '10px', display: 'block' }}>{control.label}:</label>
+          <div key={control.id} className="mt-5 relative">
+            <label className="detail-label text-sm text-gray-300 mb-2.5 block">{control.label}:</label>
             <SelectDropdown 
               value={control.value}
               options={control.options}
@@ -417,17 +417,30 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             />
           </div>
         );
+        
+      case 'multi-select':
+        return (
+          <div key={control.id} className="mt-5 relative">
+            <label className="detail-label text-sm text-gray-300 mb-2.5 block">{control.label}:</label>
+            <MultiSelectDropdown 
+              options={control.options}
+              selectedValues={control.value || []}
+              onChange={(values) => control.onChange(values)}
+              label={control.label}
+            />
+          </div>
+        );
       
       case 'slider':
         return (
-          <div key={control.id} style={{ marginTop: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <label style={{ fontSize: '0.875rem', color: '#d1d5db' }}>{control.label}</label>
-              <span style={{ fontSize: '0.75rem', padding: '2px 8px', backgroundColor: 'rgba(55, 65, 81, 1)', borderRadius: '9999px', color: '#d1d5db' }}>
+          <div key={control.id} className="mt-5">
+            <div className="flex justify-between items-center mb-2.5">
+              <label className="detail-label text-sm text-gray-300">{control.label}</label>
+              <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
                 {control.value || 100}
               </span>
             </div>
-            <div style={{ paddingLeft: '0', marginTop: '8px' }}>
+            <div className="pl-0 mt-2">
               <input
                 type="range"
                 min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
@@ -439,24 +452,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   console.log(`Slider value changed to: ${numericValue} for control ${control.id}`);
                   control.onChange(numericValue);
                 }}
-                style={{ 
-                  width: '100%', 
-                  height: '8px', 
-                  backgroundColor: 'rgba(75, 85, 99, 1)', 
-                  borderRadius: '8px', 
-                  appearance: 'none', 
-                  cursor: 'pointer',
-                  accentColor: '#3b82f6'
-                }}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
               {control.options && control.options.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af', marginTop: '8px' }}>
+                <div className="flex justify-between text-xs text-gray-400 mt-2">
                   {control.options.map((option: any) => (
                     <span 
                       key={option.value} 
-                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
-                      onMouseOver={(e) => (e.target as HTMLElement).style.color = '#93c5fd'}
-                      onMouseOut={(e) => (e.target as HTMLElement).style.color = '#9ca3af'}
+                      className="cursor-pointer hover:text-blue-300 transition-colors" 
                       onClick={() => control.onChange(Number(option.value))}
                     >
                       {option.label}
@@ -2186,6 +2189,129 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({ value, options, onChang
               }}
             >
               {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Add this new component at the end of the file, before the export default statement
+// Define the interface for the MultiSelectDropdown component
+interface MultiSelectOption {
+  value: string;
+  label: string;
+}
+
+interface MultiSelectDropdownProps {
+  options: MultiSelectOption[];
+  selectedValues: string[];
+  onChange: (selected: string[]) => void;
+  label: string;
+}
+
+const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, selectedValues, onChange, label }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // Toggle selection of an option
+  const toggleOption = (value: string) => {
+    const newSelected = selectedValues.includes(value)
+      ? selectedValues.filter(v => v !== value)
+      : [...selectedValues, value];
+    
+    onChange(newSelected);
+  };
+
+  // Get summary text for the selected options
+  const getSummaryText = () => {
+    if (selectedValues.length === 0) {
+      return 'Select columns';
+    } else if (selectedValues.length === options.length) {
+      return 'All columns';
+    } else {
+      return `${selectedValues.length} column(s)`;
+    }
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <div
+        className="w-full py-2 px-3 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer flex justify-between items-center"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+      >
+        <span>{getSummaryText()}</span>
+        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </div>
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+          <div className="p-2 border-b border-gray-700">
+            <div className="flex justify-between">
+              <button 
+                className="text-xs text-blue-400 hover:text-blue-300" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(options.map(opt => opt.value));
+                }}
+              >
+                Select All
+              </button>
+              <button 
+                className="text-xs text-blue-400 hover:text-blue-300" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange([]);
+                }}
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+          
+          {options.map((option) => (
+            <div
+              key={option.value}
+              className="px-3 py-2 cursor-pointer hover:bg-gray-700 text-sm flex items-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleOption(option.value);
+              }}
+            >
+              <input 
+                type="checkbox" 
+                checked={selectedValues.includes(option.value)} 
+                onChange={() => {}} // Handled by div click
+                className="mr-2"
+              />
+              <span className={selectedValues.includes(option.value) ? 'text-white' : 'text-gray-300'}>
+                {option.label}
+              </span>
             </div>
           ))}
         </div>

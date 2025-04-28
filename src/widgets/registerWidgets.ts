@@ -232,7 +232,8 @@ WidgetRegistry.register('simple-race-telemetry', {
     highlightClass: true,
     maxItems: 10,
     name: 'Race Telemetry',
-    fontSize: 'text-sm'
+    fontSize: 'text-sm',
+    selectedColumns: ['position', 'driverName', 'carClass', 'currentLap', 'metricValue']
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'

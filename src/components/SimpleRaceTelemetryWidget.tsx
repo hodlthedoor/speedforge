@@ -17,7 +17,27 @@ interface SimpleRaceTelemetryWidgetProps {
   name?: string;
   widgetWidth?: number;
   fontSize?: 'text-xs' | 'text-sm' | 'text-base' | 'text-lg';
+  selectedColumns?: string[]; // New property for column selection
 }
+
+// Define available columns
+const AVAILABLE_COLUMNS = [
+  { value: 'position', label: 'Position' },
+  { value: 'carNumber', label: 'Car #' },
+  { value: 'driverName', label: 'Driver' },
+  { value: 'teamName', label: 'Team' },
+  { value: 'carClass', label: 'Class' },
+  { value: 'currentLap', label: 'Lap' },
+  { value: 'iRating', label: 'iRating' },
+  { value: 'license', label: 'License' },
+  { value: 'incidents', label: 'Incidents' },
+  { value: 'lastLapTime', label: 'Last Lap' },
+  { value: 'bestLapTime', label: 'Best Lap' },
+  { value: 'metricValue', label: 'Current Metric' }
+];
+
+// Default columns to show
+const DEFAULT_COLUMNS = ['position', 'driverName', 'carClass', 'currentLap', 'metricValue'];
 
 // Internal component that uses state from widget manager
 const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
@@ -32,6 +52,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     name = 'Race Data',
     widgetWidth = 600,
     fontSize = 'text-sm',
+    selectedColumns = DEFAULT_COLUMNS,
     ...otherProps
   } = props;
 
@@ -74,7 +95,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     maxItems,
     name,
     widgetWidth,
-    fontSize
+    fontSize,
+    selectedColumns
   });
   
 
@@ -232,26 +254,38 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             <table className="w-full text-left table-fixed">
               <thead className="sticky top-0 bg-slate-800 text-gray-300">
                 <tr className="text-xs md:text-sm">
-                  <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Pos</th>
-                  {showDetails && (
-                    <>
-                      <th className="py-2 px-3 w-[50px] md:w-[60px] font-semibold">Car</th>
-                      <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Team</th>
-                    </>
+                  {selectedColumns.includes('position') && (
+                    <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Pos</th>
                   )}
-                  <th className="py-2 px-3 w-[25%] min-w-[100px] font-semibold">Driver</th>
-                  {highlightClass && <th className="py-2 px-3 w-[80px] md:w-[90px] font-semibold">Class</th>}
-                  {showDetails && (
-                    <>
-                      <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Lap</th>
-                      <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">iRating</th>
-                      <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">License</th>
-                      <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Inc</th>
-                    </>
+                  {showDetails && selectedColumns.includes('carNumber') && (
+                    <th className="py-2 px-3 w-[50px] md:w-[60px] font-semibold">Car</th>
                   )}
-                  <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">
-                    {getMetricName(selectedMetric)}
-                  </th>
+                  {showDetails && selectedColumns.includes('teamName') && (
+                    <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Team</th>
+                  )}
+                  {selectedColumns.includes('driverName') && (
+                    <th className="py-2 px-3 w-[25%] min-w-[100px] font-semibold">Driver</th>
+                  )}
+                  {highlightClass && selectedColumns.includes('carClass') && (
+                    <th className="py-2 px-3 w-[80px] md:w-[90px] font-semibold">Class</th>
+                  )}
+                  {showDetails && selectedColumns.includes('currentLap') && (
+                    <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Lap</th>
+                  )}
+                  {showDetails && selectedColumns.includes('iRating') && (
+                    <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">iRating</th>
+                  )}
+                  {showDetails && selectedColumns.includes('license') && (
+                    <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">License</th>
+                  )}
+                  {showDetails && selectedColumns.includes('incidents') && (
+                    <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Inc</th>
+                  )}
+                  {selectedColumns.includes('metricValue') && (
+                    <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">
+                      {getMetricName(selectedMetric)}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className={`${getFontSize()} text-gray-200`}>
@@ -260,26 +294,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     key={car.carIdx} 
                     className={`${car.isPlayer ? 'bg-blue-900/50' : 'hover:bg-slate-700/60'} border-b border-slate-700/50 text-ellipsis`}
                   >
-                    <td className="py-2 px-3 font-medium">
-                      {car.position}
-                    </td>
-                    
-                    {showDetails && (
-                      <>
-                        <td className="py-2 px-3">
-                          {car.carNumber}
-                        </td>
-                        <td className="py-2 px-3 truncate" title={car.teamName}>
-                          {car.teamName || '-'}
-                        </td>
-                      </>
+                    {selectedColumns.includes('position') && (
+                      <td className="py-2 px-3 font-medium">
+                        {car.position}
+                      </td>
                     )}
                     
-                    <td className="py-2 px-3 truncate" title={car.driverName}>
-                      {car.driverName}
-                    </td>
+                    {showDetails && selectedColumns.includes('carNumber') && (
+                      <td className="py-2 px-3">
+                        {car.carNumber}
+                      </td>
+                    )}
                     
-                    {highlightClass && (
+                    {showDetails && selectedColumns.includes('teamName') && (
+                      <td className="py-2 px-3 truncate" title={car.teamName}>
+                        {car.teamName || '-'}
+                      </td>
+                    )}
+                    
+                    {selectedColumns.includes('driverName') && (
+                      <td className="py-2 px-3 truncate" title={car.driverName}>
+                        {car.driverName}
+                      </td>
+                    )}
+                    
+                    {highlightClass && selectedColumns.includes('carClass') && (
                       <td className="py-2 px-3">
                         <span
                           className="inline-block px-2 py-1 rounded text-white text-xs font-medium text-center"
@@ -290,26 +329,35 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                       </td>
                     )}
                     
-                    {showDetails && (
-                      <>
-                        <td className="py-2 px-3 text-center">
-                          {car.currentLap}
-                        </td>
-                        <td className="py-2 px-3 text-right">
-                          {car.iRating || '-'}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {car.license || '-'}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {car.incidents !== undefined ? car.incidents : '-'}
-                        </td>
-                      </>
+                    {showDetails && selectedColumns.includes('currentLap') && (
+                      <td className="py-2 px-3 text-center">
+                        {car.currentLap}
+                      </td>
                     )}
                     
-                    <td className="py-2 px-3 font-mono">
-                      {formatTelemetryValue(selectedMetric, car.metricValue)}
-                    </td>
+                    {showDetails && selectedColumns.includes('iRating') && (
+                      <td className="py-2 px-3 text-right">
+                        {car.iRating || '-'}
+                      </td>
+                    )}
+                    
+                    {showDetails && selectedColumns.includes('license') && (
+                      <td className="py-2 px-3 text-center">
+                        {car.license || '-'}
+                      </td>
+                    )}
+                    
+                    {showDetails && selectedColumns.includes('incidents') && (
+                      <td className="py-2 px-3 text-center">
+                        {car.incidents !== undefined ? car.incidents : '-'}
+                      </td>
+                    )}
+                    
+                    {selectedColumns.includes('metricValue') && (
+                      <td className="py-2 px-3 font-mono">
+                        {formatTelemetryValue(selectedMetric, car.metricValue)}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -381,7 +429,8 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     highlightClass: currentState.highlightClass,
     maxItems: currentState.maxItems,
     widgetWidth: widgetWidth,
-    fontSize: currentState.fontSize
+    fontSize: currentState.fontSize,
+    selectedColumns: currentState.selectedColumns
   };
   
   return <SimpleRaceTelemetryWidgetInternal {...combinedProps} />;
@@ -515,6 +564,14 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
         { value: 'text-lg', label: 'X-Large' }
       ],
       onChange: (value) => onChange('fontSize', value)
+    },
+    {
+      id: 'selectedColumns',
+      type: 'multi-select' as WidgetControlType,
+      label: 'Display Columns',
+      value: widgetState.selectedColumns || DEFAULT_COLUMNS,
+      options: AVAILABLE_COLUMNS,
+      onChange: (value) => onChange('selectedColumns', value)
     }
   ];
 };

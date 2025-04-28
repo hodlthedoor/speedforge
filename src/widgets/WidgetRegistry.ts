@@ -2,7 +2,7 @@ import { ComponentType } from 'react';
 import { getComponentControls } from './WidgetRegistryAdapter';
 
 // Define widget control types
-export type WidgetControlType = 'button' | 'select' | 'slider' | 'toggle' | 'color-picker';
+export type WidgetControlType = 'button' | 'select' | 'slider' | 'toggle' | 'color-picker' | 'multi-select';
 
 // Define widget control definition
 export interface WidgetControlDefinition {
