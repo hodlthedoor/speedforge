@@ -77,26 +77,6 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     fontSize
   });
   
-  // Log when props change
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] selectedMetric changed to:`, selectedMetric);
-  }, [id, selectedMetric]);
-  
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] sortBy changed to:`, sortBy);
-  }, [id, sortBy]);
-  
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] showDetails changed to:`, showDetails);
-  }, [id, showDetails]);
-  
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] highlightClass changed to:`, highlightClass);
-  }, [id, highlightClass]);
-  
-  useEffect(() => {
-    console.log(`[SimpleRaceTelemetryWidget ${id}] maxItems changed to:`, maxItems);
-  }, [id, maxItems]);
 
   useEffect(() => {
     console.log(`[SimpleRaceTelemetryWidget ${id}] fontSize changed to:`, fontSize);
@@ -113,9 +93,13 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     console.log('OTHER DRIVERS:', sessionData.drivers?.other_drivers);
 
     // Extract driver information from session data
-    const driverInfo = sessionData.drivers?.other_drivers || [];
-    const playerInfo = sessionData.drivers?.player || null;
-
+    // All drivers are in the other_drivers array
+    const allDrivers = sessionData.drivers?.other_drivers || [];
+    
+    // Determine which driver is the player (usually the first one with index 0)
+    // In the absence of explicit player info, we can use index 0 as a heuristic
+    const playerCarIndex = sessionData.drivers?.car_index || 0;
+    
     // Get array of car indices (0 to max car index)
     const carIndices = telemetryData[selectedMetric] 
       ? Array.from({ length: telemetryData[selectedMetric].length }, (_, i) => i)
@@ -123,9 +107,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     // Create a row for each car with all the relevant data
     const carRows = carIndices.map(carIdx => {
-      // Find driver info for this car
-      const driver = driverInfo.find(d => d.car_idx === carIdx) || playerInfo;
-      const isPlayer = playerInfo && playerInfo.car_idx === carIdx;
+      // Find driver info for this car by matching index
+      const driver = allDrivers.find(d => d.index === carIdx);
+      const isPlayer = carIdx === playerCarIndex;
 
       // Create data object for this car
       return {
@@ -174,7 +158,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         sortedCars.sort((a, b) => a.driverName.localeCompare(b.driverName));
         break;
       case 'number':
-        sortedCars.sort((a, b) => a.carNumber.localeCompare(b.carNumber));
+        sortedCars.sort((a, b) => {
+          // Convert both to strings before comparing
+          const aNum = String(a.carNumber);
+          const bNum = String(b.carNumber);
+          return aNum.localeCompare(bNum);
+        });
         break;
       case 'class':
         sortedCars.sort((a, b) => {
@@ -391,7 +380,8 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     showDetails: currentState.showDetails,
     highlightClass: currentState.highlightClass,
     maxItems: currentState.maxItems,
-    widgetWidth: widgetWidth
+    widgetWidth: widgetWidth,
+    fontSize: currentState.fontSize
   };
   
   return <SimpleRaceTelemetryWidgetInternal {...combinedProps} />;
