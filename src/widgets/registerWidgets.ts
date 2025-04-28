@@ -220,16 +220,19 @@ WidgetRegistry.register('track-positions', {
 // Register Simple Race Telemetry Widget
 WidgetRegistry.register('simple-race-telemetry', {
   component: SimpleRaceTelemetryWidget,
-  defaultTitle: 'Race Standings',
+  defaultTitle: 'Race Telemetry',
   defaultOptions: {},
   defaultState: {
     width: 600,
     height: 400,
-    selectedMetric: 'CarIdxLastLapTime',
+    widgetWidth: 600,
+    selectedMetric: 'CarIdxPosition',
     sortBy: 'position',
     showDetails: true,
     highlightClass: true,
-    maxItems: 20
+    maxItems: 10,
+    name: 'Race Telemetry',
+    fontSize: 'text-sm'
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'

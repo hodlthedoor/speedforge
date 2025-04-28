@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Widget from './Widget';
 import { useTelemetryData, formatTelemetryValue, getMetricName, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
-import { WidgetControlDefinition } from '../widgets/WidgetRegistry';
+import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetRegistry';
 import { WidgetManager } from '../services/WidgetManager';
 
 interface SimpleRaceTelemetryWidgetProps {
@@ -15,6 +15,8 @@ interface SimpleRaceTelemetryWidgetProps {
   highlightClass?: boolean;
   maxItems?: number;
   name?: string;
+  widgetWidth?: number;
+  fontSize?: 'text-xs' | 'text-sm' | 'text-base' | 'text-lg';
 }
 
 // Internal component that uses state from widget manager
@@ -28,8 +30,19 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     highlightClass = true,
     maxItems = 10,
     name = 'Race Data',
+    widgetWidth = 600,
+    fontSize = 'text-sm',
     ...otherProps
   } = props;
+
+  // Reference to track width changes
+  const widgetWidthRef = useRef<number>(widgetWidth);
+  
+  // Keep ref in sync with width prop
+  useEffect(() => {
+    widgetWidthRef.current = widgetWidth;
+    console.log(`[SimpleRaceTelemetryWidget ${id}] Width updated to: ${widgetWidth}px`);
+  }, [id, widgetWidth]);
 
   // Use the telemetry hook to get car index data
   const { data: telemetryData, sessionData } = useTelemetryData(id, {
@@ -59,7 +72,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     showDetails,
     highlightClass,
     maxItems,
-    name
+    name,
+    widgetWidth,
+    fontSize
   });
   
   // Log when props change
@@ -82,6 +97,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   useEffect(() => {
     console.log(`[SimpleRaceTelemetryWidget ${id}] maxItems changed to:`, maxItems);
   }, [id, maxItems]);
+
+  useEffect(() => {
+    console.log(`[SimpleRaceTelemetryWidget ${id}] fontSize changed to:`, fontSize);
+  }, [id, fontSize]);
 
   // Process the telemetry data to create the table rows
   const formattedCarData = useMemo(() => {
@@ -197,70 +216,84 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     return `hsl(${hue}, 70%, 40%)`;
   };
 
+  // Calculate font size based on widget width for responsive text
+  const getFontSize = () => {
+    // If custom font size is set, use that instead of calculating based on width
+    if (fontSize) {
+      return fontSize;
+    }
+    
+    // Fallback to width-based calculation if no custom size is set
+    if (widgetWidth < 500) return 'text-xs';
+    if (widgetWidth < 700) return 'text-sm';
+    return 'text-base';
+  };
+
   return (
     <Widget 
       id={id} 
       title={name || 'Race Data'}
       onClose={onClose}
       className="w-full h-full"
+      width={widgetWidth}
     >
-      <div className="w-full h-full min-h-[240px] min-w-[240px] flex flex-col overflow-hidden p-2">
+      <div className={`w-full h-full min-h-[240px] flex flex-col overflow-hidden p-2 ${getFontSize()}`}>
         {telemetryData && formattedCarData.length > 0 ? (
           <div className="w-full h-full overflow-auto scrollbar-thin">
-            <table className="w-full text-left text-sm table-fixed">
-              <thead className="sticky top-0 bg-slate-800 text-gray-300 text-xs">
-                <tr>
-                  <th className="py-1 px-2 w-[40px]">Pos</th>
+            <table className="w-full text-left table-fixed">
+              <thead className="sticky top-0 bg-slate-800 text-gray-300">
+                <tr className="text-xs md:text-sm">
+                  <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Pos</th>
                   {showDetails && (
                     <>
-                      <th className="py-1 px-2 w-[50px]">Car</th>
-                      <th className="py-1 px-2 w-[15%] min-w-[80px]">Team</th>
+                      <th className="py-2 px-3 w-[50px] md:w-[60px] font-semibold">Car</th>
+                      <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Team</th>
                     </>
                   )}
-                  <th className="py-1 px-2 w-[25%] min-w-[100px]">Driver</th>
-                  {highlightClass && <th className="py-1 px-2 w-[80px]">Class</th>}
+                  <th className="py-2 px-3 w-[25%] min-w-[100px] font-semibold">Driver</th>
+                  {highlightClass && <th className="py-2 px-3 w-[80px] md:w-[90px] font-semibold">Class</th>}
                   {showDetails && (
                     <>
-                      <th className="py-1 px-2 w-[40px]">Lap</th>
-                      <th className="py-1 px-2 w-[60px]">iRating</th>
-                      <th className="py-1 px-2 w-[60px]">License</th>
-                      <th className="py-1 px-2 w-[40px]">Inc</th>
+                      <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Lap</th>
+                      <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">iRating</th>
+                      <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">License</th>
+                      <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Inc</th>
                     </>
                   )}
-                  <th className="py-1 px-2 w-[15%] min-w-[80px]">
+                  <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">
                     {getMetricName(selectedMetric)}
                   </th>
                 </tr>
               </thead>
-              <tbody className="text-xs md:text-sm">
+              <tbody className={`${getFontSize()} text-gray-200`}>
                 {formattedCarData.map((car) => (
                   <tr 
                     key={car.carIdx} 
-                    className={`${car.isPlayer ? 'bg-blue-900/30' : 'hover:bg-slate-700/50'} border-b border-slate-700/50 text-ellipsis`}
+                    className={`${car.isPlayer ? 'bg-blue-900/50' : 'hover:bg-slate-700/60'} border-b border-slate-700/50 text-ellipsis`}
                   >
-                    <td className="py-1 px-2 font-medium">
+                    <td className="py-2 px-3 font-medium">
                       {car.position}
                     </td>
                     
                     {showDetails && (
                       <>
-                        <td className="py-1 px-2">
+                        <td className="py-2 px-3">
                           {car.carNumber}
                         </td>
-                        <td className="py-1 px-2 truncate" title={car.teamName}>
+                        <td className="py-2 px-3 truncate" title={car.teamName}>
                           {car.teamName || '-'}
                         </td>
                       </>
                     )}
                     
-                    <td className="py-1 px-2 truncate" title={car.driverName}>
+                    <td className="py-2 px-3 truncate" title={car.driverName}>
                       {car.driverName}
                     </td>
                     
                     {highlightClass && (
-                      <td className="py-1 px-2">
+                      <td className="py-2 px-3">
                         <span
-                          className="inline-block px-1.5 py-0.5 rounded text-white text-xs font-medium text-center"
+                          className="inline-block px-2 py-1 rounded text-white text-xs font-medium text-center"
                           style={{ backgroundColor: getClassColor(car.carClass) }}
                         >
                           {car.carClass}
@@ -270,22 +303,22 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     
                     {showDetails && (
                       <>
-                        <td className="py-1 px-2 text-center">
+                        <td className="py-2 px-3 text-center">
                           {car.currentLap}
                         </td>
-                        <td className="py-1 px-2 text-right">
+                        <td className="py-2 px-3 text-right">
                           {car.iRating || '-'}
                         </td>
-                        <td className="py-1 px-2 text-center">
+                        <td className="py-2 px-3 text-center">
                           {car.license || '-'}
                         </td>
-                        <td className="py-1 px-2 text-center">
+                        <td className="py-2 px-3 text-center">
                           {car.incidents !== undefined ? car.incidents : '-'}
                         </td>
                       </>
                     )}
                     
-                    <td className="py-1 px-2 font-mono">
+                    <td className="py-2 px-3 font-mono">
                       {formatTelemetryValue(selectedMetric, car.metricValue)}
                     </td>
                   </tr>
@@ -295,7 +328,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           </div>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center p-4">
-            <div className="text-slate-400">
+            <div className="text-slate-400 text-lg">
               {telemetryData ? 'No car data available' : 'Waiting for telemetry data...'}
             </div>
           </div>
@@ -316,6 +349,9 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
   // Local state to force re-renders when widget state changes
   const [stateVersion, setStateVersion] = useState(0);
   
+  // Initialize width state from widget registry or default
+  const [widgetWidth, setWidgetWidth] = useState<number>(initialState.widgetWidth || 600);
+  
   // Subscribe to widget state updates
   useEffect(() => {
     console.log(`[SimpleRaceTelemetryWidgetComponent] Setting up subscription for widget ${id}`);
@@ -323,6 +359,12 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
         console.log(`[SimpleRaceTelemetryWidgetComponent] Received state update for widget ${id}:`, event.state);
+        
+        // Update width if it changed
+        if (event.state.widgetWidth !== undefined) {
+          setWidgetWidth(Number(event.state.widgetWidth));
+        }
+        
         // Force re-render
         setStateVersion(v => v + 1);
       }
@@ -348,7 +390,8 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     sortBy: currentState.sortBy,
     showDetails: currentState.showDetails,
     highlightClass: currentState.highlightClass,
-    maxItems: currentState.maxItems
+    maxItems: currentState.maxItems,
+    widgetWidth: widgetWidth
   };
   
   return <SimpleRaceTelemetryWidgetInternal {...combinedProps} />;
@@ -358,6 +401,9 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
 const getControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   console.log('SimpleRaceTelemetryWidget getControls called with state:', widgetState);
   
+  // Get the current width (or use default)
+  const widgetWidth = widgetState.widgetWidth || 600;
+  
   const onChange = (id: string, value: any) => {
     console.log(`[SimpleRaceTelemetryWidget Controls] Changing ${id} to:`, value);
     const update = { [id]: value };
@@ -366,6 +412,30 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
   };
   
   return [
+    {
+      id: 'widgetWidth',
+      type: 'slider' as WidgetControlType,
+      label: `Width: ${widgetWidth}px`,
+      value: widgetWidth,
+      options: [
+        { value: 500, label: 'Small' },
+        { value: 700, label: 'Medium' },
+        { value: 900, label: 'Large' },
+        { value: 1100, label: 'X-Large' }
+      ],
+      onChange: (value) => {
+        const newWidth = Number(value);
+        console.log(`[SimpleRaceTelemetryWidget] Width changed to ${newWidth}px`);
+        
+        // Directly update the widget state using WidgetManager
+        WidgetManager.updateWidgetState(widgetState.id, { 
+          widgetWidth: newWidth 
+        });
+        
+        // Also update through the control mechanism for completeness
+        updateWidget({ widgetWidth: newWidth });
+      }
+    },
     {
       id: 'selectedMetric',
       type: 'select',
@@ -442,6 +512,19 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
         { value: 30, label: '30' }
       ],
       onChange: (value) => onChange('maxItems', value)
+    },
+    {
+      id: 'fontSize',
+      type: 'select',
+      label: 'Font Size',
+      value: widgetState.fontSize || 'text-sm',
+      options: [
+        { value: 'text-xs', label: 'Small' },
+        { value: 'text-sm', label: 'Medium' },
+        { value: 'text-base', label: 'Large' },
+        { value: 'text-lg', label: 'X-Large' }
+      ],
+      onChange: (value) => onChange('fontSize', value)
     }
   ];
 };
