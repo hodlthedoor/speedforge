@@ -148,6 +148,83 @@ pub struct TelemetryData {
     // Raw values for any values that were captured
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub raw_values: HashMap<String, serde_json::Value>,
+    
+    // CarIdx fields (arrays with data for each car)
+    // These will be set from raw_values during extraction but appear at top level in JSON
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxPosition: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxLapDistPct: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxLap: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxLapCompleted: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxF2Time: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxClassPosition: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxClass: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxGear: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxRPM: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxOnPitRoad: Option<Vec<bool>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxP2P_Count: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxP2P_Status: Option<Vec<bool>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxBestLapNum: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxBestLapTime: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxEstTime: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxFastRepairsUsed: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxPaceFlags: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxPaceLine: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxPaceRow: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxQualTireCompound: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxQualTireCompoundLocked: Option<Vec<bool>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxSteer: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxTireCompound: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxTrackSurface: Option<Vec<i32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxTrackSurfaceMaterial: Option<Vec<i32>>,
 }
 
 /// Flag constants based on iRacing SDK
@@ -263,6 +340,26 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         let json_array: Vec<i32> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
                         println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                        
+                        // Set the actual struct field based on field name
+                        match *field_name {
+                            "CarIdxPosition" => data.CarIdxPosition = Some(json_array),
+                            "CarIdxLap" => data.CarIdxLap = Some(json_array),
+                            "CarIdxLapCompleted" => data.CarIdxLapCompleted = Some(json_array),
+                            "CarIdxClassPosition" => data.CarIdxClassPosition = Some(json_array),
+                            "CarIdxClass" => data.CarIdxClass = Some(json_array),
+                            "CarIdxGear" => data.CarIdxGear = Some(json_array),
+                            "CarIdxP2P_Count" => data.CarIdxP2P_Count = Some(json_array),
+                            "CarIdxBestLapNum" => data.CarIdxBestLapNum = Some(json_array),
+                            "CarIdxFastRepairsUsed" => data.CarIdxFastRepairsUsed = Some(json_array),
+                            "CarIdxPaceFlags" => data.CarIdxPaceFlags = Some(json_array),
+                            "CarIdxPaceLine" => data.CarIdxPaceLine = Some(json_array),
+                            "CarIdxPaceRow" => data.CarIdxPaceRow = Some(json_array),
+                            "CarIdxQualTireCompound" => data.CarIdxQualTireCompound = Some(json_array),
+                            "CarIdxTrackSurface" => data.CarIdxTrackSurface = Some(json_array),
+                            "CarIdxTrackSurfaceMaterial" => data.CarIdxTrackSurfaceMaterial = Some(json_array),
+                            _ => {}, // Ignore other fields
+                        }
                     }
                 },
                 Value::FloatVec(values) => {
@@ -272,6 +369,17 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         let json_array: Vec<f32> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
                         println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                        
+                        // Set the actual struct field based on field name
+                        match *field_name {
+                            "CarIdxLapDistPct" => data.CarIdxLapDistPct = Some(json_array),
+                            "CarIdxF2Time" => data.CarIdxF2Time = Some(json_array),
+                            "CarIdxRPM" => data.CarIdxRPM = Some(json_array),
+                            "CarIdxBestLapTime" => data.CarIdxBestLapTime = Some(json_array),
+                            "CarIdxEstTime" => data.CarIdxEstTime = Some(json_array),
+                            "CarIdxSteer" => data.CarIdxSteer = Some(json_array),
+                            _ => {}, // Ignore other fields
+                        }
                     }
                 },
                 Value::BoolVec(values) => {
@@ -281,6 +389,14 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         let json_array: Vec<bool> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
                         println!("[DEBUG] Found {} with {} values", field_name, values.len());
+                        
+                        // Set the actual struct field based on field name
+                        match *field_name {
+                            "CarIdxOnPitRoad" => data.CarIdxOnPitRoad = Some(json_array),
+                            "CarIdxP2P_Status" => data.CarIdxP2P_Status = Some(json_array),
+                            "CarIdxQualTireCompoundLocked" => data.CarIdxQualTireCompoundLocked = Some(json_array),
+                            _ => {}, // Ignore other fields
+                        }
                     }
                 },
                 _ => {
