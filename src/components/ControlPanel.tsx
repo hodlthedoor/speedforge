@@ -410,20 +410,23 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         return (
           <div key={control.id} className="mt-3">
             <label className="detail-label text-sm text-gray-300 mb-1.5 block">{control.label}:</label>
-            <div className="flex gap-1.5">
-              {control.options.map((option: any) => (
-                <button 
-                  key={option.value}
-                  className={`px-2.5 py-1 rounded-md text-xs ${
-                    control.value === option.value 
-                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
-                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                  } transition-all`}
-                  onClick={() => control.onChange(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="relative">
+              <select
+                className="w-full py-1.5 px-2 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                value={control.value}
+                onChange={(e) => control.onChange(e.target.value)}
+              >
+                {control.options.map((option: any) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
             </div>
           </div>
         );
