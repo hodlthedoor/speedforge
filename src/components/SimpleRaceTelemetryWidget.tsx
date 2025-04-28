@@ -539,11 +539,30 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
   // Local state to force re-renders when widget state changes
   const [stateVersion, setStateVersion] = useState(0);
   
-  // Initialize width state from widget registry or default
-  const [widgetWidth, setWidgetWidth] = useState<number>(initialState.widgetWidth || 600);
+  // Initialize width state and ref
+  const [widgetWidth, setWidgetWidth] = useState<number>(600);
+  const widgetWidthRef = useRef<number>(600);
   
-  // Subscribe to widget state updates
+  // Keep ref in sync with state
   useEffect(() => {
+    widgetWidthRef.current = widgetWidth;
+  }, [widgetWidth]);
+  
+  // Initialize width from saved state on mount
+  useEffect(() => {
+    // On mount, check if we have a saved width
+    const widget = WidgetManager.getWidget(id);
+    if (widget?.state?.widgetWidth) {
+      const savedWidth = Number(widget.state.widgetWidth);
+      console.log(`[SimpleRaceTelemetryWidget] Loading saved width: ${savedWidth}px`);
+      setWidgetWidth(savedWidth);
+      widgetWidthRef.current = savedWidth;
+    } else {
+      // Set initial width in WidgetManager if not already set
+      WidgetManager.updateWidgetState(id, { widgetWidth: 600 });
+    }
+    
+    // Subscribe to widget state updates
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
         // Only log when selectedColumns change
@@ -553,7 +572,10 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
         
         // Update width if it changed
         if (event.state.widgetWidth !== undefined) {
-          setWidgetWidth(Number(event.state.widgetWidth));
+          const newWidth = Number(event.state.widgetWidth);
+          console.log(`[SimpleRaceTelemetryWidget] Width updated to: ${newWidth}px`);
+          setWidgetWidth(newWidth);
+          widgetWidthRef.current = newWidth;
         }
         
         // Force re-render
