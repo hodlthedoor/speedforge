@@ -43,6 +43,7 @@ export interface TelemetryData {
   PlayerTrackSurfaceStatus?: string;
   PlayerTrackSurface?: TrackSurface;
   car_left_right?: CarLeftRight; // Cars to left/right indicator
+  BrakeABSactive?: boolean; // ABS activation status
   
   // Velocity Vectors
   VelocityX?: number;     // Forward/backward velocity (car's local X axis)
@@ -118,6 +119,7 @@ export type TelemetryMetric =
   | 'PlayerTrackSurfaceStatus'
   | 'PlayerTrackSurface'
   | 'car_left_right'
+  | 'BrakeABSactive'
   
   // Velocity Vectors
   | 'VelocityX'
@@ -504,6 +506,8 @@ export function formatTelemetryValue(metric: string, value: any): string {
       return String(value);
     case 'car_left_right':
       return formatCarLeftRight(value);
+    case 'BrakeABSactive':
+      return value ? 'Active' : 'Inactive';
     case 'skies':
     case 'track_surface':
     case 'CarIdxTrackSurface':
@@ -641,6 +645,7 @@ export function getMetricName(metric: string): string {
     'on_pit_road': 'On Pit Road',
     'track_surface': 'Track Surface',
     'car_left_right': 'Cars Nearby',
+    'BrakeABSactive': 'ABS Status',
     
     // Velocity Vectors
     'VelocityX': 'Forward Velocity',

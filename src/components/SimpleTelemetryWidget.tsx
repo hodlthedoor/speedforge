@@ -20,6 +20,7 @@ const availableMetrics = [
   { id: 'throttle_pct', name: 'Throttle' },
   { id: 'brake_pct', name: 'Brake' },
   { id: 'clutch_pct', name: 'Clutch' },
+  { id: 'BrakeABSactive', name: 'ABS Active' },
   { id: 'g_force_lat', name: 'Lateral G' },
   { id: 'g_force_lon', name: 'Longitudinal G' },
   { id: 'lateral_accel_ms2', name: 'Lateral Accel (m/s²)' },

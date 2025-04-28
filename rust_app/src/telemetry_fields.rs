@@ -66,6 +66,7 @@ pub struct TelemetryData {
     pub PlayerTrackSurface: i32,  // Raw numeric value
     pub car_left_right: CarLeftRight, // Cars to left/right indicator
     pub car_left_right_raw: i32,  // Raw numeric value for car_left_right
+    pub BrakeABSactive: bool,     // ABS activation status
     
     // Engine Warnings
     pub engine_warnings: EngineWarnings,
@@ -274,6 +275,14 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
             raw_values.insert("Speed".to_string(), serde_json::json!(speed_f32));
             data.speed_kph = speed_f32 * 3.6; // Convert to km/h
             data.speed_mph = speed_f32 * 2.23694; // Convert to mph
+        }
+    }
+    
+    // Extract BrakeABSactive status
+    if let Ok(abs_active) = telem.get("BrakeABSactive") {
+        if let Ok(abs_val) = TryInto::<bool>::try_into(abs_active) {
+            raw_values.insert("BrakeABSactive".to_string(), serde_json::json!(abs_val));
+            data.BrakeABSactive = abs_val;
         }
     }
     
