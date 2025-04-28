@@ -62,6 +62,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   // Reference to track width changes
   const widgetWidthRef = useRef<number>(widgetWidth);
   
+  // Reference to track if we've logged session data already
+  const hasLoggedSessionDataRef = useRef<boolean>(false);
+  
   // Keep ref in sync with width prop
   useEffect(() => {
     widgetWidthRef.current = widgetWidth;
@@ -96,13 +99,14 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     if (!telemetryData || !sessionData) return [];
 
     // Only log session data the first time
-    if (process.env.NODE_ENV === 'development' && !formattedCarData.length) {
+    if (process.env.NODE_ENV === 'development' && !hasLoggedSessionDataRef.current) {
       console.log('SESSION DATA (abbreviated):', {
         hasWeekend: !!sessionData.weekend,
         hasSession: !!sessionData.session,
         hasDrivers: !!sessionData.drivers, 
         driverCount: sessionData.drivers?.other_drivers?.length
       });
+      hasLoggedSessionDataRef.current = true;
     }
 
     // Extract driver information from session data
