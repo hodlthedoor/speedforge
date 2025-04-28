@@ -339,7 +339,6 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         // Convert Vec<i32> to JSON array
                         let json_array: Vec<i32> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
-                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
                         
                         // Set the actual struct field based on field name
                         match *field_name {
@@ -368,7 +367,6 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         // Convert Vec<f32> to JSON array 
                         let json_array: Vec<f32> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
-                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
                         
                         // Set the actual struct field based on field name
                         match *field_name {
@@ -388,7 +386,6 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         // Convert Vec<bool> to JSON array
                         let json_array: Vec<bool> = values.clone();
                         raw_values.insert(field_name.to_string(), serde_json::json!(json_array));
-                        println!("[DEBUG] Found {} with {} values", field_name, values.len());
                         
                         // Set the actual struct field based on field name
                         match *field_name {
@@ -401,7 +398,6 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                 },
                 _ => {
                     // For non-array values, try processing them individually
-                    println!("[DEBUG] {} is not an array type: {:?}", field_name, value);
                     // Add the raw value to the map
                     raw_values.insert(field_name.to_string(), telemetry_value_to_json(value.clone()));
                 }

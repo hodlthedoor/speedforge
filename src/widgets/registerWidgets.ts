@@ -221,13 +221,15 @@ WidgetRegistry.register('track-positions', {
 WidgetRegistry.register('simple-race-telemetry', {
   component: SimpleRaceTelemetryWidget,
   defaultTitle: 'Race Car Data',
-  defaultOptions: {
-    metric: 'CarIdxPosition',
-    maxItems: 15
-  },
+  defaultOptions: {},
   defaultState: {
     width: 300,
-    height: 350
+    height: 350,
+    selectedMetric: 'CarIdxLapDistPct',
+    sortBy: 'position',
+    showDetails: false,
+    highlightClass: true,
+    maxItems: 10
   },
   description: 'Display telemetry data for all cars in a race',
   category: 'Race Data'

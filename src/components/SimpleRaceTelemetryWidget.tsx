@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Widget from './Widget';
 import { useTelemetryData, formatTelemetryValue, getMetricName, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
@@ -6,32 +6,25 @@ import { WidgetControlDefinition, WidgetControlType } from '../widgets/WidgetReg
 
 interface SimpleRaceTelemetryWidgetProps {
   id: string;
-  name: string;
-  metric: TelemetryMetric;
-  initialPosition?: { x: number, y: number };
-  onClose?: (id: string) => void;
-  maxItems?: number; // Maximum number of cars to display
-  // Add properties for controls that were previously internal state
+  onClose: () => void;
+  // Default state props passed from the widget registry
   selectedMetric?: TelemetryMetric;
   sortBy?: 'position' | 'laptime' | 'name' | 'number' | 'class' | 'metric';
   showDetails?: boolean;
   highlightClass?: boolean;
+  maxItems?: number;
+  name?: string;
 }
 
-type SortOption = 'position' | 'laptime' | 'name' | 'number' | 'class' | 'metric';
-
-export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProps> = ({ 
-  id, 
-  name,
-  metric = 'CarIdxPosition',
-  initialPosition,
+const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProps> = ({
+  id,
   onClose,
-  maxItems = 10,
-  // Default values for control properties
   selectedMetric = 'CarIdxPosition',
   sortBy = 'position',
   showDetails = false,
-  highlightClass = true
+  highlightClass = true,
+  maxItems = 10,
+  name = 'Race Data'
 }) => {
   // List of all available CarIdx metrics
   const carIdxMetrics = useMemo(() => [
@@ -62,71 +55,27 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
     'CarIdxTrackSurfaceMaterial'
   ] as TelemetryMetric[], []);
   
-  // Log props for debugging
-  useEffect(() => {
-    console.log('SimpleRaceTelemetryWidget props:', { 
-      id, name, metric, maxItems, selectedMetric, sortBy, showDetails, highlightClass 
-    });
-  }, [id, name, metric, maxItems, selectedMetric, sortBy, showDetails, highlightClass]);
-  
   // Use the hook with ALL CarIdx metrics to ensure we get all possible data
   const { data, sessionData } = useTelemetryData(id, { metrics: carIdxMetrics });
-  
-  // Debug log whenever telemetry data updates
-  useEffect(() => {
-    console.log(`[${id}] Telemetry data updated:`, {
-      dataExists: !!data,
-      metric: selectedMetric,
-      metricData: data?.[selectedMetric],
-      isArray: data && data[selectedMetric] ? Array.isArray(data[selectedMetric]) : false,
-      arrayLength: data && data[selectedMetric] && Array.isArray(data[selectedMetric]) ? data[selectedMetric].length : 0,
-      sessionData: !!sessionData,
-      drivers: sessionData?.drivers?.other_drivers?.length || 0
-    });
-    
-    // Log the first few elements of the array if it exists
-    if (data && data[selectedMetric] && Array.isArray(data[selectedMetric]) && data[selectedMetric].length > 0) {
-      console.log(`[${id}] First 5 ${selectedMetric} values:`, data[selectedMetric].slice(0, 5));
-    }
-    
-    // Log what fields are available in data
-    if (data) {
-      const carIdxKeysInData = Object.keys(data).filter(key => key.startsWith('CarIdx'));
-      console.log(`[${id}] Available CarIdx keys in data:`, carIdxKeysInData);
-    }
-  }, [data, sessionData, id, selectedMetric]);
   
   // Format car data to include driver information
   const formattedCarData = useMemo(() => {
     if (!data || !sessionData?.drivers) {
-      console.log(`[${id}] No data or session data available`);
       return [];
     }
     
-    // Debug the metric field data
-    console.log(`[${id}] Formatting car data:`, {
-      metric: selectedMetric,
-      metricExists: selectedMetric in data,
-      metricValue: data[selectedMetric],
-      isArray: Array.isArray(data[selectedMetric]),
-      metricLength: Array.isArray(data[selectedMetric]) ? data[selectedMetric].length : 'not an array'
-    });
-    
     // Check if the metric exists in the data at all
     if (!(selectedMetric in data)) {
-      console.log(`[${id}] Metric "${selectedMetric}" does not exist in data object. Available keys:`, Object.keys(data).filter(k => k.startsWith('CarIdx')));
       return [];
     }
     
     // Skip if the metric isn't a CarIdx metric or not an array
     if (!selectedMetric.startsWith('CarIdx') || !Array.isArray(data[selectedMetric])) {
-      console.log(`[${id}] Not a CarIdx array metric`, { metric: selectedMetric, dataType: typeof data[selectedMetric] });
       return [];
     }
     
-    // If the array exists but is empty, log that fact
+    // If the array exists but is empty, return empty array
     if (Array.isArray(data[selectedMetric]) && data[selectedMetric].length === 0) {
-      console.log(`[${id}] CarIdx array exists but is empty`, { metric: selectedMetric });
       return [];
     }
     
@@ -137,21 +86,6 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
     // Get the player's class for highlighting
     const playerDriver = drivers.find(d => d.car_idx === playerCarIdx);
     const playerClass = playerDriver?.car_class_id;
-    
-    console.log(`[${id}] Processing driver data:`, {
-      metricArrayLength: metricArray.length,
-      driversCount: drivers.length,
-      playerCarIdx,
-      playerClass
-    });
-    
-    // Log non-null values in the metric array to help debugging
-    const nonNullCount = metricArray.filter(val => val !== null && val !== undefined).length;
-    console.log(`[${id}] Non-null values in ${selectedMetric}:`, {
-      nonNullCount,
-      totalLength: metricArray.length,
-      percentage: Math.round((nonNullCount / metricArray.length) * 100) + '%'
-    });
     
     // Get position data for sorting if available
     const positionArray = data['CarIdxPosition'] as number[] || [];
@@ -201,11 +135,6 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
         trackPosition: lap + lapDistPct
       };
     }).filter(Boolean); // Remove null entries
-    
-    console.log(`[${id}] Final formatted data:`, {
-      formattedCount: formattedData.length,
-      firstFew: formattedData.slice(0, 3)
-    });
     
     // Sort the data based on selected sort option
     let sortedData = [...formattedData];
@@ -261,13 +190,7 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
     }
     
     return sortedData;
-  }, [data, sessionData, selectedMetric, maxItems, id, sortBy]);
-  
-  const handleClose = () => {
-    if (onClose) {
-      onClose(id);
-    }
-  };
+  }, [data, sessionData, selectedMetric, maxItems, sortBy]);
 
   // Render the widget content
   const renderContent = () => {
@@ -293,11 +216,6 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
     
     // If no data yet
     if (!data || formattedCarData.length === 0) {
-      console.log(`[${id}] No data to display:`, {
-        dataExists: !!data,
-        formattedCarDataLength: formattedCarData.length
-      });
-      
       return (
         <div className="flex flex-col items-center justify-center h-full w-full p-4">
           <div className="text-sm font-medium mb-1">{getMetricName(selectedMetric)}</div>
@@ -378,9 +296,8 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
   return (
     <Widget 
       id={id} 
-      title={name}
-      initialPosition={initialPosition}
-      onClose={() => handleClose()}
+      title={name || `Race Data: ${getMetricName(selectedMetric)}`}
+      onClose={onClose}
       className="w-full h-full"
     >
       <div className="w-full h-full min-h-[240px] min-w-[240px] flex items-center justify-center">
@@ -394,7 +311,7 @@ export const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWid
 const getControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   return [
     {
-      id: 'metric',
+      id: 'selectedMetric',
       type: 'select',
       label: 'Metric',
       value: widgetState.selectedMetric || 'CarIdxPosition',
@@ -438,7 +355,7 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
       id: 'showDetails',
       type: 'toggle',
       label: 'Show Details',
-      value: widgetState.showDetails || false,
+      value: widgetState.showDetails !== undefined ? widgetState.showDetails : false,
       onChange: (value: boolean) => {
         updateWidget({ showDetails: value });
       }
@@ -454,7 +371,7 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
     },
     {
       id: 'maxItems',
-      type: 'slider' as WidgetControlType,
+      type: 'slider',
       label: 'Max Cars',
       value: widgetState.maxItems || 10,
       options: [
@@ -471,6 +388,6 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
 };
 
 // Apply the withControls HOC to the component
-export const SimpleRaceTelemetryWidget = withControls(SimpleRaceTelemetryWidgetComponent, getControls);
+const SimpleRaceTelemetryWidget = withControls(SimpleRaceTelemetryWidgetComponent, getControls);
 
 export default SimpleRaceTelemetryWidget; 

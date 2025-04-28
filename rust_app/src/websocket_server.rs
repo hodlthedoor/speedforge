@@ -139,106 +139,20 @@ impl TelemetryWebSocketServer {
     }
     
     /// Broadcast telemetry data to all connected clients
-    pub fn broadcast_telemetry(&self, data: &serde_json::Value) -> Result<(), Box<dyn Error>> {
-        // Check if any clients exist before doing work
-        {
-            let clients_guard = self.clients.lock().unwrap();
-            if clients_guard.is_empty() {
-                return Ok(());
+    pub fn broadcast_telemetry(&self, telemetry: &TelemetryData) {
+        let clients = self.clients.lock().unwrap();
+        if clients.is_empty() {
+            return;
+        }
+
+        let message = serde_json::to_string(&telemetry).unwrap();
+        
+        // Send to each connected client
+        for (_, client) in clients.iter() {
+            if let Err(e) = client.0.send(Message::Text(message.clone())) {
+                eprintln!("Error sending telemetry: {:?}", e);
             }
         }
-        
-        // DEBUG: Check the data for CarIdx fields
-        static mut CAR_IDX_LOGGING_COOLDOWN: u64 = 0;
-        unsafe {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-                
-            if now - CAR_IDX_LOGGING_COOLDOWN > 10 {  // Log every 10 seconds
-                CAR_IDX_LOGGING_COOLDOWN = now;
-                
-                if let Some(obj) = data.as_object() {
-                    println!("\n[{}] WebSocket Data CarIdx Fields:", get_timestamp());
-                    let mut car_idx_exists = false;
-                    
-                    // Check for CarIdx keys
-                    for key in obj.keys() {
-                        if key.starts_with("CarIdx") {
-                            car_idx_exists = true;
-                            if let Some(array) = obj[key].as_array() {
-                                println!("  {} has {} items", key, array.len());
-                                if !array.is_empty() {
-                                    // Print an example value
-                                    println!("  Example value: {:?}", array[0]);
-                                }
-                            } else {
-                                println!("  {} is not an array", key);
-                            }
-                        }
-                    }
-                    
-                    if !car_idx_exists {
-                        println!("  No CarIdx fields found in telemetry data!");
-                    }
-                }
-            }
-        }
-        
-        // Convert telemetry data to JSON string outside the lock
-        let json_str = serde_json::to_string(data)?;
-        let message = Message::Text(json_str);
-        
-        // Collect clients that need to be removed
-        let mut dead_clients = Vec::new();
-        
-        // First, try to send to all clients
-        {
-            let clients = self.clients.lock().unwrap();
-            for client in clients.iter() {
-                if let Err(_e) = client.0.send(message.clone()) {
-                    // Add this client to the removal list
-                    dead_clients.push(client.clone());
-                    
-                    // Only log occasionally to reduce spam
-                    static mut LAST_ERROR_LOG: u64 = 0;
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    
-                    unsafe {
-                        if now - LAST_ERROR_LOG > 30 {
-                            eprintln!("[{}] Client disconnected (channel closed), will clean up ({} clients)", 
-                                get_timestamp(), clients.len());
-                            LAST_ERROR_LOG = now;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Then remove dead clients outside the lock to avoid deadlocks
-        if !dead_clients.is_empty() {
-            let mut clients = self.clients.lock().unwrap();
-            let before_count = clients.len();
-            
-            for dead_client in &dead_clients {
-                clients.remove(dead_client);
-            }
-            
-            let after_count = clients.len();
-            let removed = before_count - after_count;
-            
-            // Only log if we actually removed clients
-            if removed > 0 && ws_is_verbose() {
-                println!("[{}] Removed {} disconnected clients, now serving {} clients", 
-                    get_timestamp(), removed, after_count);
-            }
-        }
-        
-        Ok(())
     }
     
     /// Get the current number of connected clients

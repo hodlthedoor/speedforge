@@ -207,12 +207,6 @@ interface UseTelemetryDataOptions {
   updateInterval?: number;
 }
 
-// Throttling variables for logging (outside the hook)
-const logThrottling = {
-  lastCarIdxLog: 0,
-  lastNoCarIdxLog: 0
-};
-
 /**
  * Custom hook for accessing telemetry data from WebSocketService
  * 
@@ -341,37 +335,6 @@ export function useTelemetryData(
   // Memoized handler function to prevent recreation on every render
   const handleData = useCallback((newData: TelemetryData) => {
     if (!isMountedRef.current) return;
-    
-    // Debug: Log CarIdx fields in the raw data
-    const carIdxFields = Object.keys(newData).filter(key => key.startsWith('CarIdx'));
-    if (carIdxFields.length > 0) {
-      // Throttle logging to avoid console spam - use a timestamp check
-      const now = Date.now();
-      if (now - logThrottling.lastCarIdxLog > 10000) { // Log every 10 seconds
-        logThrottling.lastCarIdxLog = now;
-        
-        console.log(`[useTelemetryData] Found ${carIdxFields.length} CarIdx fields in raw data:`, 
-          carIdxFields.map(field => {
-            const value = newData[field];
-            return {
-              field,
-              isArray: Array.isArray(value),
-              length: Array.isArray(value) ? value.length : 'not an array',
-              sampleValue: Array.isArray(value) && value.length > 0 ? 
-                `First value: ${JSON.stringify(value[0])}` : 'No sample'
-            };
-          })
-        );
-      }
-    } else {
-      // Always log when no CarIdx fields are found (this is a problem)
-      const now = Date.now();
-      if (now - logThrottling.lastNoCarIdxLog > 10000) { // Log every 10 seconds
-        logThrottling.lastNoCarIdxLog = now;
-        console.warn(`[useTelemetryData] No CarIdx fields found in telemetry data! Available fields:`, 
-          Object.keys(newData).slice(0, 20)); // Show first 20 fields to avoid console spam
-      }
-    }
     
     // Process session info if available
     if (newData.session_info) {
