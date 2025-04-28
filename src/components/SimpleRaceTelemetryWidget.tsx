@@ -20,33 +20,67 @@ interface SimpleRaceTelemetryWidgetProps {
   selectedColumns?: string[]; // New property for column selection
 }
 
-// Define available columns
+// Update AVAILABLE_COLUMNS array with object format
 const AVAILABLE_COLUMNS = [
   { value: 'position', label: 'Position' },
-  { value: 'carNumber', label: 'Car #' },
-  { value: 'driverName', label: 'Driver' },
-  { value: 'teamName', label: 'Team' },
-  { value: 'carClass', label: 'Class' },
-  { value: 'currentLap', label: 'Lap' },
-  { value: 'iRating', label: 'iRating' },
-  { value: 'license', label: 'License' },
-  { value: 'incidents', label: 'Incidents' },
-  { value: 'lastLapTime', label: 'Last Lap' },
+  { value: 'number', label: 'Car Number' },
+  { value: 'driverName', label: 'Driver Name' },
+  { value: 'carClass', label: 'Car Class' },
+  { value: 'classPosition', label: 'Class Position' },
+  { value: 'vehicleName', label: 'Vehicle' },
+  { value: 'interval', label: 'Interval' },
+  { value: 'lap', label: 'Lap' },
   { value: 'bestLapTime', label: 'Best Lap' },
-  { value: 'metricValue', label: 'Current Metric' }
+  { value: 'lastLapTime', label: 'Last Lap' },
+  { value: 'lapDelta', label: 'Lap Delta' },
+  { value: 'raceStartPosition', label: 'Start Position' },
+  { value: 'pitstops', label: 'Pitstops' },
+  { value: 'behind', label: 'Behind' },
+  { value: 'gear', label: 'Gear' },
+  { value: 'rpm', label: 'RPM' },
+  { value: 'speed', label: 'Speed' },
+  { value: 'steer', label: 'Steering' },
+  { value: 'throttle', label: 'Throttle' },
+  { value: 'brake', label: 'Brake' },
+  { value: 'clutch', label: 'Clutch' },
+  { value: 'fuelLevel', label: 'Fuel Level' },
+  { value: 'fuelUsePerHour', label: 'Fuel Use/Hour' },
+  { value: 'estimatedLaps', label: 'Est. Laps' },
+  { value: 'tireCompound', label: 'Tire Compound' },
+  { value: 'trackSurface', label: 'Track Surface' },
+  { value: 'isPitting', label: 'Pitting' },
+  { value: 'isOnPitRoad', label: 'On Pit Road' },
+  { value: 'fastRepairsUsed', label: 'Fast Repairs Used' },
+  { value: 'p2pCount', label: 'P2P Count' },
+  { value: 'p2pStatus', label: 'P2P Status' },
+  { value: 'paceFlags', label: 'Pace Flags' },
+  { value: 'paceLine', label: 'Pace Line' },
+  { value: 'paceRow', label: 'Pace Row' },
+  { value: 'currentMetric', label: 'Selected Metric' },
 ];
 
-// Default columns to show
+// Update DEFAULT_COLUMNS array with object format values
 const DEFAULT_COLUMNS = [
-  'position', 
-  'carNumber', 
-  'driverName', 
-  'carClass', 
-  'currentLap', 
+  'position',
+  'number',
+  'driverName',
+  'carClass',
+  'interval',
+  'lap',
   'bestLapTime',
-  'lastLapTime', 
-  'metricValue'
+  'currentMetric',
 ];
+
+// Add formatLapTime helper function
+const formatLapTime = (time: number | undefined): string => {
+  if (time === undefined || time <= 0) return '--:--';
+  
+  const minutes = Math.floor(time / 60);
+  const seconds = Math.floor(time % 60);
+  const milliseconds = Math.floor((time * 1000) % 1000);
+  
+  return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+};
 
 // Internal component that uses state from widget manager
 const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
@@ -91,6 +125,11 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       'CarIdxRPM',
       'CarIdxOnPitRoad',
       'CarIdxLapDistPct',
+      'CarIdxF2Time',
+      'CarIdxEstTime',
+      'CarIdxFastRepairsUsed',
+      'CarIdxP2P_Count',
+      'CarIdxP2P_Status',
       selectedMetric, // Always include the currently selected metric
     ],
   });
@@ -156,8 +195,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         rpm: telemetryData.CarIdxRPM?.[carIdx] || 0,
         onPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx] || false,
         trackPos: telemetryData.CarIdxLapDistPct?.[carIdx] || 0,
-        // Add the selected metric value
-        metricValue: telemetryData[selectedMetric]?.[carIdx] || 0,
+        gapTime: telemetryData.CarIdxF2Time?.[carIdx] || 0,
+        estimatedTime: telemetryData.CarIdxEstTime?.[carIdx] || 0,
+        fastRepairsUsed: telemetryData.CarIdxFastRepairsUsed?.[carIdx] || 0,
+        p2pCount: telemetryData.CarIdxP2P_Count?.[carIdx] || 0,
+        p2pStatus: telemetryData.CarIdxP2P_Status?.[carIdx] || 0,
+        vehicleName: driver?.car_name || '',
+        lapDelta: 0,
+        raceStartPosition: 0,
+        pitstops: 0,
+        behind: 0,
+        speed: 0,
+        steer: 0,
+        throttle: 0,
+        brake: 0,
+        clutch: 0,
+        fuelLevel: 0,
+        fuelUsePerHour: 0,
+        estimatedLaps: 0,
+        tireCompound: '',
+        trackSurface: '',
+        isPitting: false,
+        paceFlags: 0,
+        paceLine: 0,
+        paceRow: 0,
+        currentMetricValue: telemetryData[selectedMetric]?.[carIdx],
       };
     });
     
@@ -200,12 +262,24 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'metric':
         // Sort by the selected metric value
         sortedCars.sort((a, b) => {
-          // For boolean values, true comes first
-          if (typeof a.metricValue === 'boolean') {
-            return a.metricValue === b.metricValue ? 0 : a.metricValue ? -1 : 1;
+          // For numeric metrics, sort in descending order
+          const aValue = a[selectedMetric];
+          const bValue = b[selectedMetric];
+          
+          // Handle undefined values
+          if (aValue === undefined && bValue === undefined) return 0;
+          if (aValue === undefined) return 1;
+          if (bValue === undefined) return -1;
+          
+          // For lap times specifically (lower is better)
+          if (selectedMetric.toString() === 'bestLapTime' || selectedMetric.toString() === 'lastLapTime') {
+            if (aValue <= 0) return 1;
+            if (bValue <= 0) return -1;
+            return aValue - bValue;
           }
-          // For numeric values, sort numerically
-          return b.metricValue - a.metricValue;
+          
+          // For most other metrics, higher is better
+          return bValue - aValue;
         });
         break;
     }
@@ -242,6 +316,137 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     return 'text-base';
   };
 
+  // Update the renderColumnContent function
+  const renderColumnContent = (column: string, car: any) => {
+    switch (column) {
+      case 'position':
+        return car.position;
+      case 'number':
+        return car.carNumber;
+      case 'driverName':
+        return car.driverName;
+      case 'carClass':
+        return car.carClass;
+      case 'classPosition':
+        return car.classPosition || '-';
+      case 'vehicleName':
+        return car.vehicleName || '-';
+      case 'interval':
+        return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
+      case 'lap':
+        return car.currentLap;
+      case 'bestLapTime':
+        return formatLapTime(car.bestLapTime);
+      case 'lastLapTime':
+        return formatLapTime(car.lastLapTime);
+      case 'lapDelta':
+        return car.lapDelta || '-';
+      case 'raceStartPosition':
+        return car.raceStartPosition || '-';
+      case 'pitstops':
+        return car.pitstops || '0';
+      case 'behind':
+        return car.behind || '-';
+      case 'gear':
+        return car.gear || 'N';
+      case 'rpm':
+        return car.rpm ? Math.round(car.rpm) : '0';
+      case 'speed':
+        return car.speed ? Math.round(car.speed) : '0';
+      case 'steer':
+        return car.steer || '0';
+      case 'throttle':
+        return car.throttle ? Math.round(car.throttle * 100) + '%' : '0%';
+      case 'brake':
+        return car.brake ? Math.round(car.brake * 100) + '%' : '0%';
+      case 'clutch':
+        return car.clutch ? Math.round(car.clutch * 100) + '%' : '0%';
+      case 'fuelLevel':
+        return car.fuelLevel || '0';
+      case 'fuelUsePerHour':
+        return car.fuelUsePerHour || '0';
+      case 'estimatedLaps':
+        return car.estimatedLaps || '0';
+      case 'tireCompound':
+        return car.tireCompound || '-';
+      case 'trackSurface':
+        return car.trackSurface || '-';
+      case 'isPitting':
+        return car.isPitting ? 'Yes' : 'No';
+      case 'isOnPitRoad':
+        return car.onPitRoad ? 'Yes' : 'No';
+      case 'fastRepairsUsed':
+        return car.fastRepairsUsed || '0';
+      case 'p2pCount':
+        return car.p2pCount || '0';
+      case 'p2pStatus':
+        return car.p2pStatus === 1 ? 'Active' : 'Inactive';
+      case 'paceFlags':
+        return car.paceFlags || '-';
+      case 'paceLine':
+        return car.paceLine || '-';
+      case 'paceRow':
+        return car.paceRow || '-';
+      case 'currentMetric':
+        // Format the current metric value appropriately
+        if (selectedMetric.includes('Time') && typeof car.currentMetricValue === 'number') {
+          return formatLapTime(car.currentMetricValue);
+        } else if (typeof car.currentMetricValue === 'boolean') {
+          return car.currentMetricValue ? 'Yes' : 'No';
+        } else if (typeof car.currentMetricValue === 'number') {
+          // For percentage values
+          if (selectedMetric.includes('Pct') || selectedMetric.includes('Percent')) {
+            return (car.currentMetricValue * 100).toFixed(1) + '%';
+          }
+          // For integer-like values
+          if (Number.isInteger(car.currentMetricValue)) {
+            return car.currentMetricValue.toString();
+          }
+          // For floating point values
+          return car.currentMetricValue.toFixed(2);
+        }
+        return car.currentMetricValue?.toString() || '-';
+      default:
+        return '—';
+    }
+  };
+
+  // Get the display name for the current metric
+  const getCurrentMetricDisplayName = () => {
+    // Define a mapping of telemetry metrics to display names
+    const metricDisplayNames: Record<string, string> = {
+      'CarIdxPosition': 'Position',
+      'CarIdxLapDistPct': 'Track Position %',
+      'CarIdxLap': 'Current Lap',
+      'CarIdxLapCompleted': 'Completed Lap',
+      'CarIdxLastLapTime': 'Last Lap Time',
+      'CarIdxBestLapTime': 'Best Lap Time',
+      'CarIdxBestLapNum': 'Best Lap Number',
+      'CarIdxClass': 'Car Class',
+      'CarIdxClassPosition': 'Class Position',
+      'CarIdxGear': 'Gear',
+      'CarIdxRPM': 'RPM',
+      'CarIdxOnPitRoad': 'On Pit Road',
+      'CarIdxF2Time': 'Gap Time',
+      'CarIdxEstTime': 'Estimated Time',
+      'CarIdxFastRepairsUsed': 'Fast Repairs Used',
+      'CarIdxP2P_Count': 'Push-to-Pass Count',
+      'CarIdxP2P_Status': 'Push-to-Pass Status',
+      'CarIdxPaceFlags': 'Pace Flags',
+      'CarIdxPaceLine': 'Pace Line',
+      'CarIdxPaceRow': 'Pace Row',
+      'CarIdxQualTireCompound': 'Qualifying Tire Compound',
+      'CarIdxQualTireCompoundLocked': 'Qual Tire Compound Locked',
+      'CarIdxSteer': 'Steering Input',
+      'CarIdxTireCompound': 'Tire Compound',
+      'CarIdxTrackSurface': 'Track Surface',
+      'CarIdxTrackSurfaceMaterial': 'Track Surface Material'
+    };
+    
+    // Return the display name or the metric itself if not found
+    return metricDisplayNames[selectedMetric] || selectedMetric;
+  };
+
   return (
     <Widget 
       id={id} 
@@ -259,11 +464,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                   {actualColumns.includes('position') && (
                     <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Pos</th>
                   )}
-                  {actualColumns.includes('carNumber') && (
+                  {actualColumns.includes('number') && (
                     <th className="py-2 px-3 w-[50px] md:w-[60px] font-semibold">Car</th>
-                  )}
-                  {actualColumns.includes('teamName') && (
-                    <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Team</th>
                   )}
                   {actualColumns.includes('driverName') && (
                     <th className="py-2 px-3 w-[25%] min-w-[100px] font-semibold">Driver</th>
@@ -271,17 +473,17 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                   {actualColumns.includes('carClass') && (
                     <th className="py-2 px-3 w-[80px] md:w-[90px] font-semibold">Class</th>
                   )}
-                  {actualColumns.includes('currentLap') && (
+                  {actualColumns.includes('classPosition') && (
+                    <th className="py-2 px-3 text-center">Class Pos</th>
+                  )}
+                  {actualColumns.includes('vehicleName') && (
+                    <th className="py-2 px-3 text-center">Vehicle</th>
+                  )}
+                  {actualColumns.includes('interval') && (
+                    <th className="py-2 px-3 text-center">Interval</th>
+                  )}
+                  {actualColumns.includes('lap') && (
                     <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Lap</th>
-                  )}
-                  {actualColumns.includes('iRating') && (
-                    <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">iRating</th>
-                  )}
-                  {actualColumns.includes('license') && (
-                    <th className="py-2 px-3 w-[60px] md:w-[70px] font-semibold">License</th>
-                  )}
-                  {actualColumns.includes('incidents') && (
-                    <th className="py-2 px-3 w-[40px] md:w-[50px] font-semibold">Inc</th>
                   )}
                   {actualColumns.includes('bestLapTime') && (
                     <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Best Lap</th>
@@ -289,9 +491,81 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                   {actualColumns.includes('lastLapTime') && (
                     <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">Last Lap</th>
                   )}
-                  {actualColumns.includes('metricValue') && (
-                    <th className="py-2 px-3 w-[15%] min-w-[80px] font-semibold">
-                      {getMetricName(selectedMetric)}
+                  {actualColumns.includes('lapDelta') && (
+                    <th className="py-2 px-3 text-center">Lap Delta</th>
+                  )}
+                  {actualColumns.includes('raceStartPosition') && (
+                    <th className="py-2 px-3 text-center">Start Pos</th>
+                  )}
+                  {actualColumns.includes('pitstops') && (
+                    <th className="py-2 px-3 text-center">Pitstops</th>
+                  )}
+                  {actualColumns.includes('behind') && (
+                    <th className="py-2 px-3 text-center">Behind</th>
+                  )}
+                  {actualColumns.includes('gear') && (
+                    <th className="py-2 px-3 text-center">Gear</th>
+                  )}
+                  {actualColumns.includes('rpm') && (
+                    <th className="py-2 px-3 text-center">RPM</th>
+                  )}
+                  {actualColumns.includes('speed') && (
+                    <th className="py-2 px-3 text-center">Speed</th>
+                  )}
+                  {actualColumns.includes('steer') && (
+                    <th className="py-2 px-3 text-center">Steering</th>
+                  )}
+                  {actualColumns.includes('throttle') && (
+                    <th className="py-2 px-3 text-center">Throttle</th>
+                  )}
+                  {actualColumns.includes('brake') && (
+                    <th className="py-2 px-3 text-center">Brake</th>
+                  )}
+                  {actualColumns.includes('clutch') && (
+                    <th className="py-2 px-3 text-center">Clutch</th>
+                  )}
+                  {actualColumns.includes('fuelLevel') && (
+                    <th className="py-2 px-3 text-center">Fuel Level</th>
+                  )}
+                  {actualColumns.includes('fuelUsePerHour') && (
+                    <th className="py-2 px-3 text-center">Fuel Use/Hour</th>
+                  )}
+                  {actualColumns.includes('estimatedLaps') && (
+                    <th className="py-2 px-3 text-center">Est. Laps</th>
+                  )}
+                  {actualColumns.includes('tireCompound') && (
+                    <th className="py-2 px-3 text-center">Tire Compound</th>
+                  )}
+                  {actualColumns.includes('trackSurface') && (
+                    <th className="py-2 px-3 text-center">Track Surface</th>
+                  )}
+                  {actualColumns.includes('isPitting') && (
+                    <th className="py-2 px-3 text-center">Pitting</th>
+                  )}
+                  {actualColumns.includes('isOnPitRoad') && (
+                    <th className="py-2 px-3 text-center">On Pit Road</th>
+                  )}
+                  {actualColumns.includes('fastRepairsUsed') && (
+                    <th className="py-2 px-3 text-center">Fast Repairs Used</th>
+                  )}
+                  {actualColumns.includes('p2pCount') && (
+                    <th className="py-2 px-3 text-center">Push-to-Pass Count</th>
+                  )}
+                  {actualColumns.includes('p2pStatus') && (
+                    <th className="py-2 px-3 text-center">Push-to-Pass Status</th>
+                  )}
+                  {actualColumns.includes('paceFlags') && (
+                    <th className="py-2 px-3 text-center">Pace Flags</th>
+                  )}
+                  {actualColumns.includes('paceLine') && (
+                    <th className="py-2 px-3 text-center">Pace Line</th>
+                  )}
+                  {actualColumns.includes('paceRow') && (
+                    <th className="py-2 px-3 text-center">Pace Row</th>
+                  )}
+                  {actualColumns.includes('currentMetric') && (
+                    <th className="py-2 px-3 w-[80px] md:w-[100px] font-semibold">
+                      {getCurrentMetricDisplayName()}
                     </th>
                   )}
                 </tr>
@@ -304,25 +578,19 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                   >
                     {actualColumns.includes('position') && (
                       <td className="py-2 px-3 font-medium">
-                        {car.position}
+                        {renderColumnContent('position', car)}
                       </td>
                     )}
                     
-                    {actualColumns.includes('carNumber') && (
+                    {actualColumns.includes('number') && (
                       <td className="py-2 px-3">
-                        {car.carNumber}
-                      </td>
-                    )}
-                    
-                    {actualColumns.includes('teamName') && (
-                      <td className="py-2 px-3 truncate" title={car.teamName}>
-                        {car.teamName || '-'}
+                        {renderColumnContent('number', car)}
                       </td>
                     )}
                     
                     {actualColumns.includes('driverName') && (
                       <td className="py-2 px-3 truncate" title={car.driverName}>
-                        {car.driverName}
+                        {renderColumnContent('driverName', car)}
                       </td>
                     )}
                     
@@ -332,50 +600,194 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                           className="inline-block px-2 py-1 rounded text-white text-xs font-medium text-center"
                           style={{ backgroundColor: getClassColor(car.carClass) }}
                         >
-                          {car.carClass}
+                          {renderColumnContent('carClass', car)}
                         </span>
                       </td>
                     )}
                     
-                    {actualColumns.includes('currentLap') && (
+                    {actualColumns.includes('classPosition') && (
                       <td className="py-2 px-3 text-center">
-                        {car.currentLap}
+                        {renderColumnContent('classPosition', car)}
                       </td>
                     )}
                     
-                    {actualColumns.includes('iRating') && (
-                      <td className="py-2 px-3 text-right">
-                        {car.iRating || '-'}
+                    {actualColumns.includes('vehicleName') && (
+                      <td className="py-2 px-3 truncate" title={car.vehicleName}>
+                        {renderColumnContent('vehicleName', car)}
                       </td>
                     )}
                     
-                    {actualColumns.includes('license') && (
+                    {actualColumns.includes('interval') && (
                       <td className="py-2 px-3 text-center">
-                        {car.license || '-'}
+                        {renderColumnContent('interval', car)}
                       </td>
                     )}
                     
-                    {actualColumns.includes('incidents') && (
+                    {actualColumns.includes('lap') && (
                       <td className="py-2 px-3 text-center">
-                        {car.incidents !== undefined ? car.incidents : '-'}
+                        {renderColumnContent('lap', car)}
                       </td>
                     )}
                     
                     {actualColumns.includes('bestLapTime') && (
                       <td className="py-2 px-3 font-mono">
-                        {formatTelemetryValue('CarIdxBestLapTime', car.bestLapTime)}
+                        {renderColumnContent('bestLapTime', car)}
                       </td>
                     )}
                     
                     {actualColumns.includes('lastLapTime') && (
                       <td className="py-2 px-3 font-mono">
-                        {formatTelemetryValue('CarIdxLastLapTime', car.lastLapTime)}
+                        {renderColumnContent('lastLapTime', car)}
                       </td>
                     )}
                     
-                    {actualColumns.includes('metricValue') && (
+                    {actualColumns.includes('lapDelta') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('lapDelta', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('raceStartPosition') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('raceStartPosition', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('pitstops') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('pitstops', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('behind') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('behind', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('gear') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('gear', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('rpm') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('rpm', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('speed') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('speed', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('steer') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('steer', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('throttle') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('throttle', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('brake') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('brake', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('clutch') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('clutch', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('fuelLevel') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('fuelLevel', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('fuelUsePerHour') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('fuelUsePerHour', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('estimatedLaps') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('estimatedLaps', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('tireCompound') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('tireCompound', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('trackSurface') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('trackSurface', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('isPitting') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('isPitting', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('isOnPitRoad') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('isOnPitRoad', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('fastRepairsUsed') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('fastRepairsUsed', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('p2pCount') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('p2pCount', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('p2pStatus') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('p2pStatus', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('paceFlags') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('paceFlags', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('paceLine') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('paceLine', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('paceRow') && (
+                      <td className="py-2 px-3 text-center">
+                        {renderColumnContent('paceRow', car)}
+                      </td>
+                    )}
+                    
+                    {actualColumns.includes('currentMetric') && (
                       <td className="py-2 px-3 font-mono">
-                        {formatTelemetryValue(selectedMetric, car.metricValue)}
+                        {renderColumnContent('currentMetric', car)}
                       </td>
                     )}
                   </tr>
@@ -477,6 +889,10 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
     const update = { [id]: value };
     updateWidget(update);
   };
+
+  // Get current columns and check if the metric column is included
+  const currentColumns = widgetState.selectedColumns || DEFAULT_COLUMNS;
+  const showsMetricColumn = currentColumns.includes('currentMetric');
   
   return [
     {
@@ -536,6 +952,38 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
         { value: 'CarIdxTrackSurfaceMaterial', label: 'Track Surface Material' }
       ],
       onChange: (value) => onChange('selectedMetric', value)
+    },
+    {
+      id: 'displayMetricColumn',
+      type: 'toggle',
+      label: 'Show metric as column',
+      value: showsMetricColumn,
+      onChange: (value) => {
+        // Get the current columns
+        const currentColumns = widgetState.selectedColumns || DEFAULT_COLUMNS;
+        
+        // If turning on, add the metric column if not already present
+        // If turning off, remove the metric column if present
+        let newColumns;
+        if (value && !currentColumns.includes('currentMetric')) {
+          newColumns = [...currentColumns, 'currentMetric'];
+        } else if (!value && currentColumns.includes('currentMetric')) {
+          newColumns = currentColumns.filter(c => c !== 'currentMetric');
+        } else {
+          // No change needed
+          return;
+        }
+        
+        console.log(`[SimpleRaceTelemetryWidget] Toggling metric column. New columns:`, newColumns);
+        
+        // Update widget state
+        WidgetManager.updateWidgetState(widgetState.id, { 
+          selectedColumns: newColumns 
+        });
+        
+        // Also update through control mechanism
+        updateWidget({ selectedColumns: newColumns });
+      }
     },
     {
       id: 'sortBy',
