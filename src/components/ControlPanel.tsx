@@ -408,8 +408,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'select':
         return (
-          <div key={control.id} className="mt-3 relative">
-            <label className="detail-label text-sm text-gray-300 mb-1.5 block">{control.label}:</label>
+          <div key={control.id} className="mt-5 relative">
+            <label className="detail-label text-sm text-gray-300 mb-2.5 block">{control.label}:</label>
             <SelectDropdown 
               value={control.value}
               options={control.options}
@@ -420,14 +420,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       
       case 'slider':
         return (
-          <div key={control.id} className="mt-3">
-            <div className="flex justify-between items-center mb-1.5">
+          <div key={control.id} className="mt-5">
+            <div className="flex justify-between items-center mb-2.5">
               <label className="detail-label text-sm text-gray-300">{control.label}</label>
               <span className="text-xs px-2 py-0.5 bg-gray-700 rounded-full text-gray-300">
                 {control.value || 100}
               </span>
             </div>
-            <div className="pl-0 mt-1">
+            <div className="pl-0 mt-2">
               <input
                 type="range"
                 min={control.options && control.options[0] ? Number(control.options[0].value) : 0}
@@ -442,7 +442,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
               {control.options && control.options.length > 0 && (
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <div className="flex justify-between text-xs text-gray-400 mt-2">
                   {control.options.map((option: any) => (
                     <span 
                       key={option.value} 
@@ -460,7 +460,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       case 'toggle':
         return (
-          <div key={control.id} className="mt-3 flex items-center justify-between">
+          <div key={control.id} className="mt-5 flex items-center justify-between">
             <label className="detail-label text-sm text-gray-300">{control.label}</label>
             <div
               className={`relative inline-flex items-center w-11 h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${
@@ -480,7 +480,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         
       default:
         return (
-          <div key={control.id} className="mt-3 text-xs text-red-400 p-2 border border-red-400/20 rounded bg-red-400/10">
+          <div key={control.id} className="mt-5 text-xs text-red-400 p-2 border border-red-400/20 rounded bg-red-400/10">
             Unsupported control type: {control.type}
           </div>
         );
@@ -887,7 +887,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   <div style={{ height: '1px', flexGrow: 1, backgroundColor: 'rgba(100, 150, 255, 0.2)' }}></div>
                 </div>
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '16px 20px', 
                   backgroundColor: 'rgba(30, 41, 59, 0.6)', 
                   borderRadius: '8px'
                 }}>
@@ -2129,7 +2129,7 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({ value, options, onChang
   return (
     <div ref={dropdownRef} className="relative">
       <div
-        className="w-full py-1.5 px-2 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer flex justify-between items-center"
+        className="w-full py-2 px-3 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer flex justify-between items-center"
         onClick={(e) => {
           e.stopPropagation();
           setIsOpen(!isOpen);
@@ -2148,7 +2148,7 @@ const SelectDropdown: React.FC<SelectDropdownProps> = ({ value, options, onChang
           {options.map((option) => (
             <div
               key={option.value}
-              className={`px-2 py-1.5 cursor-pointer hover:bg-gray-700 text-sm ${option.value === value ? 'bg-blue-600 text-white' : 'text-gray-200'}`}
+              className={`px-3 py-2 cursor-pointer hover:bg-gray-700 text-sm ${option.value === value ? 'bg-blue-600 text-white' : 'text-gray-200'}`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleSelect(option.value);
