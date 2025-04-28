@@ -87,6 +87,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   const formattedCarData = useMemo(() => {
     if (!telemetryData || !sessionData) return [];
 
+    // Debug: Log session data to inspect available driver information
+    console.log('SESSION DATA:', sessionData);
+    console.log('DRIVERS INFO:', sessionData.drivers);
+    console.log('PLAYER INFO:', sessionData.drivers?.player);
+    console.log('OTHER DRIVERS:', sessionData.drivers?.other_drivers);
+
     // Extract driver information from session data
     const driverInfo = sessionData.drivers?.other_drivers || [];
     const playerInfo = sessionData.drivers?.player || null;
@@ -108,6 +114,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         isPlayer,
         driverName: driver?.user_name || `Car #${carIdx}`,
         carNumber: driver?.car_number || carIdx.toString(),
+        teamName: driver?.team_name || '',
+        iRating: driver?.i_rating,
+        license: driver?.license || '',
+        incidents: driver?.incidents,
         carClass: telemetryData.CarIdxClass?.[carIdx] || '',
         position: telemetryData.CarIdxPosition?.[carIdx] || 999,
         classPosition: telemetryData.CarIdxClassPosition?.[carIdx] || 999,
@@ -197,43 +207,60 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       <div className="w-full h-full min-h-[240px] min-w-[240px] flex flex-col overflow-hidden p-2">
         {telemetryData && formattedCarData.length > 0 ? (
           <div className="w-full h-full overflow-auto scrollbar-thin">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm table-fixed">
               <thead className="sticky top-0 bg-slate-800 text-gray-300 text-xs">
                 <tr>
-                  <th className="py-1 px-2">Pos</th>
-                  {showDetails && <th className="py-1 px-2">Car</th>}
-                  <th className="py-1 px-2">Driver</th>
-                  {highlightClass && <th className="py-1 px-2">Class</th>}
-                  {showDetails && <th className="py-1 px-2">Lap</th>}
-                  <th className="py-1 px-2">
+                  <th className="py-1 px-2 w-[40px]">Pos</th>
+                  {showDetails && (
+                    <>
+                      <th className="py-1 px-2 w-[50px]">Car</th>
+                      <th className="py-1 px-2 w-[15%] min-w-[80px]">Team</th>
+                    </>
+                  )}
+                  <th className="py-1 px-2 w-[25%] min-w-[100px]">Driver</th>
+                  {highlightClass && <th className="py-1 px-2 w-[80px]">Class</th>}
+                  {showDetails && (
+                    <>
+                      <th className="py-1 px-2 w-[40px]">Lap</th>
+                      <th className="py-1 px-2 w-[60px]">iRating</th>
+                      <th className="py-1 px-2 w-[60px]">License</th>
+                      <th className="py-1 px-2 w-[40px]">Inc</th>
+                    </>
+                  )}
+                  <th className="py-1 px-2 w-[15%] min-w-[80px]">
                     {getMetricName(selectedMetric)}
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="text-xs md:text-sm">
                 {formattedCarData.map((car) => (
                   <tr 
                     key={car.carIdx} 
-                    className={`${car.isPlayer ? 'bg-blue-900/30' : 'hover:bg-slate-700/50'} border-b border-slate-700/50`}
+                    className={`${car.isPlayer ? 'bg-blue-900/30' : 'hover:bg-slate-700/50'} border-b border-slate-700/50 text-ellipsis`}
                   >
                     <td className="py-1 px-2 font-medium">
                       {car.position}
                     </td>
                     
                     {showDetails && (
-                      <td className="py-1 px-2">
-                        {car.carNumber}
-                      </td>
+                      <>
+                        <td className="py-1 px-2">
+                          {car.carNumber}
+                        </td>
+                        <td className="py-1 px-2 truncate" title={car.teamName}>
+                          {car.teamName || '-'}
+                        </td>
+                      </>
                     )}
                     
-                    <td className="py-1 px-2">
+                    <td className="py-1 px-2 truncate" title={car.driverName}>
                       {car.driverName}
                     </td>
                     
                     {highlightClass && (
                       <td className="py-1 px-2">
                         <span
-                          className="inline-block px-1.5 py-0.5 rounded text-white text-xs font-medium"
+                          className="inline-block px-1.5 py-0.5 rounded text-white text-xs font-medium text-center"
                           style={{ backgroundColor: getClassColor(car.carClass) }}
                         >
                           {car.carClass}
@@ -242,9 +269,20 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     )}
                     
                     {showDetails && (
-                      <td className="py-1 px-2">
-                        {car.currentLap}
-                      </td>
+                      <>
+                        <td className="py-1 px-2 text-center">
+                          {car.currentLap}
+                        </td>
+                        <td className="py-1 px-2 text-right">
+                          {car.iRating || '-'}
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          {car.license || '-'}
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          {car.incidents !== undefined ? car.incidents : '-'}
+                        </td>
+                      </>
                     )}
                     
                     <td className="py-1 px-2 font-mono">
@@ -381,7 +419,7 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
     {
       id: 'showDetails',
       type: 'toggle',
-      label: 'Show Details',
+      label: 'Show Driver Details',
       value: widgetState.showDetails !== undefined ? widgetState.showDetails : false,
       onChange: (value) => onChange('showDetails', value)
     },
