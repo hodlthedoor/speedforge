@@ -414,7 +414,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               <select
                 className="w-full py-1.5 px-2 pr-8 rounded-md bg-gray-700 text-sm text-gray-200 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none"
                 value={control.value}
-                onChange={(e) => control.onChange(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  control.onChange(e.target.value);
+                }}
               >
                 {control.options.map((option: any) => (
                   <option key={option.value} value={option.value}>
