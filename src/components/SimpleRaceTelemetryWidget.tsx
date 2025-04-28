@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Widget from './Widget';
 import { TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
 import { WidgetControlDefinition } from '../widgets/WidgetRegistry';
+import { WidgetManager } from '../services/WidgetManager';
 
 interface SimpleRaceTelemetryWidgetProps {
   id: string;
@@ -16,16 +17,23 @@ interface SimpleRaceTelemetryWidgetProps {
   name?: string;
 }
 
-const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProps> = ({
-  id,
-  onClose,
-  selectedMetric = 'CarIdxPosition',
-  sortBy = 'position',
-  showDetails = false,
-  highlightClass = true,
-  maxItems = 10,
-  name = 'Race Data'
-}) => {
+// Internal component that uses state from widget manager
+const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
+  const {
+    id,
+    onClose,
+    selectedMetric = 'CarIdxPosition',
+    sortBy = 'position',
+    showDetails = false,
+    highlightClass = true,
+    maxItems = 10,
+    name = 'Race Data',
+    ...otherProps
+  } = props;
+
+  // Log ALL props received
+  console.log(`[SimpleRaceTelemetryWidget ${id}] FULL PROPS OBJECT:`, props);
+  
   // Log props when component renders
   console.log(`[SimpleRaceTelemetryWidget ${id}] Rendering with props:`, {
     selectedMetric,
@@ -104,6 +112,55 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
       </div>
     </Widget>
   );
+};
+
+// Wrapper component that synchronizes with the WidgetManager
+const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
+  const { id } = props;
+  
+  // Get initial state from WidgetManager
+  const widget = WidgetManager.getWidget(id);
+  const initialState = widget?.state || {};
+  
+  // Local state to force re-renders when widget state changes
+  const [stateVersion, setStateVersion] = useState(0);
+  
+  // Subscribe to widget state updates
+  useEffect(() => {
+    console.log(`[SimpleRaceTelemetryWidgetComponent] Setting up subscription for widget ${id}`);
+    
+    const unsubscribe = WidgetManager.subscribe((event) => {
+      if (event.type === 'widget:state:updated' && event.widgetId === id) {
+        console.log(`[SimpleRaceTelemetryWidgetComponent] Received state update for widget ${id}:`, event.state);
+        // Force re-render
+        setStateVersion(v => v + 1);
+      }
+    });
+    
+    return () => {
+      console.log(`[SimpleRaceTelemetryWidgetComponent] Cleaning up subscription for widget ${id}`);
+      unsubscribe();
+    };
+  }, [id]);
+  
+  // Get latest state from WidgetManager
+  const currentWidget = WidgetManager.getWidget(id);
+  const currentState = currentWidget?.state || initialState;
+  
+  console.log(`[SimpleRaceTelemetryWidgetComponent] Rendering widget ${id} with state:`, currentState);
+  console.log(`[SimpleRaceTelemetryWidgetComponent] State version: ${stateVersion}`);
+  
+  // Combine props with current widget state
+  const combinedProps = {
+    ...props,
+    selectedMetric: currentState.selectedMetric,
+    sortBy: currentState.sortBy,
+    showDetails: currentState.showDetails,
+    highlightClass: currentState.highlightClass,
+    maxItems: currentState.maxItems
+  };
+  
+  return <SimpleRaceTelemetryWidgetInternal {...combinedProps} />;
 };
 
 // Create the control definitions for the widget
