@@ -368,9 +368,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'lap':
         return car.currentLap;
       case 'bestLapTime':
-        return formatLapTime(car.bestLapTime);
+        return car.bestLapTime > 0 ? formatLapTime(car.bestLapTime) : '--:--';
       case 'lastLapTime':
-        return formatLapTime(car.lastLapTime);
+        return car.lastLapTime > 0 ? formatLapTime(car.lastLapTime) : '--:--';
       case 'lapDelta':
         return car.lapDelta || '-';
       case 'raceStartPosition':
@@ -422,7 +422,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'currentMetric':
         // Format the current metric value appropriately
         if (selectedMetric.includes('Time') && typeof car.currentMetricValue === 'number') {
-          return formatLapTime(car.currentMetricValue);
+          return car.currentMetricValue > 0 ? formatLapTime(car.currentMetricValue) : '--:--';
         } else if (typeof car.currentMetricValue === 'boolean') {
           return car.currentMetricValue ? 'Yes' : 'No';
         } else if (typeof car.currentMetricValue === 'number') {
