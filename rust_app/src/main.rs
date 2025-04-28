@@ -479,17 +479,12 @@ async fn main() {
                                             serde_json::json!({})
                                         });
                                         
-                                        match ws_server_clone.broadcast_telemetry(&json_value) {
-                                            Ok(_) => {
-                                                // Only log broadcasts in verbose mode or periodically
-                                                if should_log_telemetry_update() {
-                                                    log_info!("Broadcast telemetry data to {} clients", ws_server_clone.client_count());
-                                                }
-                                            },
-                                            Err(e) => {
-                                                log_error!("Error broadcasting telemetry: {}", e);
-                                                // Don't break here, just log the error and continue
-                                            }
+                                        // Broadcast telemetry to all WebSocket clients
+                                        ws_server_clone.broadcast_telemetry(&telemetry_data);
+                                        
+                                        // Only log broadcasts in verbose mode or periodically
+                                        if should_log_telemetry_update() {
+                                            log_info!("Broadcast telemetry data to {} clients", ws_server_clone.client_count());
                                         }
                                     },
                                     Err(e) => {

@@ -148,7 +148,7 @@ impl TelemetryWebSocketServer {
         let message = serde_json::to_string(&telemetry).unwrap();
         
         // Send to each connected client
-        for (_, client) in clients.iter() {
+        for client in clients.iter() {
             if let Err(e) = client.0.send(Message::Text(message.clone())) {
                 eprintln!("Error sending telemetry: {:?}", e);
             }
