@@ -122,9 +122,46 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       'CarIdxFastRepairsUsed',
       'CarIdxP2P_Count',
       'CarIdxP2P_Status',
+      'CarIdxSteer',  // Added for debugging steering
       selectedMetric, // Always include the currently selected metric
     ],
   });
+
+  // Log raw telemetry data when it changes
+  useEffect(() => {
+    if (telemetryData) {
+      console.log('[SimpleRaceTelemetryWidget] Raw telemetry data:', {
+        // Car Index fields
+        CarIdxPosition: telemetryData.CarIdxPosition,
+        CarIdxLap: telemetryData.CarIdxLap,
+        CarIdxLapCompleted: telemetryData.CarIdxLapCompleted,
+        CarIdxLastLapTime: telemetryData.CarIdxLastLapTime,
+        CarIdxBestLapTime: telemetryData.CarIdxBestLapTime,
+        CarIdxClass: telemetryData.CarIdxClass,
+        CarIdxClassPosition: telemetryData.CarIdxClassPosition,
+        CarIdxGear: telemetryData.CarIdxGear,
+        CarIdxRPM: telemetryData.CarIdxRPM,
+        CarIdxOnPitRoad: telemetryData.CarIdxOnPitRoad,
+        CarIdxLapDistPct: telemetryData.CarIdxLapDistPct,
+        CarIdxF2Time: telemetryData.CarIdxF2Time,
+        CarIdxEstTime: telemetryData.CarIdxEstTime,
+        CarIdxFastRepairsUsed: telemetryData.CarIdxFastRepairsUsed,
+        CarIdxP2P_Count: telemetryData.CarIdxP2P_Count,
+        CarIdxP2P_Status: telemetryData.CarIdxP2P_Status,
+        CarIdxSteer: telemetryData.CarIdxSteer,
+        CarIdxPaceFlags: telemetryData.CarIdxPaceFlags,
+        CarIdxPaceLine: telemetryData.CarIdxPaceLine,
+        CarIdxPaceRow: telemetryData.CarIdxPaceRow,
+        CarIdxQualTireCompound: telemetryData.CarIdxQualTireCompound,
+        CarIdxQualTireCompoundLocked: telemetryData.CarIdxQualTireCompoundLocked,
+        CarIdxTireCompound: telemetryData.CarIdxTireCompound,
+        CarIdxTrackSurface: telemetryData.CarIdxTrackSurface,
+        CarIdxTrackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial,
+        // Selected metric
+        selectedMetric: telemetryData[selectedMetric]
+      });
+    }
+  }, [telemetryData, selectedMetric]);
 
   // Log only the most important props - focused on columns
   console.log(`[SimpleRaceTelemetryWidget] Rendering with columns:`, {
@@ -163,7 +200,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const isPlayer = carIdx === playerCarIndex;
 
       // Create data object for this car with only available CarIdx metrics
-      return {
+      const carData = {
         carIdx,
         isPlayer,
         driverName: driver?.user_name || `Car #${carIdx}`,
@@ -199,6 +236,34 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         trackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial?.[carIdx] || '',
         currentMetricValue: telemetryData[selectedMetric]?.[carIdx],
       };
+
+      // Log data for the player car
+      if (isPlayer) {
+        console.log('[SimpleRaceTelemetryWidget] Player car data:', {
+          carIdx,
+          // Raw values
+          rawSteer: telemetryData.CarIdxSteer?.[carIdx],
+          rawRPM: telemetryData.CarIdxRPM?.[carIdx],
+          rawGear: telemetryData.CarIdxGear?.[carIdx],
+          rawPosition: telemetryData.CarIdxPosition?.[carIdx],
+          rawLap: telemetryData.CarIdxLap?.[carIdx],
+          rawLapDistPct: telemetryData.CarIdxLapDistPct?.[carIdx],
+          rawOnPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx],
+          // Formatted values
+          steer: carData.steer,
+          rpm: carData.rpm,
+          gear: carData.gear,
+          position: carData.position,
+          currentLap: carData.currentLap,
+          trackPos: carData.trackPos,
+          onPitRoad: carData.onPitRoad,
+          // Selected metric
+          currentMetric: selectedMetric,
+          currentMetricValue: carData.currentMetricValue
+        });
+      }
+
+      return carData;
     });
     
     // Filter out invalid entries (position 0 or 999 usually means no car there)
