@@ -228,12 +228,19 @@ WidgetRegistry.register('simple-race-telemetry', {
     widgetWidth: 600,
     selectedMetric: 'CarIdxPosition',
     sortBy: 'position',
-    showDetails: true,
-    highlightClass: true,
     maxItems: 10,
     name: 'Race Telemetry',
     fontSize: 'text-sm',
-    selectedColumns: ['position', 'driverName', 'carClass', 'currentLap', 'metricValue']
+    selectedColumns: [
+      'position', 
+      'carNumber', 
+      'driverName', 
+      'carClass', 
+      'currentLap', 
+      'bestLapTime',
+      'lastLapTime', 
+      'metricValue'
+    ]
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'
