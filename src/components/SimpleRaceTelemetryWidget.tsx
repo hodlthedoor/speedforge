@@ -227,8 +227,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           // Find the closest car ahead
           const [closestCarIdx, closestHistory] = carsAhead.reduce((closest, [idx, history]) => {
             const idxNum = parseInt(idx);
-            const lastPos = history[history.length - 1].pos;
-            const currentLastPos = carHistory[carHistory.length - 1].pos;
+            const lastPos = history.length > 0 ? history[history.length - 1].pos : 0;
+            const currentLastPos = carHistory.length > 0 ? carHistory[carHistory.length - 1].pos : 0;
             
             // Prefer cars that are exactly one position ahead
             if (history.length === carHistory.length + 1) {
@@ -237,12 +237,13 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             
             // Otherwise use the closest by track position
             const distance = lastPos - currentLastPos;
-            return distance < (closest[1][closest[1].length - 1].pos - currentLastPos) ? [idx, history] : closest;
+            const closestDistance = closest[1].length > 0 ? closest[1][closest[1].length - 1].pos - currentLastPos : 1000;
+            return distance < closestDistance ? [idx, history] : closest;
           }, ['', []] as [string, Array<{ pos: number, time: number }>]);
 
           const closestCarIdxNum = parseInt(closestCarIdx);
-          const carTime = carHistory[carHistory.length - 1].time;
-          const closestCarTime = closestHistory[closestHistory.length - 1].time;
+          const carTime = carHistory.length > 0 ? carHistory[carHistory.length - 1].time : currentTime;
+          const closestCarTime = closestHistory.length > 0 ? closestHistory[closestHistory.length - 1].time : currentTime;
           
           newCalculatedGaps[carIdx] = (carTime - closestCarTime) / 1000;
         } else {
