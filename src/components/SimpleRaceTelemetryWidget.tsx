@@ -175,46 +175,50 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       // Only update if we've passed a 5% marker
       if (!newTimeHistory[carIdx][roundedPos]) {
         newTimeHistory[carIdx][roundedPos] = currentTime;
-      }
+        
+        // Calculate gap to leader
+        if (carIdx !== leaderIdx && 
+            newTimeHistory[leaderIdx] && 
+            newTimeHistory[leaderIdx][roundedPos]) {
+          const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos]) / 1000;
+          gapsToLeader[carIdx] = gapToLeader;
+          
+          // Debug log for gap to leader
+          console.log(`[Gap Calculation] Car ${carIdx} at ${roundedPos}%: Gap to leader = ${gapToLeader.toFixed(3)}s`);
+        }
 
-      // Calculate gap to leader
-      if (carIdx !== leaderIdx && 
-          newTimeHistory[carIdx][roundedPos] && 
-          newTimeHistory[leaderIdx] && 
-          newTimeHistory[leaderIdx][roundedPos]) {
-        const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos]) / 1000;
-        gapsToLeader[carIdx] = gapToLeader;
-      }
+        // Find the car ahead
+        const carsAhead = Object.entries(currentPositions)
+          .filter(([idx, pos]) => {
+            const idxNum = parseInt(idx);
+            const posNum = pos as number;
+            return idxNum !== carIdx && 
+                   (posNum > currentPosNum || (posNum < 0.1 && currentPosNum > 0.9));
+          });
 
-      // Find the car ahead
-      const carsAhead = Object.entries(currentPositions)
-        .filter(([idx, pos]) => {
-          const idxNum = parseInt(idx);
-          const posNum = pos as number;
-          return idxNum !== carIdx && 
-                 (posNum > currentPosNum || (posNum < 0.1 && currentPosNum > 0.9));
-        });
+        if (carsAhead.length > 0) {
+          // Find the closest car ahead
+          const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
+            const posNum = pos as number;
+            const distance = posNum > currentPosNum 
+              ? posNum - currentPosNum 
+              : (1 - currentPosNum) + posNum;
+            return distance < (closest[1] as number) ? [idx, distance] : closest;
+          }, ['', 1] as [string, number]);
 
-      if (carsAhead.length > 0) {
-        // Find the closest car ahead
-        const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
-          const posNum = pos as number;
-          const distance = posNum > currentPosNum 
-            ? posNum - currentPosNum 
-            : (1 - currentPosNum) + posNum;
-          return distance < (closest[1] as number) ? [idx, distance] : closest;
-        }, ['', 1] as [string, number]);
+          const closestCarIdxNum = parseInt(closestCarIdx);
+          const closestCarPosNum = closestCarPos as number;
+          const roundedClosestPos = Math.round(closestCarPosNum * 20) / 20;
 
-        const closestCarIdxNum = parseInt(closestCarIdx);
-        const closestCarPosNum = closestCarPos as number;
-        const roundedClosestPos = Math.round(closestCarPosNum * 20) / 20;
-
-        // Calculate gap using time history at the same track position
-        if (newTimeHistory[carIdx][roundedPos] && 
-            newTimeHistory[closestCarIdxNum] && 
-            newTimeHistory[closestCarIdxNum][roundedPos]) {
-          const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos]) / 1000;
-          calculatedGaps[carIdx] = gap;
+          // Calculate gap using time history at the same track position
+          if (newTimeHistory[closestCarIdxNum] && 
+              newTimeHistory[closestCarIdxNum][roundedPos]) {
+            const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos]) / 1000;
+            calculatedGaps[carIdx] = gap;
+            
+            // Debug log for gap to car ahead
+            console.log(`[Gap Calculation] Car ${carIdx} at ${roundedPos}%: Gap to car ${closestCarIdxNum} = ${gap.toFixed(3)}s`);
+          }
         }
       }
     });
@@ -246,29 +250,40 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     // Update the car data with calculated values
     if (telemetryData) {
+      // Create a new object to trigger re-render
+      const updatedTelemetryData = { ...telemetryData };
+      
+      // Update gaps to car ahead
       Object.entries(calculatedGaps).forEach(([carIdx, gap]) => {
         const idx = parseInt(carIdx);
-        if (telemetryData.CarIdxF2Time) {
-          telemetryData.CarIdxF2Time[idx] = gap;
+        if (!updatedTelemetryData.CarIdxF2Time) {
+          updatedTelemetryData.CarIdxF2Time = [];
         }
+        updatedTelemetryData.CarIdxF2Time[idx] = gap;
       });
 
-      // Add gap to leader to telemetry data
+      // Update gaps to leader
       Object.entries(gapsToLeader).forEach(([carIdx, gap]) => {
         const idx = parseInt(carIdx);
-        if (!telemetryData.CarIdxGapToLeader) {
-          telemetryData.CarIdxGapToLeader = [];
+        if (!updatedTelemetryData.CarIdxGapToLeader) {
+          updatedTelemetryData.CarIdxGapToLeader = [];
         }
-        telemetryData.CarIdxGapToLeader[idx] = gap;
+        updatedTelemetryData.CarIdxGapToLeader[idx] = gap;
       });
 
       // Update positions
       Object.entries(calculatedPositions).forEach(([carIdx, position]) => {
         const idx = parseInt(carIdx);
-        if (telemetryData.CarIdxPosition) {
-          telemetryData.CarIdxPosition[idx] = position;
+        if (!updatedTelemetryData.CarIdxPosition) {
+          updatedTelemetryData.CarIdxPosition = [];
         }
+        updatedTelemetryData.CarIdxPosition[idx] = position;
       });
+
+      // Update the telemetry data through the hook
+      if (typeof telemetryData === 'object' && telemetryData !== null) {
+        Object.assign(telemetryData, updatedTelemetryData);
+      }
     }
   }, [telemetryData, timeHistory]);
 
@@ -520,14 +535,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'interval':
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
       case 'gap':
-        // Format the gap to car ahead
         if (car.position === 1) return '--'; // Leader has no gap
-        if (car.gapToAhead === 0) return '--'; // No gap data available
-        return formatLapTime(car.gapToAhead);
+        const gapToAhead = telemetryData?.CarIdxF2Time?.[car.carIdx];
+        if (!gapToAhead) return '--';
+        return formatLapTime(gapToAhead);
       case 'gapToLeader':
         if (car.position === 1) return '--'; // Leader has no gap
-        if (car.gapToLeader === 0) return '--'; // No gap data available
-        return formatLapTime(car.gapToLeader);
+        const gapToLeader = telemetryData?.CarIdxGapToLeader?.[car.carIdx];
+        if (!gapToLeader) return '--';
+        return formatLapTime(gapToLeader);
       case 'lap':
         return car.currentLap;
       case 'lastLapTime':
