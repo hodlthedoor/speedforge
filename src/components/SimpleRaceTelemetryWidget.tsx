@@ -233,7 +233,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           newGapsToLeader[carIdx] = gapToLeader;
         }
 
-        // Find the car ahead
+        // Find the car ahead using our calculated positions
         const carsAhead = Object.entries(currentPositions)
           .filter(([idx, pos]) => {
             const idxNum = parseInt(idx);
@@ -241,22 +241,40 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             const laps = currentLaps[idxNum] || 0;
             const totalPosAhead = laps * 100 + posNum;
             
+            // Only consider cars that are actually ahead in position
+            const carAheadPosition = newCalculatedPositions[idxNum] || 999;
+            const currentCarPosition = newCalculatedPositions[carIdx] || 999;
+            
             return idxNum !== carIdx && 
+                   carAheadPosition < currentCarPosition &&
                    (totalPosAhead > totalPos || 
                     (totalPosAhead < 100 && totalPos > (currentLap * 100 + 90)));
           });
 
         if (carsAhead.length > 0) {
-          // Find the closest car ahead
+          // Find the closest car ahead by position
           const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
             const idxNum = parseInt(idx);
             const posNum = pos as number;
             const laps = currentLaps[idxNum] || 0;
             const totalPosAhead = laps * 100 + posNum;
             
+            // Use position difference as primary factor
+            const currentCarPosition = newCalculatedPositions[carIdx] || 999;
+            const carAheadPosition = newCalculatedPositions[idxNum] || 999;
+            const positionDiff = currentCarPosition - carAheadPosition;
+            
+            // Use track position as secondary factor
             const distance = totalPosAhead > totalPos 
               ? totalPosAhead - totalPos 
               : (100 - totalPos % 100) + (totalPosAhead % 100);
+            
+            // Prefer cars that are exactly one position ahead
+            if (positionDiff === 1) {
+              return [idx, distance];
+            }
+            
+            // Otherwise use the closest by track position
             return distance < (closest[1] as number) ? [idx, distance] : closest;
           }, ['', 1000] as [string, number]);
 
@@ -270,7 +288,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             const timeDiff = calculateTimeDifference(closestCarIdxNum, roundedPos, closestCarPosNum);
             const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos] + timeDiff) / 1000;
             newCalculatedGaps[carIdx] = gap;
+            
+            // // Debug log for gap calculation
+            // if (process.env.NODE_ENV === 'development') {
+            //   console.log(`[Gap Calculation] Car ${carIdx} (P${newCalculatedPositions[carIdx]}) -> Car ${closestCarIdxNum} (P${newCalculatedPositions[closestCarIdxNum]}): ${gap.toFixed(3)}s`);
+            // }
           }
+        } else {
+          // No car ahead found, clear the gap
+          newCalculatedGaps[carIdx] = 0;
         }
       }
     });
@@ -329,16 +355,16 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       }
     });
 
-    // Log position changes for debugging
-    if (process.env.NODE_ENV === 'development') {
-      positionData.forEach(data => {
-        const oldPosition = telemetryData.CarIdxPosition?.[data.carIdx];
-        const newPosition = newCalculatedPositions[data.carIdx];
-        if (oldPosition !== newPosition) {
-          console.log(`[Position Update] Car ${data.carIdx}: ${oldPosition} -> ${newPosition} (Lap ${data.laps}, Pos ${data.pos.toFixed(2)}%)`);
-        }
-      });
-    }
+    // // Log position changes for debugging
+    // if (process.env.NODE_ENV === 'development') {
+    //   positionData.forEach(data => {
+    //     const oldPosition = telemetryData.CarIdxPosition?.[data.carIdx];
+    //     const newPosition = newCalculatedPositions[data.carIdx];
+    //     if (oldPosition !== newPosition) {
+    //       console.log(`[Position Update] Car ${data.carIdx}: ${oldPosition} -> ${newPosition} (Lap ${data.laps}, Pos ${data.pos.toFixed(2)}%)`);
+    //     }
+    //   });
+    // }
 
     // Update all states
     setTimeHistory(newTimeHistory);
@@ -386,62 +412,62 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     }
   }, [telemetryData, timeHistory, calculatedGaps, calculatedGapsToLeader, calculatedPositions]);
 
-  // Log raw telemetry data when it changes
-  useEffect(() => {
-    if (telemetryData) {
-      console.log('[SimpleRaceTelemetryWidget] Raw telemetry data:', {
-        // Car Index fields
-        CarIdxPosition: telemetryData.CarIdxPosition,
-        CarIdxLap: telemetryData.CarIdxLap,
-        CarIdxLapCompleted: telemetryData.CarIdxLapCompleted,
-        CarIdxLastLapTime: telemetryData.CarIdxLastLapTime,
-        CarIdxBestLapTime: telemetryData.CarIdxBestLapTime,
-        CarIdxClass: telemetryData.CarIdxClass,
-        CarIdxClassPosition: telemetryData.CarIdxClassPosition,
-        CarIdxGear: telemetryData.CarIdxGear,
-        CarIdxRPM: telemetryData.CarIdxRPM,
-        CarIdxOnPitRoad: telemetryData.CarIdxOnPitRoad,
-        CarIdxLapDistPct: telemetryData.CarIdxLapDistPct,
-        CarIdxF2Time: telemetryData.CarIdxF2Time,
-        CarIdxEstTime: telemetryData.CarIdxEstTime,
-        CarIdxFastRepairsUsed: telemetryData.CarIdxFastRepairsUsed,
-        CarIdxP2P_Count: telemetryData.CarIdxP2P_Count,
-        CarIdxP2P_Status: telemetryData.CarIdxP2P_Status,
-        CarIdxSteer: telemetryData.CarIdxSteer,
-        CarIdxPaceFlags: telemetryData.CarIdxPaceFlags,
-        CarIdxPaceLine: telemetryData.CarIdxPaceLine,
-        CarIdxPaceRow: telemetryData.CarIdxPaceRow,
-        CarIdxQualTireCompound: telemetryData.CarIdxQualTireCompound,
-        CarIdxQualTireCompoundLocked: telemetryData.CarIdxQualTireCompoundLocked,
-        CarIdxTireCompound: telemetryData.CarIdxTireCompound,
-        CarIdxTrackSurface: telemetryData.CarIdxTrackSurface,
-        CarIdxTrackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial,
-        // Selected metric
-        selectedMetric: telemetryData[selectedMetric]
-      });
-    }
-  }, [telemetryData, selectedMetric]);
+  // // Log raw telemetry data when it changes
+  // useEffect(() => {
+  //   if (telemetryData) {
+  //     console.log('[SimpleRaceTelemetryWidget] Raw telemetry data:', {
+  //       // Car Index fields
+  //       CarIdxPosition: telemetryData.CarIdxPosition,
+  //       CarIdxLap: telemetryData.CarIdxLap,
+  //       CarIdxLapCompleted: telemetryData.CarIdxLapCompleted,
+  //       CarIdxLastLapTime: telemetryData.CarIdxLastLapTime,
+  //       CarIdxBestLapTime: telemetryData.CarIdxBestLapTime,
+  //       CarIdxClass: telemetryData.CarIdxClass,
+  //       CarIdxClassPosition: telemetryData.CarIdxClassPosition,
+  //       CarIdxGear: telemetryData.CarIdxGear,
+  //       CarIdxRPM: telemetryData.CarIdxRPM,
+  //       CarIdxOnPitRoad: telemetryData.CarIdxOnPitRoad,
+  //       CarIdxLapDistPct: telemetryData.CarIdxLapDistPct,
+  //       CarIdxF2Time: telemetryData.CarIdxF2Time,
+  //       CarIdxEstTime: telemetryData.CarIdxEstTime,
+  //       CarIdxFastRepairsUsed: telemetryData.CarIdxFastRepairsUsed,
+  //       CarIdxP2P_Count: telemetryData.CarIdxP2P_Count,
+  //       CarIdxP2P_Status: telemetryData.CarIdxP2P_Status,
+  //       CarIdxSteer: telemetryData.CarIdxSteer,
+  //       CarIdxPaceFlags: telemetryData.CarIdxPaceFlags,
+  //       CarIdxPaceLine: telemetryData.CarIdxPaceLine,
+  //       CarIdxPaceRow: telemetryData.CarIdxPaceRow,
+  //       CarIdxQualTireCompound: telemetryData.CarIdxQualTireCompound,
+  //       CarIdxQualTireCompoundLocked: telemetryData.CarIdxQualTireCompoundLocked,
+  //       CarIdxTireCompound: telemetryData.CarIdxTireCompound,
+  //       CarIdxTrackSurface: telemetryData.CarIdxTrackSurface,
+  //       CarIdxTrackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial,
+  //       // Selected metric
+  //       selectedMetric: telemetryData[selectedMetric]
+  //     });
+  //   }
+  // }, [telemetryData, selectedMetric]);
 
-  // Log only the most important props - focused on columns
-  console.log(`[SimpleRaceTelemetryWidget] Rendering with columns:`, {
-    columnsSelected: actualColumns, 
-    columnCount: actualColumns.length
-  });
+  // // Log only the most important props - focused on columns
+  // console.log(`[SimpleRaceTelemetryWidget] Rendering with columns:`, {
+  //   columnsSelected: actualColumns, 
+  //   columnCount: actualColumns.length
+  // });
   
   // Process the telemetry data to create the table rows
   const formattedCarData = useMemo(() => {
     if (!telemetryData || !sessionData) return [];
 
-    // Only log session data the first time
-    if (process.env.NODE_ENV === 'development' && !hasLoggedSessionDataRef.current) {
-      console.log('SESSION DATA (abbreviated):', {
-        hasWeekend: !!sessionData.weekend,
-        hasSession: !!sessionData.session,
-        hasDrivers: !!sessionData.drivers, 
-        driverCount: sessionData.drivers?.other_drivers?.length
-      });
-      hasLoggedSessionDataRef.current = true;
-    }
+    // // Only log session data the first time
+    // if (process.env.NODE_ENV === 'development' && !hasLoggedSessionDataRef.current) {
+    //   console.log('SESSION DATA (abbreviated):', {
+    //     hasWeekend: !!sessionData.weekend,
+    //     hasSession: !!sessionData.session,
+    //     hasDrivers: !!sessionData.drivers, 
+    //     driverCount: sessionData.drivers?.other_drivers?.length
+    //   });
+    //   hasLoggedSessionDataRef.current = true;
+    // }
 
     // Extract driver information from session data
     const allDrivers = sessionData.drivers?.other_drivers || [];
@@ -508,31 +534,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         currentMetricValue: telemetryData[selectedMetric]?.[carIdx],
       };
 
-      // Log data for the player car
-      if (isPlayer) {
-        console.log('[SimpleRaceTelemetryWidget] Player car data:', {
-          carIdx,
-          // Raw values
-          rawSteer: telemetryData.CarIdxSteer?.[carIdx],
-          rawRPM: telemetryData.CarIdxRPM?.[carIdx],
-          rawGear: telemetryData.CarIdxGear?.[carIdx],
-          rawPosition: telemetryData.CarIdxPosition?.[carIdx],
-          rawLap: telemetryData.CarIdxLap?.[carIdx],
-          rawLapDistPct: telemetryData.CarIdxLapDistPct?.[carIdx],
-          rawOnPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx],
-          // Formatted values
-          steer: carData.steer,
-          rpm: carData.rpm,
-          gear: carData.gear,
-          position: carData.position,
-          currentLap: carData.currentLap,
-          trackPos: carData.trackPos,
-          onPitRoad: carData.onPitRoad,
-          // Selected metric
-          currentMetric: selectedMetric,
-          currentMetricValue: carData.currentMetricValue
-        });
-      }
+      // // Log data for the player car
+      // if (isPlayer) {
+      //   console.log('[SimpleRaceTelemetryWidget] Player car data:', {
+      //     carIdx,
+      //     // Raw values
+      //     rawSteer: telemetryData.CarIdxSteer?.[carIdx],
+      //     rawRPM: telemetryData.CarIdxRPM?.[carIdx],
+      //     rawGear: telemetryData.CarIdxGear?.[carIdx],
+      //     rawPosition: telemetryData.CarIdxPosition?.[carIdx],
+      //     rawLap: telemetryData.CarIdxLap?.[carIdx],
+      //     rawLapDistPct: telemetryData.CarIdxLapDistPct?.[carIdx],
+      //     rawOnPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx],
+      //     // Formatted values
+      //     steer: carData.steer,
+      //     rpm: carData.rpm,
+      //     gear: carData.gear,
+      //     position: carData.position,
+      //     currentLap: carData.currentLap,
+      //     trackPos: carData.trackPos,
+      //     onPitRoad: carData.onPitRoad,
+      //     // Selected metric
+      //     currentMetric: selectedMetric,
+      //     currentMetricValue: carData.currentMetricValue
+      //   });
+      // }
 
       return carData;
     });
@@ -833,7 +859,7 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     const widget = WidgetManager.getWidget(id);
     if (widget?.state?.widgetWidth) {
       const savedWidth = Number(widget.state.widgetWidth);
-      console.log(`[SimpleRaceTelemetryWidget] Loading saved width: ${savedWidth}px`);
+      // console.log(`[SimpleRaceTelemetryWidget] Loading saved width: ${savedWidth}px`);
       setWidgetWidth(savedWidth);
       widgetWidthRef.current = savedWidth;
     } else {
@@ -845,14 +871,14 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
     const unsubscribe = WidgetManager.subscribe((event) => {
       if (event.type === 'widget:state:updated' && event.widgetId === id) {
         // Only log when selectedColumns change
-        if (event.state.selectedColumns !== undefined) {
-          console.log(`[SimpleRaceTelemetryWidget] Column selection updated:`, event.state.selectedColumns);
-        }
+        // if (event.state.selectedColumns !== undefined) {
+        //   console.log(`[SimpleRaceTelemetryWidget] Column selection updated:`, event.state.selectedColumns);
+        // }
         
         // Update width if it changed
         if (event.state.widgetWidth !== undefined) {
           const newWidth = Number(event.state.widgetWidth);
-          console.log(`[SimpleRaceTelemetryWidget] Width updated to: ${newWidth}px`);
+          // console.log(`[SimpleRaceTelemetryWidget] Width updated to: ${newWidth}px`);
           setWidgetWidth(newWidth);
           widgetWidthRef.current = newWidth;
         }
@@ -872,11 +898,11 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
   const currentState = currentWidget?.state || initialState;
   
   // Only log column-related information
-  console.log(`[SimpleRaceTelemetryWidget] Column selection status:`, {
-    propsColumns: props.selectedColumns,
-    stateColumns: currentState.selectedColumns,
-    willUse: props.selectedColumns || currentState.selectedColumns || DEFAULT_COLUMNS
-  });
+  //console.log(`[SimpleRaceTelemetryWidget] Column selection status:`, {
+  //  propsColumns: props.selectedColumns,
+  //  stateColumns: currentState.selectedColumns,
+  //  willUse: props.selectedColumns || currentState.selectedColumns || DEFAULT_COLUMNS
+  //});
   
   // Combine props with current widget state
   const combinedProps = {
@@ -895,18 +921,18 @@ const SimpleRaceTelemetryWidgetComponent: React.FC<SimpleRaceTelemetryWidgetProp
 // Create the control definitions for the widget
 const getControls = (widgetState: any, updateWidget: (updates: any) => void): WidgetControlDefinition[] => {
   // Only log column-related state
-  if (widgetState.selectedColumns) {
-    console.log('[SimpleRaceTelemetryWidget] getControls received selectedColumns:', widgetState.selectedColumns);
-  }
+    // if (widgetState.selectedColumns) {
+    //   console.log('[SimpleRaceTelemetryWidget] getControls received selectedColumns:', widgetState.selectedColumns);
+    // }
   
   // Get the current width (or use default)
   const widgetWidth = widgetState.widgetWidth || 600;
   
   const onChange = (id: string, value: any) => {
     // Only log column-related changes
-    if (id === 'selectedColumns') {
-      console.log(`[SimpleRaceTelemetryWidget] Columns selection onChange:`, value);
-    }
+    // if (id === 'selectedColumns') {
+    //   console.log(`[SimpleRaceTelemetryWidget] Columns selection onChange:`, value);
+    // }
     
     const update = { [id]: value };
     updateWidget(update);
@@ -996,7 +1022,7 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
           return;
         }
         
-        console.log(`[SimpleRaceTelemetryWidget] Toggling metric column. New columns:`, newColumns);
+        // console.log(`[SimpleRaceTelemetryWidget] Toggling metric column. New columns:`, newColumns);
         
         // Update widget state
         WidgetManager.updateWidgetState(widgetState.id, { 
@@ -1055,8 +1081,8 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
       value: widgetState.selectedColumns || DEFAULT_COLUMNS,
       options: AVAILABLE_COLUMNS,
       onChange: (value) => {
-        console.log(`[SimpleRaceTelemetryWidget] Column selection changing from:`, widgetState.selectedColumns);
-        console.log(`[SimpleRaceTelemetryWidget] Column selection changing to:`, value);
+        // console.log(`[SimpleRaceTelemetryWidget] Column selection changing from:`, widgetState.selectedColumns);
+        // console.log(`[SimpleRaceTelemetryWidget] Column selection changing to:`, value);
         
         // Make sure we have a valid array even if undefined is passed
         const columnValues = Array.isArray(value) ? value : DEFAULT_COLUMNS;
