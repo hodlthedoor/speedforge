@@ -261,7 +261,20 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       })
       .sort((a, b) => (a.sector !== b.sector ? b.sector - a.sector : a.t - b.t));
 
-    order.forEach(({ idx }, i) => (newPos[idx] = i + 1));
+    order.forEach((entry, i) => {
+      const me = entry.idx;
+
+      if (i === 0) {            // leader
+        newGapLead[me]  = 0;
+        newGapAhead[me] = 0;
+        return;
+      }
+
+      const ahead = order[i - 1];
+
+      newGapAhead[me] = (entry.t - ahead.t)       / 1000;   // last checkpoint diff
+      newGapLead[me]  = (entry.t - order[0].t)    / 1000;   // leader gap
+    });
 
     /* commit state */
     setTimeHistory(newTH);
