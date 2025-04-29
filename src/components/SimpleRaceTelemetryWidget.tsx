@@ -257,72 +257,73 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       }
 
       const ahead = order[i - 1];
-      
-      // For gap to car ahead, use the time at the current car's sector
       const mySector = entry.sector;
-      const myTime = entry.t;
-      const aheadTimeAtMySector = stampForSector(newTH, ahead.idx, mySector);
+      const aheadSector = ahead.sector;
       
-      // Calculate time spent in intermediate sectors
-      let intermediateSectorTime = 0;
-      if (aheadTimeAtMySector) {
-        // Get the sectors between the current car and the car ahead
-        const aheadSector = ahead.sector;
-        if (aheadSector > mySector) {
-          // Add up time spent in each intermediate sector
-          // Start from the next sector after current, up to the sector before the car ahead
-          for (let s = mySector + 1; s < aheadSector; s++) {
-            const sectorTime = stampForSector(newTH, ahead.idx, s);
-            const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
-            if (sectorTime && prevSectorTime) {
-              intermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
-            }
-          }
-          // For the car ahead's current sector, use the time difference between its current time and when it entered that sector
-          const aheadSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
-          if (aheadSectorEntryTime) {
-            intermediateSectorTime += (ahead.t - aheadSectorEntryTime) / 1000;
-          }
-        }
-      }
-
-      // For gap to leader, use the time at the current car's sector
-      const leaderTimeAtMySector = stampForSector(newTH, order[0].idx, mySector);
-
-      // Calculate leader's time in intermediate sectors
-      let leaderIntermediateSectorTime = 0;
-      if (leaderTimeAtMySector) {
-        const leaderSector = order[0].sector;
-        if (leaderSector > mySector) {
-          // Add up time spent in each intermediate sector
-          // Start from the next sector after current, up to the sector before the leader
-          for (let s = mySector + 1; s < leaderSector; s++) {
-            const sectorTime = stampForSector(newTH, order[0].idx, s);
-            const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
-            if (sectorTime && prevSectorTime) {
-              leaderIntermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
-            }
-          }
-          // For the leader's current sector, use the time difference between its current time and when it entered that sector
-          const leaderSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
-          if (leaderSectorEntryTime) {
-            leaderIntermediateSectorTime += (order[0].t - leaderSectorEntryTime) / 1000;
-          }
-        }
-      }
-
-      // Only update gaps if we have valid times at the same sector
-      if (aheadTimeAtMySector && myTime) {
-        const deltaAhead = (myTime - aheadTimeAtMySector) / 1000 + intermediateSectorTime;
+      // For gap to car ahead
+      if (mySector === aheadSector) {
+        // Cars in same sector - use current time difference
+        const deltaAhead = (entry.t - ahead.t) / 1000;
         if (deltaAhead > 0) {
           newGapAhead[me] = deltaAhead;
         }
+      } else if (mySector > aheadSector) {
+        // Car ahead is in a previous sector
+        // Get the time difference at the car ahead's sector
+        const aheadTimeAtSector = stampForSector(newTH, ahead.idx, aheadSector);
+        const myTimeAtSector = stampForSector(newTH, me, aheadSector);
+        
+        if (aheadTimeAtSector && myTimeAtSector) {
+          const baseDelta = (myTimeAtSector - aheadTimeAtSector) / 1000;
+          
+          // Add time spent in intermediate sectors
+          let intermediateTime = 0;
+          for (let s = aheadSector + 1; s <= mySector; s++) {
+            const sectorTime = stampForSector(newTH, me, s);
+            const prevSectorTime = stampForSector(newTH, me, s - 1);
+            if (sectorTime && prevSectorTime) {
+              intermediateTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+          
+          const deltaAhead = baseDelta + intermediateTime;
+          if (deltaAhead > 0) {
+            newGapAhead[me] = deltaAhead;
+          }
+        }
       }
 
-      if (leaderTimeAtMySector && myTime) {
-        const deltaLead = (myTime - leaderTimeAtMySector) / 1000 + leaderIntermediateSectorTime;
+      // For gap to leader
+      const leaderSector = order[0].sector;
+      if (mySector === leaderSector) {
+        // Same sector as leader - use current time difference
+        const deltaLead = (entry.t - order[0].t) / 1000;
         if (deltaLead > 0) {
           newGapLead[me] = deltaLead;
+        }
+      } else if (mySector > leaderSector) {
+        // Leader is in a previous sector
+        // Get the time difference at the leader's sector
+        const leaderTimeAtSector = stampForSector(newTH, order[0].idx, leaderSector);
+        const myTimeAtSector = stampForSector(newTH, me, leaderSector);
+        
+        if (leaderTimeAtSector && myTimeAtSector) {
+          const baseDelta = (myTimeAtSector - leaderTimeAtSector) / 1000;
+          
+          // Add time spent in intermediate sectors
+          let intermediateTime = 0;
+          for (let s = leaderSector + 1; s <= mySector; s++) {
+            const sectorTime = stampForSector(newTH, me, s);
+            const prevSectorTime = stampForSector(newTH, me, s - 1);
+            if (sectorTime && prevSectorTime) {
+              intermediateTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+          
+          const deltaLead = baseDelta + intermediateTime;
+          if (deltaLead > 0) {
+            newGapLead[me] = deltaLead;
+          }
         }
       }
     });
