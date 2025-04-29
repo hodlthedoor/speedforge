@@ -93,11 +93,16 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   } = props;
 
   // Add state for tracking time history at track positions
-  const [timeHistory, setTimeHistory] = useState<Record<number, Array<{ pos: number, time: number }>>>({});
+  const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [calculatedGaps, setCalculatedGaps] = useState<Record<number, number>>({});
   const [calculatedGapsToLeader, setCalculatedGapsToLeader] = useState<Record<number, number>>({});
   const [calculatedPositions, setCalculatedPositions] = useState<Record<number, number>>({});
+
+  // Helper function to calculate sector number
+  const getSectorNumber = (laps: number, trackPos: number) => {
+    return (laps * 20) + Math.floor(trackPos * 20);
+  };
 
   // Ensure we have a valid selectedColumns array
   const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
@@ -143,8 +148,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     const currentTime = Date.now();
     const currentPositions = telemetryData.CarIdxLapDistPct;
-    
-    // Create new state objects while preserving existing data
+    const currentLaps = telemetryData.CarIdxLapCompleted || {};
     const newTimeHistory = { ...timeHistory };
     const newCalculatedGaps = { ...calculatedGaps };
     const newGapsToLeader = { ...calculatedGapsToLeader };
@@ -154,7 +158,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       if (!newTimeHistory[carIdx]) {
-        newTimeHistory[carIdx] = [];
+        newTimeHistory[carIdx] = {};
       }
     });
 
@@ -162,114 +166,120 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       const currentPosNum = currentPos as number;
+      const completedLaps = currentLaps[carIdx] || 0;
       
-      // Round position to nearest 5%
-      const roundedPos = Math.round(currentPosNum * 20) / 20;
+      // Calculate sector number
+      const sector = getSectorNumber(completedLaps, currentPosNum);
       
-      // Add new position if we've passed a 5% marker
-      const lastPos = newTimeHistory[carIdx].length > 0 ? newTimeHistory[carIdx][newTimeHistory[carIdx].length - 1].pos : -1;
-      if (roundedPos !== lastPos) {
-        // Create a new array with the existing history plus the new position
-        newTimeHistory[carIdx] = [...newTimeHistory[carIdx], { pos: roundedPos, time: currentTime }];
-      }
+      // Update time history for current sector
+      newTimeHistory[carIdx][sector] = currentTime;
     });
 
-    // Find the leader (car with most positions recorded, or earliest time if tied)
-    const leader = Object.entries(newTimeHistory).reduce((leader, [carIdxStr, history]) => {
-      const carIdx = parseInt(carIdxStr);
-      const leaderHistory = newTimeHistory[leader];
+    // Find the leader (car with highest sector number, or earliest time if tied)
+    const leader = Object.entries(currentPositions).reduce((leader, [idx, pos]) => {
+      const idxNum = parseInt(idx);
+      const posNum = pos as number;
+      const laps = currentLaps[idxNum] || 0;
+      const sector = getSectorNumber(laps, posNum);
       
-      if (history.length > leaderHistory.length) {
-        return carIdx;
-      } else if (history.length === leaderHistory.length && history.length > 0) {
-        // If same number of positions, compare times at the last position
-        return history[history.length - 1].time < leaderHistory[leaderHistory.length - 1].time ? carIdx : leader;
+      const leaderPos = leader[1] as number;
+      const leaderLaps = currentLaps[parseInt(leader[0])] || 0;
+      const leaderSector = getSectorNumber(leaderLaps, leaderPos);
+      
+      if (sector > leaderSector) {
+        return [idx, pos];
+      } else if (sector === leaderSector) {
+        // If same sector, compare times
+        const time = newTimeHistory[idxNum][sector];
+        const leaderTime = newTimeHistory[parseInt(leader[0])][leaderSector];
+        return time < leaderTime ? [idx, pos] : leader;
       }
       return leader;
-    }, 0);
+    }, ['', -1] as [string, number]);
+
+    const leaderIdx = parseInt(leader[0]);
+    const leaderPos = leader[1] as number;
+    const leaderLaps = currentLaps[leaderIdx] || 0;
+    const leaderSector = getSectorNumber(leaderLaps, leaderPos);
 
     // Calculate gaps to leader and car ahead
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
-      if (carIdx === leader) {
+      const currentPosNum = currentPos as number;
+      const completedLaps = currentLaps[carIdx] || 0;
+      const sector = getSectorNumber(completedLaps, currentPosNum);
+
+      if (carIdx === leaderIdx) {
         newGapsToLeader[carIdx] = 0;
         newCalculatedGaps[carIdx] = 0;
         return;
       }
 
-      const carHistory = newTimeHistory[carIdx];
-      const leaderHistory = newTimeHistory[leader];
-      
-      if (carHistory.length > 0 && leaderHistory.length > 0) {
-        // Find the last position where both cars have data
-        const lastCommonPos = Math.min(
-          carHistory[carHistory.length - 1].pos,
-          leaderHistory[leaderHistory.length - 1].pos
-        );
-        
-        // Calculate gap to leader
-        const carTimeAtPos = carHistory.find(h => h.pos === lastCommonPos)?.time;
-        const leaderTimeAtPos = leaderHistory.find(h => h.pos === lastCommonPos)?.time;
-        
-        if (carTimeAtPos && leaderTimeAtPos) {
-          newGapsToLeader[carIdx] = (carTimeAtPos - leaderTimeAtPos) / 1000;
-        }
+      // Calculate gap to leader
+      if (newTimeHistory[carIdx][sector] && newTimeHistory[leaderIdx][sector]) {
+        newGapsToLeader[carIdx] = (newTimeHistory[carIdx][sector] - newTimeHistory[leaderIdx][sector]) / 1000;
+      }
 
-        // Find the car ahead
-        const carsAhead = Object.entries(newTimeHistory)
-          .filter(([idx, history]) => {
-            const idxNum = parseInt(idx);
-            return idxNum !== carIdx && history.length >= carHistory.length;
-          });
-
-        if (carsAhead.length > 0) {
-          // Find the closest car ahead
-          const [closestCarIdx, closestHistory] = carsAhead.reduce((closest, [idx, history]) => {
-            const idxNum = parseInt(idx);
-            const lastPos = history.length > 0 ? history[history.length - 1].pos : 0;
-            const currentLastPos = carHistory.length > 0 ? carHistory[carHistory.length - 1].pos : 0;
-            
-            // Prefer cars that are exactly one position ahead
-            if (history.length === carHistory.length + 1) {
-              return [idx, history];
-            }
-            
-            // Otherwise use the closest by track position
-            const distance = lastPos - currentLastPos;
-            const closestDistance = closest[1].length > 0 ? closest[1][closest[1].length - 1].pos - currentLastPos : 1000;
-            return distance < closestDistance ? [idx, history] : closest;
-          }, ['', []] as [string, Array<{ pos: number, time: number }>]);
-
-          const closestCarIdxNum = parseInt(closestCarIdx);
-          const carTime = carHistory.length > 0 ? carHistory[carHistory.length - 1].time : currentTime;
-          const closestCarTime = closestHistory.length > 0 ? closestHistory[closestHistory.length - 1].time : currentTime;
+      // Find the car ahead
+      const carsAhead = Object.entries(currentPositions)
+        .filter(([idx, pos]) => {
+          const idxNum = parseInt(idx);
+          const posNum = pos as number;
+          const laps = currentLaps[idxNum] || 0;
+          const aheadSector = getSectorNumber(laps, posNum);
           
-          newCalculatedGaps[carIdx] = (carTime - closestCarTime) / 1000;
-        } else {
-          newCalculatedGaps[carIdx] = 0;
+          return idxNum !== carIdx && aheadSector > sector;
+        });
+
+      if (carsAhead.length > 0) {
+        // Find the closest car ahead by sector
+        const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
+          const idxNum = parseInt(idx);
+          const posNum = pos as number;
+          const laps = currentLaps[idxNum] || 0;
+          const aheadSector = getSectorNumber(laps, posNum);
+          
+          const closestPos = closest[1] as number;
+          const closestLaps = currentLaps[parseInt(closest[0])] || 0;
+          const closestSector = getSectorNumber(closestLaps, closestPos);
+          
+          return aheadSector < closestSector ? [idx, pos] : closest;
+        }, ['', 1000] as [string, number]);
+
+        const closestCarIdxNum = parseInt(closestCarIdx);
+        const closestCarLaps = currentLaps[closestCarIdxNum] || 0;
+        const closestCarSector = getSectorNumber(closestCarLaps, closestCarPos as number);
+        
+        if (newTimeHistory[carIdx][sector] && newTimeHistory[closestCarIdxNum][sector]) {
+          newCalculatedGaps[carIdx] = (newTimeHistory[carIdx][sector] - newTimeHistory[closestCarIdxNum][sector]) / 1000;
         }
+      } else {
+        newCalculatedGaps[carIdx] = 0;
       }
     });
 
-    // Calculate positions based on number of positions completed and times
-    const positionData = Object.entries(newTimeHistory).map(([carIdxStr, history]) => {
+    // Calculate positions based on sector number and time
+    const positionData = Object.entries(currentPositions).map(([carIdxStr, pos]) => {
       const carIdx = parseInt(carIdxStr);
-      const lastPos = history.length > 0 ? history[history.length - 1] : null;
+      const posNum = pos as number;
+      const laps = currentLaps[carIdx] || 0;
+      const sector = getSectorNumber(laps, posNum);
+      const timeAtSector = newTimeHistory[carIdx][sector] || currentTime;
       
       return {
         carIdx,
-        positionsCompleted: history.length,
-        lastTime: lastPos?.time || currentTime,
-        lastPos: lastPos?.pos || 0
+        sector,
+        timeAtSector,
+        laps
       };
     });
 
-    // Sort by number of positions completed, then by time at last position
+    // Sort by sector number, then by time at sector
     positionData.sort((a, b) => {
-      if (a.positionsCompleted !== b.positionsCompleted) {
-        return b.positionsCompleted - a.positionsCompleted;
+      if (a.sector !== b.sector) {
+        return b.sector - a.sector;
       }
-      return a.lastTime - b.lastTime;
+      return a.timeAtSector - b.timeAtSector;
     });
 
     // Assign positions
