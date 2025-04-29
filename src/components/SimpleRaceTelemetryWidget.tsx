@@ -143,6 +143,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     const currentTime = Date.now();
     const currentPositions = telemetryData.CarIdxLapDistPct;
+    
+    // Create new state objects while preserving existing data
     const newTimeHistory = { ...timeHistory };
     const newCalculatedGaps = { ...calculatedGaps };
     const newGapsToLeader = { ...calculatedGapsToLeader };
@@ -160,10 +162,6 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       const currentPosNum = currentPos as number;
-      const completedLaps = telemetryData.CarIdxLapCompleted?.[carIdx] || 0;
-      
-      // Calculate total position including laps (add 100% for each completed lap)
-      const totalPos = (completedLaps * 100) + currentPosNum;
       
       // Round position to nearest 5%
       const roundedPos = Math.round(currentPosNum * 20) / 20;
@@ -171,7 +169,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       // Add new position if we've passed a 5% marker
       const lastPos = newTimeHistory[carIdx].length > 0 ? newTimeHistory[carIdx][newTimeHistory[carIdx].length - 1].pos : -1;
       if (roundedPos !== lastPos) {
-        newTimeHistory[carIdx].push({ pos: roundedPos, time: currentTime });
+        // Create a new array with the existing history plus the new position
+        newTimeHistory[carIdx] = [...newTimeHistory[carIdx], { pos: roundedPos, time: currentTime }];
       }
     });
 
@@ -322,7 +321,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         Object.assign(telemetryData, updatedTelemetryData);
       }
     }
-  }, [telemetryData, timeHistory, calculatedGaps, calculatedGapsToLeader, calculatedPositions]);
+  }, [telemetryData]);
 
   // // Log raw telemetry data when it changes
   // useEffect(() => {
