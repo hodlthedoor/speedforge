@@ -93,7 +93,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   } = props;
 
   // Add state for tracking time history at track positions
-  const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
+  const [timeHistory, setTimeHistory] = useState<Record<number, Array<{ pos: number, time: number }>>>({});
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [calculatedGaps, setCalculatedGaps] = useState<Record<number, number>>({});
   const [calculatedGapsToLeader, setCalculatedGapsToLeader] = useState<Record<number, number>>({});
@@ -143,67 +143,16 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     const currentTime = Date.now();
     const currentPositions = telemetryData.CarIdxLapDistPct;
-    const currentLaps = telemetryData.CarIdxLap || {};
     const newTimeHistory = { ...timeHistory };
     const newCalculatedGaps = { ...calculatedGaps };
     const newGapsToLeader = { ...calculatedGapsToLeader };
     const newCalculatedPositions = { ...calculatedPositions };
 
-    // Helper function to get all checkpoints between two positions
-    const getCheckpointsBetween = (startPos: number, endPos: number) => {
-      const checkpoints = [];
-      let current = Math.ceil(startPos * 20) / 20; // Round up to next 5% marker
-      const end = Math.floor(endPos * 20) / 20;    // Round down to previous 5% marker
-      
-      while (current <= end) {
-        checkpoints.push(current);
-        current += 0.05; // Next 5% marker
-      }
-      return checkpoints;
-    };
-
-    // Helper function to calculate time difference between two positions
-    const calculateTimeDifference = (carIdx: number, startPos: number, endPos: number) => {
-      if (!newTimeHistory[carIdx]) return 0;
-      
-      const checkpoints = getCheckpointsBetween(startPos, endPos);
-      let totalTime = 0;
-      
-      for (let i = 0; i < checkpoints.length - 1; i++) {
-        const currentPos = checkpoints[i];
-        const nextPos = checkpoints[i + 1];
-        
-        if (newTimeHistory[carIdx][currentPos] && newTimeHistory[carIdx][nextPos]) {
-          totalTime += newTimeHistory[carIdx][nextPos] - newTimeHistory[carIdx][currentPos];
-        }
-      }
-      
-      return totalTime;
-    };
-
-    // First, find the leader (car with highest track position + laps)
-    const leader = Object.entries(currentPositions).reduce((leader, [idx, pos]) => {
-      const posNum = pos as number;
-      const laps = currentLaps[parseInt(idx)] || 0;
-      const totalPos = laps * 100 + posNum;
-      
-      const leaderPos = leader[1] as number;
-      const leaderLaps = currentLaps[parseInt(leader[0])] || 0;
-      const leaderTotalPos = leaderLaps * 100 + leaderPos;
-      
-      return totalPos > leaderTotalPos ? [idx, pos] : leader;
-    }, ['', -1] as [string, number]);
-
-    const leaderIdx = parseInt(leader[0]);
-    const leaderPos = leader[1] as number;
-    const leaderLaps = currentLaps[leaderIdx] || 0;
-    const roundedLeaderPos = Math.round(leaderPos * 20) / 20;
-
     // Initialize time history for all cars first
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       if (!newTimeHistory[carIdx]) {
-        newTimeHistory[carIdx] = {};
+        newTimeHistory[carIdx] = [];
       }
     });
 
@@ -219,148 +168,114 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       // Round position to nearest 5%
       const roundedPos = Math.round(currentPosNum * 20) / 20;
       
-      // Only update if we've passed a 5% marker
-      if (!newTimeHistory[carIdx][roundedPos]) {
-        newTimeHistory[carIdx][roundedPos] = currentTime;
+      // Add new position if we've passed a 5% marker
+      const lastPos = newTimeHistory[carIdx].length > 0 ? newTimeHistory[carIdx][newTimeHistory[carIdx].length - 1].pos : -1;
+      if (roundedPos !== lastPos) {
+        newTimeHistory[carIdx].push({ pos: roundedPos, time: currentTime });
+      }
+    });
+
+    // Find the leader (car with most positions recorded, or earliest time if tied)
+    const leader = Object.entries(newTimeHistory).reduce((leader, [carIdxStr, history]) => {
+      const carIdx = parseInt(carIdxStr);
+      const leaderHistory = newTimeHistory[leader];
+      
+      if (history.length > leaderHistory.length) {
+        return carIdx;
+      } else if (history.length === leaderHistory.length && history.length > 0) {
+        // If same number of positions, compare times at the last position
+        return history[history.length - 1].time < leaderHistory[leaderHistory.length - 1].time ? carIdx : leader;
+      }
+      return leader;
+    }, 0);
+
+    // Calculate gaps to leader and car ahead
+    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
+      const carIdx = parseInt(carIdxStr);
+      if (carIdx === leader) {
+        newGapsToLeader[carIdx] = 0;
+        newCalculatedGaps[carIdx] = 0;
+        return;
+      }
+
+      const carHistory = newTimeHistory[carIdx];
+      const leaderHistory = newTimeHistory[leader];
+      
+      if (carHistory.length > 0 && leaderHistory.length > 0) {
+        // Find the last position where both cars have data
+        const lastCommonPos = Math.min(
+          carHistory[carHistory.length - 1].pos,
+          leaderHistory[leaderHistory.length - 1].pos
+        );
         
         // Calculate gap to leader
-        if (carIdx !== leaderIdx && 
-            newTimeHistory[leaderIdx] && 
-            newTimeHistory[leaderIdx][roundedPos]) {
-          const leaderCompletedLaps = telemetryData.CarIdxLapCompleted?.[leaderIdx] || 0;
-          const leaderTotalPos = (leaderCompletedLaps * 100) + leaderPos;
-          const timeDiff = calculateTimeDifference(leaderIdx, roundedPos, leaderPos);
-          const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos] + timeDiff) / 1000;
-          newGapsToLeader[carIdx] = gapToLeader;
+        const carTimeAtPos = carHistory.find(h => h.pos === lastCommonPos)?.time;
+        const leaderTimeAtPos = leaderHistory.find(h => h.pos === lastCommonPos)?.time;
+        
+        if (carTimeAtPos && leaderTimeAtPos) {
+          newGapsToLeader[carIdx] = (carTimeAtPos - leaderTimeAtPos) / 1000;
         }
 
-        // Find the car ahead using our calculated positions
-        const carsAhead = Object.entries(currentPositions)
-          .filter(([idx, pos]) => {
+        // Find the car ahead
+        const carsAhead = Object.entries(newTimeHistory)
+          .filter(([idx, history]) => {
             const idxNum = parseInt(idx);
-            const posNum = pos as number;
-            const laps = telemetryData.CarIdxLapCompleted?.[idxNum] || 0;
-            const totalPosAhead = (laps * 100) + posNum;
-            
-            // Only consider cars that are actually ahead in position
-            const carAheadPosition = newCalculatedPositions[idxNum] || 999;
-            const currentCarPosition = newCalculatedPositions[carIdx] || 999;
-            
-            return idxNum !== carIdx && 
-                   carAheadPosition < currentCarPosition &&
-                   (totalPosAhead > totalPos || 
-                    (totalPosAhead < 100 && totalPos > (completedLaps * 100 + 90)));
+            return idxNum !== carIdx && history.length >= carHistory.length;
           });
 
         if (carsAhead.length > 0) {
-          // Find the closest car ahead by position
-          const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
+          // Find the closest car ahead
+          const [closestCarIdx, closestHistory] = carsAhead.reduce((closest, [idx, history]) => {
             const idxNum = parseInt(idx);
-            const posNum = pos as number;
-            const laps = telemetryData.CarIdxLapCompleted?.[idxNum] || 0;
-            const totalPosAhead = (laps * 100) + posNum;
-            
-            // Use position difference as primary factor
-            const currentCarPosition = newCalculatedPositions[carIdx] || 999;
-            const carAheadPosition = newCalculatedPositions[idxNum] || 999;
-            const positionDiff = currentCarPosition - carAheadPosition;
-            
-            // Use track position as secondary factor
-            const distance = totalPosAhead > totalPos 
-              ? totalPosAhead - totalPos 
-              : (100 - totalPos % 100) + (totalPosAhead % 100);
+            const lastPos = history[history.length - 1].pos;
+            const currentLastPos = carHistory[carHistory.length - 1].pos;
             
             // Prefer cars that are exactly one position ahead
-            if (positionDiff === 1) {
-              return [idx, distance];
+            if (history.length === carHistory.length + 1) {
+              return [idx, history];
             }
             
             // Otherwise use the closest by track position
-            return distance < (closest[1] as number) ? [idx, distance] : closest;
-          }, ['', 1000] as [string, number]);
+            const distance = lastPos - currentLastPos;
+            return distance < (closest[1][closest[1].length - 1].pos - currentLastPos) ? [idx, history] : closest;
+          }, ['', []] as [string, Array<{ pos: number, time: number }>]);
 
           const closestCarIdxNum = parseInt(closestCarIdx);
-          const closestCarPosNum = closestCarPos as number;
-          const roundedClosestPos = Math.round(closestCarPosNum * 20) / 20;
-
-          // Calculate gap using time history at all checkpoints between
-          if (newTimeHistory[closestCarIdxNum] && 
-              newTimeHistory[closestCarIdxNum][roundedPos]) {
-            const timeDiff = calculateTimeDifference(closestCarIdxNum, roundedPos, closestCarPosNum);
-            const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos] + timeDiff) / 1000;
-            newCalculatedGaps[carIdx] = gap;
-          }
+          const carTime = carHistory[carHistory.length - 1].time;
+          const closestCarTime = closestHistory[closestHistory.length - 1].time;
+          
+          newCalculatedGaps[carIdx] = (carTime - closestCarTime) / 1000;
         } else {
-          // No car ahead found, clear the gap
           newCalculatedGaps[carIdx] = 0;
         }
       }
     });
 
-    // Calculate positions based on total position (laps + track position)
-    const positionData = Object.entries(currentPositions).map(([carIdxStr, pos]) => {
+    // Calculate positions based on number of positions completed and times
+    const positionData = Object.entries(newTimeHistory).map(([carIdxStr, history]) => {
       const carIdx = parseInt(carIdxStr);
-      const posNum = pos as number;
-      const completedLaps = telemetryData.CarIdxLapCompleted?.[carIdx] || 0;
-      const totalPos = (completedLaps * 100) + posNum;
-      const roundedPos = Math.round(posNum * 20) / 20;
-      const timeAtPos = newTimeHistory[carIdx][roundedPos] || currentTime;
+      const lastPos = history.length > 0 ? history[history.length - 1] : null;
       
-      // Get the last completed lap time if available
-      const lastLapTime = telemetryData.CarIdxLastLapTime?.[carIdx] || 0;
-      
-      return { 
-        carIdx, 
-        timeAtPos, 
-        totalPos,
-        laps: completedLaps,
-        pos: posNum,
-        lastLapTime
+      return {
+        carIdx,
+        positionsCompleted: history.length,
+        lastTime: lastPos?.time || currentTime,
+        lastPos: lastPos?.pos || 0
       };
     });
 
-    // Sort by total position and time to determine running order
+    // Sort by number of positions completed, then by time at last position
     positionData.sort((a, b) => {
-      // First sort by total position (laps + track position)
-      if (a.totalPos !== b.totalPos) {
-        return b.totalPos - a.totalPos;
+      if (a.positionsCompleted !== b.positionsCompleted) {
+        return b.positionsCompleted - a.positionsCompleted;
       }
-      
-      // If same total position, sort by time at that position
-      if (a.timeAtPos !== b.timeAtPos) {
-        return a.timeAtPos - b.timeAtPos;
-      }
-      
-      // If same position and time, sort by last lap time
-      if (a.lastLapTime !== b.lastLapTime) {
-        return a.lastLapTime - b.lastLapTime;
-      }
-      
-      // If all else equal, maintain current order
-      return 0;
+      return a.lastTime - b.lastTime;
     });
 
-    // Assign positions and update telemetry data
+    // Assign positions
     positionData.forEach((data, index) => {
-      const position = index + 1;
-      newCalculatedPositions[data.carIdx] = position;
-      
-      // Update the telemetry data position
-      if (telemetryData.CarIdxPosition) {
-        telemetryData.CarIdxPosition[data.carIdx] = position;
-      }
+      newCalculatedPositions[data.carIdx] = index + 1;
     });
-
-    // // Log position changes for debugging
-    // if (process.env.NODE_ENV === 'development') {
-    //   positionData.forEach(data => {
-    //     const oldPosition = telemetryData.CarIdxPosition?.[data.carIdx];
-    //     const newPosition = newCalculatedPositions[data.carIdx];
-    //     if (oldPosition !== newPosition) {
-    //       console.log(`[Position Update] Car ${data.carIdx}: ${oldPosition} -> ${newPosition} (Lap ${data.laps}, Pos ${data.pos.toFixed(2)}%)`);
-    //     }
-    //   });
-    // }
 
     // Update all states
     setTimeHistory(newTimeHistory);
