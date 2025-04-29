@@ -211,10 +211,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       const currentPosNum = currentPos as number;
-      const currentLap = currentLaps[carIdx] || 0;
+      const completedLaps = telemetryData.CarIdxLapCompleted?.[carIdx] || 0;
       
       // Calculate total position including laps (add 100% for each completed lap)
-      const totalPos = (currentLap * 100) + currentPosNum;
+      const totalPos = (completedLaps * 100) + currentPosNum;
       
       // Round position to nearest 5%
       const roundedPos = Math.round(currentPosNum * 20) / 20;
@@ -227,7 +227,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (carIdx !== leaderIdx && 
             newTimeHistory[leaderIdx] && 
             newTimeHistory[leaderIdx][roundedPos]) {
-          const leaderTotalPos = (leaderLaps * 100) + leaderPos;
+          const leaderCompletedLaps = telemetryData.CarIdxLapCompleted?.[leaderIdx] || 0;
+          const leaderTotalPos = (leaderCompletedLaps * 100) + leaderPos;
           const timeDiff = calculateTimeDifference(leaderIdx, roundedPos, leaderPos);
           const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos] + timeDiff) / 1000;
           newGapsToLeader[carIdx] = gapToLeader;
@@ -238,7 +239,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           .filter(([idx, pos]) => {
             const idxNum = parseInt(idx);
             const posNum = pos as number;
-            const laps = currentLaps[idxNum] || 0;
+            const laps = telemetryData.CarIdxLapCompleted?.[idxNum] || 0;
             const totalPosAhead = (laps * 100) + posNum;
             
             // Only consider cars that are actually ahead in position
@@ -248,7 +249,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             return idxNum !== carIdx && 
                    carAheadPosition < currentCarPosition &&
                    (totalPosAhead > totalPos || 
-                    (totalPosAhead < 100 && totalPos > (currentLap * 100 + 90)));
+                    (totalPosAhead < 100 && totalPos > (completedLaps * 100 + 90)));
           });
 
         if (carsAhead.length > 0) {
@@ -256,7 +257,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
             const idxNum = parseInt(idx);
             const posNum = pos as number;
-            const laps = currentLaps[idxNum] || 0;
+            const laps = telemetryData.CarIdxLapCompleted?.[idxNum] || 0;
             const totalPosAhead = (laps * 100) + posNum;
             
             // Use position difference as primary factor
@@ -300,8 +301,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const positionData = Object.entries(currentPositions).map(([carIdxStr, pos]) => {
       const carIdx = parseInt(carIdxStr);
       const posNum = pos as number;
-      const laps = currentLaps[carIdx] || 0;
-      const totalPos = (laps * 100) + posNum;
+      const completedLaps = telemetryData.CarIdxLapCompleted?.[carIdx] || 0;
+      const totalPos = (completedLaps * 100) + posNum;
       const roundedPos = Math.round(posNum * 20) / 20;
       const timeAtPos = newTimeHistory[carIdx][roundedPos] || currentTime;
       
@@ -312,7 +313,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         carIdx, 
         timeAtPos, 
         totalPos,
-        laps,
+        laps: completedLaps,
         pos: posNum,
         lastLapTime
       };
