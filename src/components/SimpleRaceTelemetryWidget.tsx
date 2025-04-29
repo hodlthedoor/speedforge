@@ -180,8 +180,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const now = Date.now();
     const { CarIdxLapDistPct: pos, CarIdxLapCompleted: laps = {} } = telemetryData;
     const newTH = { ...timeHistory };
+    
+    // Initialize gap arrays with previous values to prevent undefined flicker
     const newGapAhead: Record<number, number> = { ...calculatedGaps };
-    const newGapLead:  Record<number, number> = { ...calculatedGapsToLeader };
+    const newGapLead: Record<number, number> = { ...calculatedGapsToLeader };
     const newPos: Record<number, number> = {};
 
     /* set once-per-sector timestamps */
@@ -255,9 +257,16 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       }
 
       const ahead = order[i - 1];
+      const deltaAhead = entry.t - ahead.t;
+      const deltaLead = entry.t - order[0].t;
 
-      newGapAhead[me] = (entry.t - ahead.t) / 1000;   // last checkpoint diff
-      newGapLead[me] = (entry.t - order[0].t) / 1000;   // leader gap
+      // Only update gaps if we have valid new values
+      if (deltaAhead > 0) {
+        newGapAhead[me] = deltaAhead / 1000;
+      }
+      if (deltaLead > 0) {
+        newGapLead[me] = deltaLead / 1000;
+      }
     });
 
     order.forEach(({ idx }, i) => (newPos[idx] = i + 1));
