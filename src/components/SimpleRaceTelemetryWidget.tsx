@@ -95,6 +95,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   // Add state for tracking time history at track positions
   const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
   const [currentTime, setCurrentTime] = useState<number>(0);
+  const [calculatedGaps, setCalculatedGaps] = useState<Record<number, number>>({});
+  const [calculatedGapsToLeader, setCalculatedGapsToLeader] = useState<Record<number, number>>({});
+  const [calculatedPositions, setCalculatedPositions] = useState<Record<number, number>>({});
 
   // Ensure we have a valid selectedColumns array
   const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
@@ -141,9 +144,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const currentTime = Date.now();
     const currentPositions = telemetryData.CarIdxLapDistPct;
     const newTimeHistory = { ...timeHistory };
-    const calculatedGaps: Record<number, number> = {};
-    const gapsToLeader: Record<number, number> = {};
-    const calculatedPositions: Record<number, number> = {};
+    const newCalculatedGaps = { ...calculatedGaps };
+    const newGapsToLeader = { ...calculatedGapsToLeader };
+    const newCalculatedPositions = { ...calculatedPositions };
 
     // First, find the leader (car with highest track position)
     const leader = Object.entries(currentPositions).reduce((leader, [idx, pos]) => {
@@ -181,7 +184,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             newTimeHistory[leaderIdx] && 
             newTimeHistory[leaderIdx][roundedPos]) {
           const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos]) / 1000;
-          gapsToLeader[carIdx] = gapToLeader;
+          newGapsToLeader[carIdx] = gapToLeader;
           
           // Debug log for gap to leader
           console.log(`[Gap Calculation] Car ${carIdx} at ${roundedPos}%: Gap to leader = ${gapToLeader.toFixed(3)}s`);
@@ -214,7 +217,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
           if (newTimeHistory[closestCarIdxNum] && 
               newTimeHistory[closestCarIdxNum][roundedPos]) {
             const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos]) / 1000;
-            calculatedGaps[carIdx] = gap;
+            newCalculatedGaps[carIdx] = gap;
             
             // Debug log for gap to car ahead
             console.log(`[Gap Calculation] Car ${carIdx} at ${roundedPos}%: Gap to car ${closestCarIdxNum} = ${gap.toFixed(3)}s`);
@@ -242,11 +245,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
     // Assign positions
     positionData.forEach((data, index) => {
-      calculatedPositions[data.carIdx] = index + 1;
+      newCalculatedPositions[data.carIdx] = index + 1;
     });
 
+    // Update all states
     setTimeHistory(newTimeHistory);
     setCurrentTime(currentTime);
+    setCalculatedGaps(newCalculatedGaps);
+    setCalculatedGapsToLeader(newGapsToLeader);
+    setCalculatedPositions(newCalculatedPositions);
 
     // Update the car data with calculated values
     if (telemetryData) {
@@ -254,7 +261,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const updatedTelemetryData = { ...telemetryData };
       
       // Update gaps to car ahead
-      Object.entries(calculatedGaps).forEach(([carIdx, gap]) => {
+      Object.entries(newCalculatedGaps).forEach(([carIdx, gap]) => {
         const idx = parseInt(carIdx);
         if (!updatedTelemetryData.CarIdxF2Time) {
           updatedTelemetryData.CarIdxF2Time = [];
@@ -263,7 +270,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       });
 
       // Update gaps to leader
-      Object.entries(gapsToLeader).forEach(([carIdx, gap]) => {
+      Object.entries(newGapsToLeader).forEach(([carIdx, gap]) => {
         const idx = parseInt(carIdx);
         if (!updatedTelemetryData.CarIdxGapToLeader) {
           updatedTelemetryData.CarIdxGapToLeader = [];
@@ -272,7 +279,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       });
 
       // Update positions
-      Object.entries(calculatedPositions).forEach(([carIdx, position]) => {
+      Object.entries(newCalculatedPositions).forEach(([carIdx, position]) => {
         const idx = parseInt(carIdx);
         if (!updatedTelemetryData.CarIdxPosition) {
           updatedTelemetryData.CarIdxPosition = [];
@@ -285,7 +292,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         Object.assign(telemetryData, updatedTelemetryData);
       }
     }
-  }, [telemetryData, timeHistory]);
+  }, [telemetryData, timeHistory, calculatedGaps, calculatedGapsToLeader, calculatedPositions]);
 
   // Log raw telemetry data when it changes
   useEffect(() => {
@@ -359,9 +366,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const driver = allDrivers.find(d => d.index === carIdx);
       const isPlayer = carIdx === playerCarIndex;
 
-      // Get the gaps
-      const gapToAhead = telemetryData.CarIdxF2Time?.[carIdx] || 0;
-      const gapToLeader = telemetryData.CarIdxGapToLeader?.[carIdx] || 0;
+      // Get the gaps from calculated state
+      const gapToAhead = calculatedGaps[carIdx] || 0;
+      const gapToLeader = calculatedGapsToLeader[carIdx] || 0;
+      const position = calculatedPositions[carIdx] || telemetryData.CarIdxPosition?.[carIdx] || 999;
       const trackPosition = telemetryData.CarIdxLapDistPct?.[carIdx] || 0;
       const currentLap = telemetryData.CarIdxLap?.[carIdx] || 0;
 
@@ -376,7 +384,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         license: driver?.license || '',
         incidents: driver?.incidents,
         carClass: telemetryData.CarIdxClass?.[carIdx] || '',
-        position: telemetryData.CarIdxPosition?.[carIdx] || 999,
+        position,
         classPosition: telemetryData.CarIdxClassPosition?.[carIdx] || 999,
         currentLap,
         lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
@@ -489,7 +497,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     }
     
     return sortedCars.slice(0, maxItems);
-  }, [telemetryData, sessionData, selectedMetric, sortBy, maxItems]);
+  }, [telemetryData, sessionData, selectedMetric, sortBy, maxItems, calculatedGaps, calculatedGapsToLeader, calculatedPositions]);
 
   // Helper function to generate a color for car classes
   const getClassColor = (className: string) => {
@@ -536,12 +544,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
       case 'gap':
         if (car.position === 1) return '--'; // Leader has no gap
-        const gapToAhead = telemetryData?.CarIdxF2Time?.[car.carIdx];
+        const gapToAhead = calculatedGaps[car.carIdx];
         if (!gapToAhead) return '--';
         return formatLapTime(gapToAhead);
       case 'gapToLeader':
         if (car.position === 1) return '--'; // Leader has no gap
-        const gapToLeader = telemetryData?.CarIdxGapToLeader?.[car.carIdx];
+        const gapToLeader = calculatedGapsToLeader[car.carIdx];
         if (!gapToLeader) return '--';
         return formatLapTime(gapToLeader);
       case 'lap':
