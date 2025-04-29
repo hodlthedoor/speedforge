@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useEffect, useState, useMemo, useRef } from 'react';
 import Widget from './Widget';
 import { useTelemetryData, formatTelemetryValue, getMetricName, TelemetryMetric } from '../hooks/useTelemetryData';
 import { withControls } from '../widgets/WidgetRegistryAdapter';
@@ -174,14 +174,14 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   /* ────────────────────────────────────────────
      core effect
      ──────────────────────────────────────────── */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!telemetryData?.CarIdxLapDistPct) return;
 
     const now = Date.now();
     const { CarIdxLapDistPct: pos, CarIdxLapCompleted: laps = {} } = telemetryData;
     const newTH = { ...timeHistory };
-    const newGapAhead: Record<number, number> = {};
-    const newGapLead: Record<number, number> = {};
+    const newGapAhead: Record<number, number> = { ...calculatedGaps };
+    const newGapLead:  Record<number, number> = { ...calculatedGapsToLeader };
     const newPos: Record<number, number> = {};
 
     /* set once-per-sector timestamps */
