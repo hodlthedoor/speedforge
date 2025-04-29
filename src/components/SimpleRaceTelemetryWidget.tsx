@@ -276,17 +276,27 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (aheadTimeAtSector && myTimeAtSector) {
           const baseDelta = (myTimeAtSector - aheadTimeAtSector) / 1000;
           
-          // Add time spent in intermediate sectors
-          let intermediateTime = 0;
+          // Add time spent in intermediate sectors by the car ahead
+          let aheadIntermediateTime = 0;
+          for (let s = aheadSector + 1; s <= ahead.sector; s++) {
+            const sectorTime = stampForSector(newTH, ahead.idx, s);
+            const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
+            if (sectorTime && prevSectorTime) {
+              aheadIntermediateTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+          
+          // Add time spent in intermediate sectors by the following car
+          let myIntermediateTime = 0;
           for (let s = aheadSector + 1; s <= mySector; s++) {
             const sectorTime = stampForSector(newTH, me, s);
             const prevSectorTime = stampForSector(newTH, me, s - 1);
             if (sectorTime && prevSectorTime) {
-              intermediateTime += (sectorTime - prevSectorTime) / 1000;
+              myIntermediateTime += (sectorTime - prevSectorTime) / 1000;
             }
           }
           
-          const deltaAhead = baseDelta + intermediateTime;
+          const deltaAhead = baseDelta + (aheadIntermediateTime - myIntermediateTime);
           if (deltaAhead > 0) {
             newGapAhead[me] = deltaAhead;
           }
@@ -310,17 +320,27 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (leaderTimeAtSector && myTimeAtSector) {
           const baseDelta = (myTimeAtSector - leaderTimeAtSector) / 1000;
           
-          // Add time spent in intermediate sectors
-          let intermediateTime = 0;
+          // Add time spent in intermediate sectors by the leader
+          let leaderIntermediateTime = 0;
+          for (let s = leaderSector + 1; s <= order[0].sector; s++) {
+            const sectorTime = stampForSector(newTH, order[0].idx, s);
+            const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
+            if (sectorTime && prevSectorTime) {
+              leaderIntermediateTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+          
+          // Add time spent in intermediate sectors by the following car
+          let myIntermediateTime = 0;
           for (let s = leaderSector + 1; s <= mySector; s++) {
             const sectorTime = stampForSector(newTH, me, s);
             const prevSectorTime = stampForSector(newTH, me, s - 1);
             if (sectorTime && prevSectorTime) {
-              intermediateTime += (sectorTime - prevSectorTime) / 1000;
+              myIntermediateTime += (sectorTime - prevSectorTime) / 1000;
             }
           }
           
-          const deltaLead = baseDelta + intermediateTime;
+          const deltaLead = baseDelta + (leaderIntermediateTime - myIntermediateTime);
           if (deltaLead > 0) {
             newGapLead[me] = deltaLead;
           }
