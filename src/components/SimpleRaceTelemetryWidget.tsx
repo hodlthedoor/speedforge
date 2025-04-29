@@ -263,21 +263,53 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const myTime = entry.t;
       const aheadTimeAtMySector = stampForSector(newTH, ahead.idx, mySector);
       
+      // Calculate time spent in intermediate sectors
+      let intermediateSectorTime = 0;
+      if (aheadTimeAtMySector) {
+        // Get the sectors between the current car and the car ahead
+        const aheadSector = ahead.sector;
+        if (aheadSector > mySector) {
+          // Add up time spent in each intermediate sector
+          for (let s = mySector + 1; s <= aheadSector; s++) {
+            const sectorTime = stampForSector(newTH, ahead.idx, s);
+            const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
+            if (sectorTime && prevSectorTime) {
+              intermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+        }
+      }
+
       // For gap to leader, use the time at the current car's sector
       const leaderTimeAtMySector = stampForSector(newTH, order[0].idx, mySector);
 
+      // Calculate leader's time in intermediate sectors
+      let leaderIntermediateSectorTime = 0;
+      if (leaderTimeAtMySector) {
+        const leaderSector = order[0].sector;
+        if (leaderSector > mySector) {
+          for (let s = mySector + 1; s <= leaderSector; s++) {
+            const sectorTime = stampForSector(newTH, order[0].idx, s);
+            const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
+            if (sectorTime && prevSectorTime) {
+              leaderIntermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
+            }
+          }
+        }
+      }
+
       // Only update gaps if we have valid times at the same sector
       if (aheadTimeAtMySector && myTime) {
-        const deltaAhead = myTime - aheadTimeAtMySector;
+        const deltaAhead = (myTime - aheadTimeAtMySector) / 1000 + intermediateSectorTime;
         if (deltaAhead > 0) {
-          newGapAhead[me] = deltaAhead / 1000;
+          newGapAhead[me] = deltaAhead;
         }
       }
 
       if (leaderTimeAtMySector && myTime) {
-        const deltaLead = myTime - leaderTimeAtMySector;
+        const deltaLead = (myTime - leaderTimeAtMySector) / 1000 + leaderIntermediateSectorTime;
         if (deltaLead > 0) {
-          newGapLead[me] = deltaLead / 1000;
+          newGapLead[me] = deltaLead;
         }
       }
     });
