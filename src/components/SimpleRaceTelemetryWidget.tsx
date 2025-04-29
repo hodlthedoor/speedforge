@@ -102,6 +102,13 @@ const stampForSector = (
   }
 };
 
+// helper for safe gap calculation
+const safeGap = (
+  prev: Record<number, number>,
+  idx: number,
+  value: number | undefined,
+) => (value && value > 0 ? value : prev[idx]);
+
 // Internal component that uses state from widget manager
 const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
   const {
@@ -188,93 +195,72 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const [leaderIdxStr, leaderPos] = Object.entries(pos).reduce(
       (lead, [idxStr, p]) => {
         const idx = +idxStr;
-        const s = getSectorNumber(laps[idx] || 0, p as number);
+        const completedLaps = laps[idx] || 0;
+        const s = getSectorNumber(completedLaps, p as number);
         const [curIdxStr, curPos] = lead;
-        const sLead = getSectorNumber(laps[+curIdxStr] || 0, curPos as number);
-        if (s > sLead) return [idxStr, p];
-        if (s === sLead) {
-          const t = stampForSector(newTH, idx, s) ?? now;
-          const tLead = stampForSector(newTH, +curIdxStr, sLead) ?? now;
-          return t < tLead ? [idxStr, p] : lead;
+        const curCompletedLaps = laps[+curIdxStr] || 0;
+        const sLead = getSectorNumber(curCompletedLaps, curPos as number);
+        
+        if (completedLaps > curCompletedLaps) return [idxStr, p];
+        if (completedLaps === curCompletedLaps) {
+          if (s > sLead) return [idxStr, p];
+          if (s === sLead) {
+            const t = stampForSector(newTH, idx, s) ?? now;
+            const tLead = stampForSector(newTH, +curIdxStr, sLead) ?? now;
+            return t < tLead ? [idxStr, p] : lead;
+          }
         }
         return lead;
       },
       ['0', 0] as [string, number],
     );
     const leaderIdx = +leaderIdxStr;
-    const leaderSector = getSectorNumber(laps[leaderIdx] || 0, leaderPos as number);
-
-    /* gap calculations */
-    Object.entries(pos).forEach(([idxStr, p]) => {
-      const idx = +idxStr;
-      const sector = getSectorNumber(laps[idx] || 0, p as number);
-
-      const myStamp = stampForSector(newTH, idx, sector);
-      if (idx === leaderIdx) {
-        newGapLead[idx] = 0;
-        newGapAhead[idx] = 0;
-        return;
-      }
-
-      /* gap to leader */
-      const leaderStamp = stampForSector(newTH, leaderIdx, leaderSector);
-      if (myStamp && leaderStamp)
-        newGapLead[idx] = (myStamp - leaderStamp) / 1000;
-
-      /* gap to closest ahead */
-      const candidates = Object.entries(pos).filter(([jStr, pj]) => {
-        const j = +jStr;
-        if (j === idx) return false;
-        const s = getSectorNumber(laps[j] || 0, pj as number);
-        return s > sector;
-      });
-      if (!candidates.length) return;
-
-      const [aheadIdxStr, aheadPos] = candidates.reduce(
-        (best, [jStr, pj]) => {
-          const j = +jStr;
-          const s = getSectorNumber(laps[j] || 0, pj as number);
-          const [bStr, bp] = best;
-          const sb = getSectorNumber(laps[+bStr] || 0, bp as number);
-          return s < sb ? [jStr, pj] : best;
-        },
-        ['0', 1_000] as [string, number],
-      );
-      const aheadIdx = +aheadIdxStr;
-      const aheadSector = getSectorNumber(laps[aheadIdx] || 0, aheadPos as number);
-
-      const aheadStamp = stampForSector(newTH, aheadIdx, aheadSector);
-      if (myStamp && aheadStamp)
-        newGapAhead[idx] = (myStamp - aheadStamp) / 1000;
-    });
+    const leaderCompletedLaps = laps[leaderIdx] || 0;
+    const leaderSector = getSectorNumber(leaderCompletedLaps, leaderPos as number);
 
     /* position ordering */
     const order = Object.entries(pos)
       .map(([idxStr, p]) => {
         const idx = +idxStr;
-        const sector = getSectorNumber(laps[idx] || 0, p as number);
+        const completedLaps = laps[idx] || 0;
+        const sector = getSectorNumber(completedLaps, p as number);
         return {
           idx,
+          completedLaps,
           sector,
           t: stampForSector(newTH, idx, sector) ?? now,
         };
       })
-      .sort((a, b) => (a.sector !== b.sector ? b.sector - a.sector : a.t - b.t));
+      .sort((a, b) => {
+        // First sort by completed laps (descending)
+        if (a.completedLaps !== b.completedLaps) {
+          return b.completedLaps - a.completedLaps;
+        }
+        // Then by sector (descending)
+        if (a.sector !== b.sector) {
+          return b.sector - a.sector;
+        }
+        // Finally by time at sector (ascending)
+        return a.t - b.t;
+      });
 
+    /* gap calculations */
     order.forEach((entry, i) => {
       const me = entry.idx;
 
       if (i === 0) {            // leader
-        newGapLead[me]  = 0;
+        newGapLead[me] = 0;
         newGapAhead[me] = 0;
         return;
       }
 
       const ahead = order[i - 1];
 
-      newGapAhead[me] = (entry.t - ahead.t)       / 1000;   // last checkpoint diff
-      newGapLead[me]  = (entry.t - order[0].t)    / 1000;   // leader gap
+      newGapAhead[me] = (entry.t - ahead.t) / 1000;   // last checkpoint diff
+      newGapLead[me] = (entry.t - order[0].t) / 1000;   // leader gap
     });
+
+    order.forEach(({ idx }, i) => (newPos[idx] = i + 1));
 
     /* commit state */
     setTimeHistory(newTH);
@@ -376,7 +362,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const isPlayer = carIdx === playerCarIndex;
 
       // Get the position from calculated positions first, fallback to telemetry data
-      const position = calculatedPositions[carIdx] || telemetryData.CarIdxPosition?.[carIdx] || 999;
+      const position = calculatedPositions[carIdx] || 999;
       const trackPosition = telemetryData.CarIdxLapDistPct?.[carIdx] || 0;
       const currentLap = telemetryData.CarIdxLap?.[carIdx] || 0;
 
@@ -554,14 +540,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'interval':
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
       case 'gap':
-        if (car.position === 1) return '--'; // Leader has no gap
         const gapToAhead = calculatedGaps[car.carIdx];
-        if (!gapToAhead) return '--';
+        if (gapToAhead === undefined) return '--';
         return formatLapTime(gapToAhead);
       case 'gapToLeader':
-        if (car.position === 1) return '--'; // Leader has no gap
         const gapToLeader = calculatedGapsToLeader[car.carIdx];
-        if (!gapToLeader) return '--';
+        if (gapToLeader === undefined) return '--';
         return formatLapTime(gapToLeader);
       case 'lap':
         return car.currentLap;
