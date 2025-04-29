@@ -213,8 +213,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const currentPosNum = currentPos as number;
       const currentLap = currentLaps[carIdx] || 0;
       
-      // Calculate total position including laps
-      const totalPos = currentLap * 100 + currentPosNum;
+      // Calculate total position including laps (add 100% for each completed lap)
+      const totalPos = (currentLap * 100) + currentPosNum;
       
       // Round position to nearest 5%
       const roundedPos = Math.round(currentPosNum * 20) / 20;
@@ -227,7 +227,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (carIdx !== leaderIdx && 
             newTimeHistory[leaderIdx] && 
             newTimeHistory[leaderIdx][roundedPos]) {
-          const leaderTotalPos = leaderLaps * 100 + leaderPos;
+          const leaderTotalPos = (leaderLaps * 100) + leaderPos;
           const timeDiff = calculateTimeDifference(leaderIdx, roundedPos, leaderPos);
           const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos] + timeDiff) / 1000;
           newGapsToLeader[carIdx] = gapToLeader;
@@ -239,7 +239,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             const idxNum = parseInt(idx);
             const posNum = pos as number;
             const laps = currentLaps[idxNum] || 0;
-            const totalPosAhead = laps * 100 + posNum;
+            const totalPosAhead = (laps * 100) + posNum;
             
             // Only consider cars that are actually ahead in position
             const carAheadPosition = newCalculatedPositions[idxNum] || 999;
@@ -257,7 +257,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             const idxNum = parseInt(idx);
             const posNum = pos as number;
             const laps = currentLaps[idxNum] || 0;
-            const totalPosAhead = laps * 100 + posNum;
+            const totalPosAhead = (laps * 100) + posNum;
             
             // Use position difference as primary factor
             const currentCarPosition = newCalculatedPositions[carIdx] || 999;
@@ -288,11 +288,6 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             const timeDiff = calculateTimeDifference(closestCarIdxNum, roundedPos, closestCarPosNum);
             const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos] + timeDiff) / 1000;
             newCalculatedGaps[carIdx] = gap;
-            
-            // // Debug log for gap calculation
-            // if (process.env.NODE_ENV === 'development') {
-            //   console.log(`[Gap Calculation] Car ${carIdx} (P${newCalculatedPositions[carIdx]}) -> Car ${closestCarIdxNum} (P${newCalculatedPositions[closestCarIdxNum]}): ${gap.toFixed(3)}s`);
-            // }
           }
         } else {
           // No car ahead found, clear the gap
@@ -306,7 +301,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const carIdx = parseInt(carIdxStr);
       const posNum = pos as number;
       const laps = currentLaps[carIdx] || 0;
-      const totalPos = laps * 100 + posNum;
+      const totalPos = (laps * 100) + posNum;
       const roundedPos = Math.round(posNum * 20) / 20;
       const timeAtPos = newTimeHistory[carIdx][roundedPos] || currentTime;
       
