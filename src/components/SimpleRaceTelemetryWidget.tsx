@@ -282,8 +282,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             // Get the time when they entered the first new sector
             const firstNewSectorEntryTime = stampForSector(newTH, ahead.idx, referenceSector);
             if (firstNewSectorEntryTime) {
-              // Add up all the time spent in new sectors
-              for (let s = referenceSector + 1; s <= aheadSector; s++) {
+              // Add up all the time spent in completed sectors
+              for (let s = referenceSector + 1; s < aheadSector; s++) {
                 const sectorTime = stampForSector(newTH, ahead.idx, s);
                 const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
                 if (sectorTime && prevSectorTime) {
@@ -291,7 +291,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                 }
               }
               // Add the time spent in their current sector
-              additionalTime += (ahead.t - stampForSector(newTH, ahead.idx, aheadSector)) / 1000;
+              additionalTime += (ahead.t - stampForSector(newTH, ahead.idx, aheadSector - 1)) / 1000;
+            }
+          }
+          
+          // If we're in the reference sector, subtract our current time in it
+          if (mySector === referenceSector) {
+            const mySectorEntryTime = stampForSector(newTH, me, referenceSector);
+            if (mySectorEntryTime) {
+              additionalTime -= (entry.t - mySectorEntryTime) / 1000;
             }
           }
           
@@ -325,8 +333,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             // Get the time when they entered the first new sector
             const firstNewSectorEntryTime = stampForSector(newTH, order[0].idx, referenceSector);
             if (firstNewSectorEntryTime) {
-              // Add up all the time spent in new sectors
-              for (let s = referenceSector + 1; s <= leaderSector; s++) {
+              // Add up all the time spent in completed sectors
+              for (let s = referenceSector + 1; s < leaderSector; s++) {
                 const sectorTime = stampForSector(newTH, order[0].idx, s);
                 const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
                 if (sectorTime && prevSectorTime) {
@@ -334,7 +342,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                 }
               }
               // Add the time spent in their current sector
-              additionalTime += (order[0].t - stampForSector(newTH, order[0].idx, leaderSector)) / 1000;
+              additionalTime += (order[0].t - stampForSector(newTH, order[0].idx, leaderSector - 1)) / 1000;
+            }
+          }
+          
+          // If we're in the reference sector, subtract our current time in it
+          if (mySector === referenceSector) {
+            const mySectorEntryTime = stampForSector(newTH, me, referenceSector);
+            if (mySectorEntryTime) {
+              additionalTime -= (entry.t - mySectorEntryTime) / 1000;
             }
           }
           
