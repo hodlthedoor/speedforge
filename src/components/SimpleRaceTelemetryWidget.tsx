@@ -270,12 +270,18 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         const aheadSector = ahead.sector;
         if (aheadSector > mySector) {
           // Add up time spent in each intermediate sector
-          for (let s = mySector + 1; s <= aheadSector; s++) {
+          // Start from the next sector after current, up to the sector before the car ahead
+          for (let s = mySector + 1; s < aheadSector; s++) {
             const sectorTime = stampForSector(newTH, ahead.idx, s);
             const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
             if (sectorTime && prevSectorTime) {
               intermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
             }
+          }
+          // For the car ahead's current sector, use the time difference between its current time and when it entered that sector
+          const aheadSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
+          if (aheadSectorEntryTime) {
+            intermediateSectorTime += (ahead.t - aheadSectorEntryTime) / 1000;
           }
         }
       }
@@ -288,12 +294,19 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       if (leaderTimeAtMySector) {
         const leaderSector = order[0].sector;
         if (leaderSector > mySector) {
-          for (let s = mySector + 1; s <= leaderSector; s++) {
+          // Add up time spent in each intermediate sector
+          // Start from the next sector after current, up to the sector before the leader
+          for (let s = mySector + 1; s < leaderSector; s++) {
             const sectorTime = stampForSector(newTH, order[0].idx, s);
             const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
             if (sectorTime && prevSectorTime) {
               leaderIntermediateSectorTime += (sectorTime - prevSectorTime) / 1000;
             }
+          }
+          // For the leader's current sector, use the time difference between its current time and when it entered that sector
+          const leaderSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
+          if (leaderSectorEntryTime) {
+            leaderIntermediateSectorTime += (order[0].t - leaderSectorEntryTime) / 1000;
           }
         }
       }
