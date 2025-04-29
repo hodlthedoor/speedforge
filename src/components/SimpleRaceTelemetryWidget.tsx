@@ -156,16 +156,19 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const leaderPos = leader[1] as number;
     const roundedLeaderPos = Math.round(leaderPos * 20) / 20;
 
+    // Initialize time history for all cars first
+    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
+      const carIdx = parseInt(carIdxStr);
+      if (!newTimeHistory[carIdx]) {
+        newTimeHistory[carIdx] = {};
+      }
+    });
+
     // Update time history and calculate positions for each car
     Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
       const carIdx = parseInt(carIdxStr);
       const currentPosNum = currentPos as number;
       
-      // Initialize time history for this car if needed
-      if (!newTimeHistory[carIdx]) {
-        newTimeHistory[carIdx] = {};
-      }
-
       // Round position to nearest 5%
       const roundedPos = Math.round(currentPosNum * 20) / 20;
       
@@ -175,7 +178,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       }
 
       // Calculate gap to leader
-      if (carIdx !== leaderIdx && newTimeHistory[carIdx][roundedPos] && newTimeHistory[leaderIdx][roundedPos]) {
+      if (carIdx !== leaderIdx && 
+          newTimeHistory[carIdx][roundedPos] && 
+          newTimeHistory[leaderIdx] && 
+          newTimeHistory[leaderIdx][roundedPos]) {
         const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos]) / 1000;
         gapsToLeader[carIdx] = gapToLeader;
       }
@@ -204,7 +210,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         const roundedClosestPos = Math.round(closestCarPosNum * 20) / 20;
 
         // Calculate gap using time history at the same track position
-        if (newTimeHistory[carIdx][roundedPos] && newTimeHistory[closestCarIdxNum][roundedPos]) {
+        if (newTimeHistory[carIdx][roundedPos] && 
+            newTimeHistory[closestCarIdxNum] && 
+            newTimeHistory[closestCarIdxNum][roundedPos]) {
           const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos]) / 1000;
           calculatedGaps[carIdx] = gap;
         }
