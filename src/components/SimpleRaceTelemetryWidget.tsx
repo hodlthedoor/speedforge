@@ -291,7 +291,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                 }
               }
               // Add the time spent in their current sector
-              additionalTime += (ahead.t - stampForSector(newTH, ahead.idx, aheadSector - 1)) / 1000;
+              const currentSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
+              if (currentSectorEntryTime) {
+                additionalTime += (ahead.t - currentSectorEntryTime) / 1000;
+              }
             }
           }
           
@@ -342,7 +345,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                 }
               }
               // Add the time spent in their current sector
-              additionalTime += (order[0].t - stampForSector(newTH, order[0].idx, leaderSector - 1)) / 1000;
+              const currentSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
+              if (currentSectorEntryTime) {
+                additionalTime += (order[0].t - currentSectorEntryTime) / 1000;
+              }
             }
           }
           
