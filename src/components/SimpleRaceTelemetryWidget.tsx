@@ -77,6 +77,31 @@ const formatLapTime = (time: number | undefined): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
+/* ────────────────────────────────────────────
+   helpers ─ keep once-per-sector timestamp and
+   recover the last known one if a sector is missing
+   ──────────────────────────────────────────── */
+const rememberFirst = (
+  store: Record<number, Record<number, number>>,
+  idx: number,
+  sector: number,
+  t: number,
+) => {
+  if (!store[idx]) store[idx] = {};
+  if (store[idx][sector] === undefined) store[idx][sector] = t;
+};
+
+const stampForSector = (
+  store: Record<number, Record<number, number>>,
+  idx: number,
+  sector: number,
+): number | undefined => {
+  for (let s = sector; s >= 0; s--) {
+    const ts = store[idx]?.[s];
+    if (ts !== undefined) return ts;
+  }
+};
+
 // Internal component that uses state from widget manager
 const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps> = (props) => {
   const {
@@ -94,15 +119,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
 
   // Add state for tracking time history at track positions
   const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
-  const [currentTime, setCurrentTime] = useState<number>(0);
   const [calculatedGaps, setCalculatedGaps] = useState<Record<number, number>>({});
   const [calculatedGapsToLeader, setCalculatedGapsToLeader] = useState<Record<number, number>>({});
   const [calculatedPositions, setCalculatedPositions] = useState<Record<number, number>>({});
 
-  // Helper function to calculate sector number
-  const getSectorNumber = (laps: number, trackPos: number) => {
-    return (laps * 20) + Math.floor(trackPos * 20);
-  };
+  const getSectorNumber = (laps: number, trackPos: number) =>
+    laps * 20 + Math.floor(trackPos * 20);
 
   // Ensure we have a valid selectedColumns array
   const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
@@ -142,194 +164,129 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     ],
   });
 
-  // Update time history and calculate gaps
+  /* ────────────────────────────────────────────
+     core effect
+     ──────────────────────────────────────────── */
   useEffect(() => {
     if (!telemetryData?.CarIdxLapDistPct) return;
 
-    const currentTime = Date.now();
-    const currentPositions = telemetryData.CarIdxLapDistPct;
-    const currentLaps = telemetryData.CarIdxLapCompleted || {};
-    const newTimeHistory = { ...timeHistory };
-    const newCalculatedGaps = { ...calculatedGaps };
-    const newGapsToLeader = { ...calculatedGapsToLeader };
-    const newCalculatedPositions = { ...calculatedPositions };
+    const now = Date.now();
+    const { CarIdxLapDistPct: pos, CarIdxLapCompleted: laps = {} } = telemetryData;
+    const newTH = { ...timeHistory };
+    const newGapAhead: Record<number, number> = {};
+    const newGapLead: Record<number, number> = {};
+    const newPos: Record<number, number> = {};
 
-    // Initialize time history for all cars first
-    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
-      const carIdx = parseInt(carIdxStr);
-      if (!newTimeHistory[carIdx]) {
-        newTimeHistory[carIdx] = {};
-      }
+    /* set once-per-sector timestamps */
+    Object.entries(pos).forEach(([idxStr, p]) => {
+      const idx = +idxStr;
+      const sector = getSectorNumber(laps[idx] || 0, p as number);
+      rememberFirst(newTH, idx, sector, now);
     });
 
-    // Update time history and calculate positions for each car
-    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
-      const carIdx = parseInt(carIdxStr);
-      const currentPosNum = currentPos as number;
-      const completedLaps = currentLaps[carIdx] || 0;
-      
-      // Calculate sector number
-      const sector = getSectorNumber(completedLaps, currentPosNum);
-      
-      // Update time history for current sector
-      newTimeHistory[carIdx][sector] = currentTime;
-    });
+    /* leader detection */
+    const [leaderIdxStr, leaderPos] = Object.entries(pos).reduce(
+      (lead, [idxStr, p]) => {
+        const idx = +idxStr;
+        const s = getSectorNumber(laps[idx] || 0, p as number);
+        const [curIdxStr, curPos] = lead;
+        const sLead = getSectorNumber(laps[+curIdxStr] || 0, curPos as number);
+        if (s > sLead) return [idxStr, p];
+        if (s === sLead) {
+          const t = stampForSector(newTH, idx, s) ?? now;
+          const tLead = stampForSector(newTH, +curIdxStr, sLead) ?? now;
+          return t < tLead ? [idxStr, p] : lead;
+        }
+        return lead;
+      },
+      ['0', 0] as [string, number],
+    );
+    const leaderIdx = +leaderIdxStr;
+    const leaderSector = getSectorNumber(laps[leaderIdx] || 0, leaderPos as number);
 
-    // Find the leader (car with highest sector number, or earliest time if tied)
-    const leader = Object.entries(currentPositions).reduce((leader, [idx, pos]) => {
-      const idxNum = parseInt(idx);
-      const posNum = pos as number;
-      const laps = currentLaps[idxNum] || 0;
-      const sector = getSectorNumber(laps, posNum);
-      
-      const leaderPos = leader[1] as number;
-      const leaderLaps = currentLaps[parseInt(leader[0])] || 0;
-      const leaderSector = getSectorNumber(leaderLaps, leaderPos);
-      
-      if (sector > leaderSector) {
-        return [idx, pos];
-      } else if (sector === leaderSector) {
-        // If same sector, compare times
-        const time = newTimeHistory[idxNum][sector];
-        const leaderTime = newTimeHistory[parseInt(leader[0])][leaderSector];
-        return time < leaderTime ? [idx, pos] : leader;
-      }
-      return leader;
-    }, ['', -1] as [string, number]);
+    /* gap calculations */
+    Object.entries(pos).forEach(([idxStr, p]) => {
+      const idx = +idxStr;
+      const sector = getSectorNumber(laps[idx] || 0, p as number);
 
-    const leaderIdx = parseInt(leader[0]);
-    const leaderPos = leader[1] as number;
-    const leaderLaps = currentLaps[leaderIdx] || 0;
-    const leaderSector = getSectorNumber(leaderLaps, leaderPos);
-
-    // Calculate gaps to leader and car ahead
-    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
-      const carIdx = parseInt(carIdxStr);
-      const currentPosNum = currentPos as number;
-      const completedLaps = currentLaps[carIdx] || 0;
-      const sector = getSectorNumber(completedLaps, currentPosNum);
-
-      if (carIdx === leaderIdx) {
-        newGapsToLeader[carIdx] = 0;
-        newCalculatedGaps[carIdx] = 0;
+      const myStamp = stampForSector(newTH, idx, sector);
+      if (idx === leaderIdx) {
+        newGapLead[idx] = 0;
+        newGapAhead[idx] = 0;
         return;
       }
 
-      // Calculate gap to leader
-      if (newTimeHistory[carIdx][sector] && newTimeHistory[leaderIdx][sector]) {
-        newGapsToLeader[carIdx] = (newTimeHistory[carIdx][sector] - newTimeHistory[leaderIdx][sector]) / 1000;
-      }
+      /* gap to leader */
+      const leaderStamp = stampForSector(newTH, leaderIdx, leaderSector);
+      if (myStamp && leaderStamp)
+        newGapLead[idx] = (myStamp - leaderStamp) / 1000;
 
-      // Find the car ahead
-      const carsAhead = Object.entries(currentPositions)
-        .filter(([idx, pos]) => {
-          const idxNum = parseInt(idx);
-          const posNum = pos as number;
-          const laps = currentLaps[idxNum] || 0;
-          const aheadSector = getSectorNumber(laps, posNum);
-          
-          return idxNum !== carIdx && aheadSector > sector;
-        });
+      /* gap to closest ahead */
+      const candidates = Object.entries(pos).filter(([jStr, pj]) => {
+        const j = +jStr;
+        if (j === idx) return false;
+        const s = getSectorNumber(laps[j] || 0, pj as number);
+        return s > sector;
+      });
+      if (!candidates.length) return;
 
-      if (carsAhead.length > 0) {
-        // Find the closest car ahead by sector
-        const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
-          const idxNum = parseInt(idx);
-          const posNum = pos as number;
-          const laps = currentLaps[idxNum] || 0;
-          const aheadSector = getSectorNumber(laps, posNum);
-          
-          const closestPos = closest[1] as number;
-          const closestLaps = currentLaps[parseInt(closest[0])] || 0;
-          const closestSector = getSectorNumber(closestLaps, closestPos);
-          
-          return aheadSector < closestSector ? [idx, pos] : closest;
-        }, ['', 1000] as [string, number]);
+      const [aheadIdxStr, aheadPos] = candidates.reduce(
+        (best, [jStr, pj]) => {
+          const j = +jStr;
+          const s = getSectorNumber(laps[j] || 0, pj as number);
+          const [bStr, bp] = best;
+          const sb = getSectorNumber(laps[+bStr] || 0, bp as number);
+          return s < sb ? [jStr, pj] : best;
+        },
+        ['0', 1_000] as [string, number],
+      );
+      const aheadIdx = +aheadIdxStr;
+      const aheadSector = getSectorNumber(laps[aheadIdx] || 0, aheadPos as number);
 
-        const closestCarIdxNum = parseInt(closestCarIdx);
-        const closestCarLaps = currentLaps[closestCarIdxNum] || 0;
-        const closestCarSector = getSectorNumber(closestCarLaps, closestCarPos as number);
-        
-        if (newTimeHistory[carIdx][sector] && newTimeHistory[closestCarIdxNum][sector]) {
-          newCalculatedGaps[carIdx] = (newTimeHistory[carIdx][sector] - newTimeHistory[closestCarIdxNum][sector]) / 1000;
-        }
-      } else {
-        newCalculatedGaps[carIdx] = 0;
-      }
+      const aheadStamp = stampForSector(newTH, aheadIdx, aheadSector);
+      if (myStamp && aheadStamp)
+        newGapAhead[idx] = (myStamp - aheadStamp) / 1000;
     });
 
-    // Calculate positions based on sector number and time
-    const positionData = Object.entries(currentPositions).map(([carIdxStr, pos]) => {
-      const carIdx = parseInt(carIdxStr);
-      const posNum = pos as number;
-      const laps = currentLaps[carIdx] || 0;
-      const sector = getSectorNumber(laps, posNum);
-      const timeAtSector = newTimeHistory[carIdx][sector] || currentTime;
-      
-      return {
-        carIdx,
-        sector,
-        timeAtSector,
-        laps
-      };
-    });
+    /* position ordering */
+    const order = Object.entries(pos)
+      .map(([idxStr, p]) => {
+        const idx = +idxStr;
+        const sector = getSectorNumber(laps[idx] || 0, p as number);
+        return {
+          idx,
+          sector,
+          t: stampForSector(newTH, idx, sector) ?? now,
+        };
+      })
+      .sort((a, b) => (a.sector !== b.sector ? b.sector - a.sector : a.t - b.t));
 
-    // Sort by sector number, then by time at sector
-    positionData.sort((a, b) => {
-      if (a.sector !== b.sector) {
-        return b.sector - a.sector;
-      }
-      return a.timeAtSector - b.timeAtSector;
-    });
+    order.forEach(({ idx }, i) => (newPos[idx] = i + 1));
 
-    // Assign positions
-    positionData.forEach((data, index) => {
-      newCalculatedPositions[data.carIdx] = index + 1;
-    });
+    /* commit state */
+    setTimeHistory(newTH);
+    setCalculatedGaps(newGapAhead);
+    setCalculatedGapsToLeader(newGapLead);
+    setCalculatedPositions(newPos);
 
-    // Update all states
-    setTimeHistory(newTimeHistory);
-    setCurrentTime(currentTime);
-    setCalculatedGaps(newCalculatedGaps);
-    setCalculatedGapsToLeader(newGapsToLeader);
-    setCalculatedPositions(newCalculatedPositions);
-
-    // Update the car data with calculated values
+    /* feed back into telemetryData */
     if (telemetryData) {
-      // Create a new object to trigger re-render
-      const updatedTelemetryData = { ...telemetryData };
-      
-      // Update gaps to car ahead
-      Object.entries(newCalculatedGaps).forEach(([carIdx, gap]) => {
-        const idx = parseInt(carIdx);
-        if (!updatedTelemetryData.CarIdxF2Time) {
-          updatedTelemetryData.CarIdxF2Time = [];
-        }
-        updatedTelemetryData.CarIdxF2Time[idx] = gap;
+      const upd = { ...telemetryData };
+
+      Object.entries(newGapAhead).forEach(([i, g]) => {
+        upd.CarIdxF2Time ||= [];
+        upd.CarIdxF2Time[+i] = g;
+      });
+      Object.entries(newGapLead).forEach(([i, g]) => {
+        upd.CarIdxGapToLeader ||= [];
+        upd.CarIdxGapToLeader[+i] = g;
+      });
+      Object.entries(newPos).forEach(([i, p]) => {
+        upd.CarIdxPosition ||= [];
+        upd.CarIdxPosition[+i] = p;
       });
 
-      // Update gaps to leader
-      Object.entries(newGapsToLeader).forEach(([carIdx, gap]) => {
-        const idx = parseInt(carIdx);
-        if (!updatedTelemetryData.CarIdxGapToLeader) {
-          updatedTelemetryData.CarIdxGapToLeader = [];
-        }
-        updatedTelemetryData.CarIdxGapToLeader[idx] = gap;
-      });
-
-      // Update positions
-      Object.entries(newCalculatedPositions).forEach(([carIdx, position]) => {
-        const idx = parseInt(carIdx);
-        if (!updatedTelemetryData.CarIdxPosition) {
-          updatedTelemetryData.CarIdxPosition = [];
-        }
-        updatedTelemetryData.CarIdxPosition[idx] = position;
-      });
-
-      // Update the telemetry data through the hook
-      if (typeof telemetryData === 'object' && telemetryData !== null) {
-        Object.assign(telemetryData, updatedTelemetryData);
-      }
+      Object.assign(telemetryData, upd);
     }
   }, [telemetryData]);
 
@@ -719,7 +676,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             <table className="w-full text-left table-fixed">
               <thead className="sticky top-0 bg-slate-800 text-gray-300">
                 <tr className="text-xs md:text-sm">
-                  {actualColumns.map((column) => (
+                  {selectedColumns.map((column) => (
                     <th key={column} className="py-2 px-3 text-left">
                       {AVAILABLE_COLUMNS.find((c) => c.value === column)?.label || column}
                     </th>
@@ -732,7 +689,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     key={car.carIdx} 
                     className={`${car.isPlayer ? 'bg-blue-900/50' : 'hover:bg-slate-700/60'} border-b border-slate-700/50 text-ellipsis`}
                   >
-                    {actualColumns.map((column) => (
+                    {selectedColumns.map((column) => (
                       <td key={column} className={`py-2 px-3 truncate ${column === 'metric' ? 'font-mono' : ''}`}>
                         {renderColumnContent(column, car)}
                       </td>
