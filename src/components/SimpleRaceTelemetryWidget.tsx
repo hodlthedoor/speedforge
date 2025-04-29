@@ -29,6 +29,7 @@ const AVAILABLE_COLUMNS = [
   { value: 'classPosition', label: 'Class Position' },
   { value: 'interval', label: 'Track Position %' },
   { value: 'gap', label: 'Gap to Ahead' },
+  { value: 'gapToLeader', label: 'Gap to Leader' },
   { value: 'lap', label: 'Current Lap' },
   { value: 'lastLapCompleted', label: 'Last Completed Lap' },
   { value: 'bestLapTime', label: 'Best Lap Time' },
@@ -91,6 +92,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     ...otherProps
   } = props;
 
+  // Add state for tracking time history at track positions
+  const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
+  const [currentTime, setCurrentTime] = useState<number>(0);
+
   // Ensure we have a valid selectedColumns array
   const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
   
@@ -124,10 +129,140 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       'CarIdxFastRepairsUsed',
       'CarIdxP2P_Count',
       'CarIdxP2P_Status',
-      'CarIdxSteer',  // Added for debugging steering
-      selectedMetric, // Always include the currently selected metric
+      'CarIdxSteer',
+      selectedMetric,
     ],
   });
+
+  // Update time history and calculate gaps
+  useEffect(() => {
+    if (!telemetryData?.CarIdxLapDistPct) return;
+
+    const currentTime = Date.now();
+    const currentPositions = telemetryData.CarIdxLapDistPct;
+    const newTimeHistory = { ...timeHistory };
+    const calculatedGaps: Record<number, number> = {};
+    const gapsToLeader: Record<number, number> = {};
+    const calculatedPositions: Record<number, number> = {};
+
+    // First, find the leader (car with highest track position)
+    const leader = Object.entries(currentPositions).reduce((leader, [idx, pos]) => {
+      const posNum = pos as number;
+      const leaderPos = leader[1] as number;
+      return posNum > leaderPos ? [idx, pos] : leader;
+    }, ['', -1] as [string, number]);
+
+    const leaderIdx = parseInt(leader[0]);
+    const leaderPos = leader[1] as number;
+    const roundedLeaderPos = Math.round(leaderPos * 20) / 20;
+
+    // Update time history and calculate positions for each car
+    Object.entries(currentPositions).forEach(([carIdxStr, currentPos]) => {
+      const carIdx = parseInt(carIdxStr);
+      const currentPosNum = currentPos as number;
+      
+      // Initialize time history for this car if needed
+      if (!newTimeHistory[carIdx]) {
+        newTimeHistory[carIdx] = {};
+      }
+
+      // Round position to nearest 5%
+      const roundedPos = Math.round(currentPosNum * 20) / 20;
+      
+      // Only update if we've passed a 5% marker
+      if (!newTimeHistory[carIdx][roundedPos]) {
+        newTimeHistory[carIdx][roundedPos] = currentTime;
+      }
+
+      // Calculate gap to leader
+      if (carIdx !== leaderIdx && newTimeHistory[carIdx][roundedPos] && newTimeHistory[leaderIdx][roundedPos]) {
+        const gapToLeader = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[leaderIdx][roundedPos]) / 1000;
+        gapsToLeader[carIdx] = gapToLeader;
+      }
+
+      // Find the car ahead
+      const carsAhead = Object.entries(currentPositions)
+        .filter(([idx, pos]) => {
+          const idxNum = parseInt(idx);
+          const posNum = pos as number;
+          return idxNum !== carIdx && 
+                 (posNum > currentPosNum || (posNum < 0.1 && currentPosNum > 0.9));
+        });
+
+      if (carsAhead.length > 0) {
+        // Find the closest car ahead
+        const [closestCarIdx, closestCarPos] = carsAhead.reduce((closest, [idx, pos]) => {
+          const posNum = pos as number;
+          const distance = posNum > currentPosNum 
+            ? posNum - currentPosNum 
+            : (1 - currentPosNum) + posNum;
+          return distance < (closest[1] as number) ? [idx, distance] : closest;
+        }, ['', 1] as [string, number]);
+
+        const closestCarIdxNum = parseInt(closestCarIdx);
+        const closestCarPosNum = closestCarPos as number;
+        const roundedClosestPos = Math.round(closestCarPosNum * 20) / 20;
+
+        // Calculate gap using time history at the same track position
+        if (newTimeHistory[carIdx][roundedPos] && newTimeHistory[closestCarIdxNum][roundedPos]) {
+          const gap = (newTimeHistory[carIdx][roundedPos] - newTimeHistory[closestCarIdxNum][roundedPos]) / 1000;
+          calculatedGaps[carIdx] = gap;
+        }
+      }
+    });
+
+    // Calculate positions based on time history
+    const positionData = Object.entries(currentPositions).map(([carIdxStr, pos]) => {
+      const carIdx = parseInt(carIdxStr);
+      const posNum = pos as number;
+      const roundedPos = Math.round(posNum * 20) / 20;
+      const timeAtPos = newTimeHistory[carIdx][roundedPos] || currentTime;
+      return { carIdx, timeAtPos, pos: posNum };
+    });
+
+    // Sort by position and time to determine running order
+    positionData.sort((a, b) => {
+      if (a.pos === b.pos) {
+        return a.timeAtPos - b.timeAtPos;
+      }
+      return b.pos - a.pos;
+    });
+
+    // Assign positions
+    positionData.forEach((data, index) => {
+      calculatedPositions[data.carIdx] = index + 1;
+    });
+
+    setTimeHistory(newTimeHistory);
+    setCurrentTime(currentTime);
+
+    // Update the car data with calculated values
+    if (telemetryData) {
+      Object.entries(calculatedGaps).forEach(([carIdx, gap]) => {
+        const idx = parseInt(carIdx);
+        if (telemetryData.CarIdxF2Time) {
+          telemetryData.CarIdxF2Time[idx] = gap;
+        }
+      });
+
+      // Add gap to leader to telemetry data
+      Object.entries(gapsToLeader).forEach(([carIdx, gap]) => {
+        const idx = parseInt(carIdx);
+        if (!telemetryData.CarIdxGapToLeader) {
+          telemetryData.CarIdxGapToLeader = [];
+        }
+        telemetryData.CarIdxGapToLeader[idx] = gap;
+      });
+
+      // Update positions
+      Object.entries(calculatedPositions).forEach(([carIdx, position]) => {
+        const idx = parseInt(carIdx);
+        if (telemetryData.CarIdxPosition) {
+          telemetryData.CarIdxPosition[idx] = position;
+        }
+      });
+    }
+  }, [telemetryData, timeHistory]);
 
   // Log raw telemetry data when it changes
   useEffect(() => {
@@ -201,8 +336,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const driver = allDrivers.find(d => d.index === carIdx);
       const isPlayer = carIdx === playerCarIndex;
 
-      // Get the gap to car ahead
+      // Get the gaps
       const gapToAhead = telemetryData.CarIdxF2Time?.[carIdx] || 0;
+      const gapToLeader = telemetryData.CarIdxGapToLeader?.[carIdx] || 0;
       const trackPosition = telemetryData.CarIdxLapDistPct?.[carIdx] || 0;
       const currentLap = telemetryData.CarIdxLap?.[carIdx] || 0;
 
@@ -223,8 +359,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
         lastLapTime: telemetryData.CarIdxLastLapTime?.[carIdx] || 0,
         bestLapTime: telemetryData.CarIdxBestLapTime?.[carIdx] || 0,
-        gapToAhead, // Add the gap to car ahead
-        trackPosition, // Add track position for gap calculation
+        gapToAhead,
+        gapToLeader,
+        trackPosition,
         gear: telemetryData.CarIdxGear?.[carIdx] || '-',
         rpm: telemetryData.CarIdxRPM?.[carIdx] || 0,
         steer: telemetryData.CarIdxSteer?.[carIdx] || 0,
@@ -379,6 +516,10 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (car.position === 1) return '--'; // Leader has no gap
         if (car.gapToAhead === 0) return '--'; // No gap data available
         return formatLapTime(car.gapToAhead);
+      case 'gapToLeader':
+        if (car.position === 1) return '--'; // Leader has no gap
+        if (car.gapToLeader === 0) return '--'; // No gap data available
+        return formatLapTime(car.gapToLeader);
       case 'lap':
         return car.currentLap;
       case 'lastLapTime':
