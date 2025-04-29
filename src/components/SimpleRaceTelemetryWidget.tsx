@@ -257,15 +257,28 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       }
 
       const ahead = order[i - 1];
-      const deltaAhead = entry.t - ahead.t;
-      const deltaLead = entry.t - order[0].t;
+      
+      // For gap to car ahead, use the time at the current car's sector
+      const mySector = entry.sector;
+      const myTime = entry.t;
+      const aheadTimeAtMySector = stampForSector(newTH, ahead.idx, mySector);
+      
+      // For gap to leader, use the time at the current car's sector
+      const leaderTimeAtMySector = stampForSector(newTH, order[0].idx, mySector);
 
-      // Only update gaps if we have valid new values
-      if (deltaAhead > 0) {
-        newGapAhead[me] = deltaAhead / 1000;
+      // Only update gaps if we have valid times at the same sector
+      if (aheadTimeAtMySector && myTime) {
+        const deltaAhead = myTime - aheadTimeAtMySector;
+        if (deltaAhead > 0) {
+          newGapAhead[me] = deltaAhead / 1000;
+        }
       }
-      if (deltaLead > 0) {
-        newGapLead[me] = deltaLead / 1000;
+
+      if (leaderTimeAtMySector && myTime) {
+        const deltaLead = myTime - leaderTimeAtMySector;
+        if (deltaLead > 0) {
+          newGapLead[me] = deltaLead / 1000;
+        }
       }
     });
 
