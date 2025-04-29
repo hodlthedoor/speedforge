@@ -28,6 +28,7 @@ const AVAILABLE_COLUMNS = [
   { value: 'carClass', label: 'Car Class' },
   { value: 'classPosition', label: 'Class Position' },
   { value: 'interval', label: 'Track Position %' },
+  { value: 'gap', label: 'Gap to Ahead' },
   { value: 'lap', label: 'Current Lap' },
   { value: 'lastLapCompleted', label: 'Last Completed Lap' },
   { value: 'bestLapTime', label: 'Best Lap Time' },
@@ -58,6 +59,7 @@ const DEFAULT_COLUMNS = [
   'carClass',
   'classPosition',
   'interval',
+  'gap',
   'lap',
   'bestLapTime',
   'currentMetric',
@@ -199,6 +201,11 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const driver = allDrivers.find(d => d.index === carIdx);
       const isPlayer = carIdx === playerCarIndex;
 
+      // Get the gap to car ahead
+      const gapToAhead = telemetryData.CarIdxF2Time?.[carIdx] || 0;
+      const trackPosition = telemetryData.CarIdxLapDistPct?.[carIdx] || 0;
+      const currentLap = telemetryData.CarIdxLap?.[carIdx] || 0;
+
       // Create data object for this car with only available CarIdx metrics
       const carData = {
         carIdx,
@@ -212,10 +219,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         carClass: telemetryData.CarIdxClass?.[carIdx] || '',
         position: telemetryData.CarIdxPosition?.[carIdx] || 999,
         classPosition: telemetryData.CarIdxClassPosition?.[carIdx] || 999,
-        currentLap: telemetryData.CarIdxLap?.[carIdx] || 0,
+        currentLap,
         lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
         lastLapTime: telemetryData.CarIdxLastLapTime?.[carIdx] || 0,
         bestLapTime: telemetryData.CarIdxBestLapTime?.[carIdx] || 0,
+        gapToAhead, // Add the gap to car ahead
+        trackPosition, // Add track position for gap calculation
         gear: telemetryData.CarIdxGear?.[carIdx] || '-',
         rpm: telemetryData.CarIdxRPM?.[carIdx] || 0,
         steer: telemetryData.CarIdxSteer?.[carIdx] || 0,
@@ -365,10 +374,13 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         return car.classPosition || '-';
       case 'interval':
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
+      case 'gap':
+        // Format the gap to car ahead
+        if (car.position === 1) return '--'; // Leader has no gap
+        if (car.gapToAhead === 0) return '--'; // No gap data available
+        return formatLapTime(car.gapToAhead);
       case 'lap':
         return car.currentLap;
-      case 'bestLapTime':
-        return car.bestLapTime > 0 ? formatLapTime(car.bestLapTime) : '--:--';
       case 'lastLapTime':
         return car.lastLapTime > 0 ? formatLapTime(car.lastLapTime) : '--:--';
       case 'lapDelta':
