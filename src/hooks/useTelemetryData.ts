@@ -82,6 +82,7 @@ export interface TelemetryData {
   delta_session_best?: number;
   delta_optimal?: number;
   position?: number;
+  SessionTime?: number;
   
   // Fuel & Temps
   fuel_level?: number;
@@ -158,6 +159,7 @@ export type TelemetryMetric =
   | 'delta_session_best'
   | 'delta_optimal'
   | 'position'
+  | 'SessionTime'
   
   // Fuel & Temps
   | 'fuel_level'
@@ -618,6 +620,8 @@ export function formatTelemetryValue(metric: string, value: any): string {
     case 'repair_required_sec':
     case 'opt_repair_sec':
       return `${value.toFixed(1)}s`;
+    case 'SessionTime':
+      return `${value.toFixed(1)}s`;
     default:
       // For any CarIdx metrics not specially handled above
       if (metric.startsWith('CarIdx')) {
@@ -684,6 +688,7 @@ export function getMetricName(metric: string): string {
     'delta_session_best': 'Delta Session Best',
     'delta_optimal': 'Delta Optimal',
     'position': 'Position',
+    'SessionTime': 'Session Time',
     
     // Fuel & Temps
     'fuel_level': 'Fuel Level',

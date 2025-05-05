@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef, ReactNode } from 'react';
 
+// Add grid constants at the top of the file after imports
+const GRID_SIZE = 20; // Size of each grid cell in pixels
+const SNAP_THRESHOLD = 5; // Distance in pixels to trigger snapping
+
 export interface BaseDraggableProps {
   initialPosition?: { x: number, y: number };
   className?: string;
@@ -75,6 +79,15 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
     };
   }, [onPositionChange]);
 
+  // Modify grid snapping helper function to only snap to left and top borders
+  const snapToGrid = (value: number): number => {
+    const remainder = value % GRID_SIZE;
+    if (remainder < SNAP_THRESHOLD) {
+      return value - remainder;
+    }
+    return value;
+  };
+
   // Handle mouse down to start dragging
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Skip if the click originated from an input, button, or other interactive element
@@ -108,13 +121,17 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
     setIsDragging(true);
   };
 
-  // Mouse move handler - update position when dragging
+  // Modify handleMouseMove to include grid snapping
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging) return;
     
     // Calculate new position considering the original click offset
-    const newX = e.clientX - dragOffset.x;
-    const newY = e.clientY - dragOffset.y;
+    let newX = e.clientX - dragOffset.x;
+    let newY = e.clientY - dragOffset.y;
+    
+    // Snap to grid (only left and top borders)
+    newX = snapToGrid(newX);
+    newY = snapToGrid(newY);
     
     // Update the position
     setPosition({ x: newX, y: newY });

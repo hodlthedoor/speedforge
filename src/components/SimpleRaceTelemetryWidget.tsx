@@ -167,6 +167,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       'CarIdxP2P_Count',
       'CarIdxP2P_Status',
       'CarIdxSteer',
+      'SessionTime',
       selectedMetric,
     ],
   });
@@ -177,7 +178,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   useLayoutEffect(() => {
     if (!telemetryData?.CarIdxLapDistPct) return;
 
-    const now = Date.now();
+    const now = telemetryData.SessionTime || 0;
     const { CarIdxLapDistPct: pos, CarIdxLapCompleted: laps = {} } = telemetryData;
     const newTH = { ...timeHistory };
     
@@ -270,31 +271,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       } else {
         // Cars in different sectors - use time difference at the earlier sector
         const referenceSector = Math.min(mySector, aheadSector);
+        
+        // Get the time when both cars were at the reference sector
         const aheadTimeAtSector = stampForSector(newTH, ahead.idx, referenceSector);
         const myTimeAtSector = stampForSector(newTH, me, referenceSector);
         
         if (aheadTimeAtSector && myTimeAtSector) {
+          // Base delta is the time difference when both cars were at the reference sector
           const baseDelta = (myTimeAtSector - aheadTimeAtSector) / 1000;
           
           // Add time the car ahead spent in all sectors after the reference sector
           let additionalTime = 0;
           if (aheadSector > referenceSector) {
-            // Get the time when they entered the first new sector
-            const firstNewSectorEntryTime = stampForSector(newTH, ahead.idx, referenceSector);
-            if (firstNewSectorEntryTime) {
-              // Add up all the time spent in completed sectors
-              for (let s = referenceSector + 1; s < aheadSector; s++) {
-                const sectorTime = stampForSector(newTH, ahead.idx, s);
-                const prevSectorTime = stampForSector(newTH, ahead.idx, s - 1);
-                if (sectorTime && prevSectorTime) {
-                  additionalTime += (sectorTime - prevSectorTime) / 1000;
-                }
+            // For each completed sector, add the time difference between sector entry and exit
+            for (let s = referenceSector + 1; s < aheadSector; s++) {
+              const sectorEntryTime = stampForSector(newTH, ahead.idx, s - 1);
+              const sectorExitTime = stampForSector(newTH, ahead.idx, s);
+              if (sectorEntryTime && sectorExitTime) {
+                additionalTime += (sectorExitTime - sectorEntryTime) / 1000;
               }
-              // Add the time spent in their current sector
-              const currentSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
-              if (currentSectorEntryTime) {
-                additionalTime += (ahead.t - currentSectorEntryTime) / 1000;
-              }
+            }
+            
+            // For the current sector, add time since they entered it
+            const currentSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
+            if (currentSectorEntryTime) {
+              additionalTime += (ahead.t - currentSectorEntryTime) / 1000;
             }
           }
           
@@ -324,31 +325,31 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       } else {
         // Different sector from leader - use time difference at the earlier sector
         const referenceSector = Math.min(mySector, leaderSector);
+        
+        // Get the time when both cars were at the reference sector
         const leaderTimeAtSector = stampForSector(newTH, order[0].idx, referenceSector);
         const myTimeAtSector = stampForSector(newTH, me, referenceSector);
         
         if (leaderTimeAtSector && myTimeAtSector) {
+          // Base delta is the time difference when both cars were at the reference sector
           const baseDelta = (myTimeAtSector - leaderTimeAtSector) / 1000;
           
           // Add time the leader spent in all sectors after the reference sector
           let additionalTime = 0;
           if (leaderSector > referenceSector) {
-            // Get the time when they entered the first new sector
-            const firstNewSectorEntryTime = stampForSector(newTH, order[0].idx, referenceSector);
-            if (firstNewSectorEntryTime) {
-              // Add up all the time spent in completed sectors
-              for (let s = referenceSector + 1; s < leaderSector; s++) {
-                const sectorTime = stampForSector(newTH, order[0].idx, s);
-                const prevSectorTime = stampForSector(newTH, order[0].idx, s - 1);
-                if (sectorTime && prevSectorTime) {
-                  additionalTime += (sectorTime - prevSectorTime) / 1000;
-                }
+            // For each completed sector, add the time difference between sector entry and exit
+            for (let s = referenceSector + 1; s < leaderSector; s++) {
+              const sectorEntryTime = stampForSector(newTH, order[0].idx, s - 1);
+              const sectorExitTime = stampForSector(newTH, order[0].idx, s);
+              if (sectorEntryTime && sectorExitTime) {
+                additionalTime += (sectorExitTime - sectorEntryTime) / 1000;
               }
-              // Add the time spent in their current sector
-              const currentSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
-              if (currentSectorEntryTime) {
-                additionalTime += (order[0].t - currentSectorEntryTime) / 1000;
-              }
+            }
+            
+            // For the current sector, add time since they entered it
+            const currentSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
+            if (currentSectorEntryTime) {
+              additionalTime += (order[0].t - currentSectorEntryTime) / 1000;
             }
           }
           

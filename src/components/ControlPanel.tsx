@@ -62,7 +62,27 @@ interface ControlPanelProps {
   clickThrough?: boolean;
 }
 
-const ControlPanel: React.FC<ControlPanelProps> = ({
+// Add GridOverlay component at the top of the file after imports
+const GridOverlay: React.FC = () => {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      pointerEvents: 'none',
+      backgroundSize: '20px 20px',
+      backgroundImage: `
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px)
+      `,
+      zIndex: 0
+    }} />
+  );
+};
+
+export const ControlPanel: React.FC<ControlPanelProps> = ({
   initialPosition = { x: 20, y: 20 },
   onClickThrough,
   onAddWidget,
@@ -1506,6 +1526,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   // Make sure we return JSX at the end of the component
   return (
     <>
+      <GridOverlay />
       {/* Debug indicator */}
       <div 
         style={{
