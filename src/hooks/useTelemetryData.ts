@@ -668,10 +668,21 @@ export function useTelemetryData(
         checkpointHistoryRef.current
       );
 
+      // Initialize arrays if they don't exist
+      newData.CarIdxPosition = newData.CarIdxPosition || [];
+      newData.CarIdxF2Time = newData.CarIdxF2Time || [];
+      newData.CarIdxGapToLeader = newData.CarIdxGapToLeader || [];
+
       // Add calculated values to the data
-      newData.CarIdxPosition = positions;
-      newData.CarIdxF2Time = gaps;
-      newData.CarIdxGapToLeader = gapsToLeader;
+      Object.entries(positions).forEach(([idx, pos]) => {
+        newData.CarIdxPosition[+idx] = pos;
+      });
+      Object.entries(gaps).forEach(([idx, gap]) => {
+        newData.CarIdxF2Time[+idx] = gap;
+      });
+      Object.entries(gapsToLeader).forEach(([idx, gap]) => {
+        newData.CarIdxGapToLeader[+idx] = gap;
+      });
     }
     
     // If specific metrics are requested, filter the data
