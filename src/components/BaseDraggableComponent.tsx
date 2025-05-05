@@ -129,9 +129,9 @@ export const BaseDraggableComponent: React.FC<BaseDraggableProps> = ({
     let newX = e.clientX - dragOffset.x;
     let newY = e.clientY - dragOffset.y;
     
-    // Snap to grid (only left and top borders)
-    newX = snapToGrid(newX);
-    newY = snapToGrid(newY);
+    // Snap the widget position directly to the grid
+    newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+    newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
     
     // Update the position
     setPosition({ x: newX, y: newY });
