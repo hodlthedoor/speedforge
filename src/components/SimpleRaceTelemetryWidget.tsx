@@ -177,7 +177,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     history: Array<{position: number, timestamp: number}>,
     startPos: number,
     endPos: number,
-    currentTime: number
+    currentTime: number,
+    sessionTime: number
   ) => {
     if (history.length < 2) return 0;
 
@@ -199,7 +200,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     // and current time to estimate
     if (history.length > 0) {
       const lastCheckpoint = history[history.length - 1];
-      const timeSinceLastCheckpoint = currentTime - lastCheckpoint.timestamp;
+      const timeSinceLastCheckpoint = sessionTime - lastCheckpoint.timestamp;
       const positionSinceLastCheckpoint = Math.abs(endPos - lastCheckpoint.position);
       
       // Estimate time based on recent speed
@@ -243,7 +244,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     const { 
       CarIdxLapDistPct: positions, 
       CarIdxLap: laps = {},
-      SessionTime: currentTime = 0
+      SessionTime: sessionTime = 0
     } = telemetryData;
 
     // Update checkpoint history for all cars
@@ -253,7 +254,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       newCheckpointHistory[idx] = updateCheckpointHistory(
         idx,
         pos as number,
-        currentTime,
+        sessionTime,
         newCheckpointHistory
       );
     });
@@ -303,10 +304,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (lapDifference > 0) {
           const carHistory = newCheckpointHistory[car.idx] || [];
           if (carHistory.length > 0) {
-            // Use the last full lap time from history
+            // Calculate lap time using session time and checkpoint history
             const lastLapTime = carHistory[carHistory.length - 1].timestamp - 
                               carHistory[0].timestamp;
-            gapInSeconds += lapDifference * lastLapTime;
+            
+            // Adjust lap time based on current session time if needed
+            const currentLapTime = sessionTime - carHistory[carHistory.length - 1].timestamp;
+            const adjustedLapTime = Math.min(lastLapTime, currentLapTime);
+            
+            gapInSeconds += lapDifference * adjustedLapTime;
           }
         }
         
@@ -318,7 +324,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             carHistory,
             car.position,
             car.position + positionDifference,
-            currentTime
+            sessionTime,
+            sessionTime
           );
           
           gapInSeconds += timeToPosition;
@@ -344,10 +351,15 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         if (lapDifference > 0) {
           const carHistory = newCheckpointHistory[car.idx] || [];
           if (carHistory.length > 0) {
-            // Use the last full lap time from history
+            // Calculate lap time using session time and checkpoint history
             const lastLapTime = carHistory[carHistory.length - 1].timestamp - 
                               carHistory[0].timestamp;
-            gapInSeconds += lapDifference * lastLapTime;
+            
+            // Adjust lap time based on current session time if needed
+            const currentLapTime = sessionTime - carHistory[carHistory.length - 1].timestamp;
+            const adjustedLapTime = Math.min(lastLapTime, currentLapTime);
+            
+            gapInSeconds += lapDifference * adjustedLapTime;
           }
         }
         
@@ -359,7 +371,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
             carHistory,
             car.position,
             car.position + positionDifference,
-            currentTime
+            sessionTime,
+            sessionTime
           );
           
           gapInSeconds += timeToPosition;
