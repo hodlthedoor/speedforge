@@ -211,6 +211,299 @@ interface UseTelemetryDataOptions {
   updateInterval?: number;
 }
 
+// Add these interfaces after the existing interfaces
+interface Checkpoint {
+  totalProgress: number;
+  timestamp: number;
+  lapTime?: number;  // Time for the last completed lap
+}
+
+interface CarProgress {
+  idx: number;
+  lap: number;
+  completed: number;
+  position: number;
+  rawPosition: number;
+  totalProgress: number;
+}
+
+interface CalculatedPositions {
+  positions: Record<number, number>;
+  gaps: Record<number, number>;
+  gapsToLeader: Record<number, number>;
+}
+
+// Add checkpoint management
+const CHECKPOINT_INTERVAL = 0.1; // 10% of track
+const MAX_CHECKPOINTS = 20; // Keep last 20 checkpoints per car
+
+// Helper to get checkpoint index for a total progress
+const getCheckpointIndex = (totalProgress: number) => Math.floor(totalProgress / CHECKPOINT_INTERVAL);
+
+// Helper to update checkpoint history for a car
+const updateCheckpointHistory = (
+  carIdx: number,
+  totalProgress: number,
+  timestamp: number,
+  currentHistory: Record<number, Checkpoint[]>,
+  sessionTime: number
+) => {
+  const checkpointIndex = getCheckpointIndex(totalProgress);
+  const carHistory = currentHistory[carIdx] || [];
+  
+  // If we have a previous checkpoint, check if we need to clear future data
+  // This handles session restarts or telemetry jumps
+  if (carHistory.length > 0) {
+    const lastCheckpoint = carHistory[carHistory.length - 1];
+    if (totalProgress < lastCheckpoint.totalProgress) {
+      // We've gone backwards (session restart or telemetry jump)
+      // Clear all checkpoints after this point
+      return [{ totalProgress, timestamp }];
+    }
+  }
+  
+  // Only add checkpoint if we've moved to a new interval
+  if (carHistory.length === 0 || getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
+    // Calculate lap time if we have enough history
+    let lapTime: number | undefined;
+    if (carHistory.length > 0) {
+      const lastCheckpoint = carHistory[carHistory.length - 1];
+      if (Math.floor(totalProgress) > Math.floor(lastCheckpoint.totalProgress)) {
+        // We've completed a lap, calculate the lap time
+        lapTime = timestamp - lastCheckpoint.timestamp;
+      }
+    }
+    
+    const newHistory = [...carHistory, { totalProgress, timestamp, lapTime }];
+    // Keep only the most recent checkpoints
+    return newHistory.slice(-MAX_CHECKPOINTS);
+  }
+  
+  return carHistory;
+};
+
+// Helper to find the most recent checkpoint before a total progress
+const findCheckpointBefore = (
+  history: Checkpoint[],
+  totalProgress: number
+) => {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].totalProgress <= totalProgress) {
+      return history[i];
+    }
+  }
+  return history[0]; // Fallback to first checkpoint if none found
+};
+
+// Helper to calculate time between two total progress values using checkpoint history
+const calculateTimeBetweenProgress = (
+  history: Checkpoint[],
+  startProgress: number,
+  endProgress: number,
+  currentTime: number
+) => {
+  if (history.length < 2) return 0;
+
+  // Find the closest checkpoints before and after the positions
+  const startCheckpoint = findCheckpointBefore(history, startProgress);
+  const endCheckpoint = findCheckpointBefore(history, endProgress);
+
+  // If we have checkpoints on both sides of the positions
+  if (startCheckpoint && endCheckpoint) {
+    // Calculate the time per progress unit between checkpoints
+    const timePerUnit = (endCheckpoint.timestamp - startCheckpoint.timestamp) / 
+                       (endCheckpoint.totalProgress - startCheckpoint.totalProgress);
+    
+    // Calculate the time for the actual positions
+    return (endProgress - startProgress) * timePerUnit;
+  }
+
+  // If we don't have enough history, use the most recent checkpoint
+  // and current time to estimate
+  if (history.length > 0) {
+    const lastCheckpoint = history[history.length - 1];
+    const timeSinceLastCheckpoint = currentTime - lastCheckpoint.timestamp;
+    const progressSinceLastCheckpoint = Math.abs(endProgress - lastCheckpoint.totalProgress);
+    
+    // Estimate time based on recent speed
+    return timeSinceLastCheckpoint * (progressSinceLastCheckpoint / CHECKPOINT_INTERVAL);
+  }
+
+  return 0;
+};
+
+// Add this function before useTelemetryData
+function calculatePositionsAndGaps(
+  positions: Record<number, number>,
+  laps: Record<number, number>,
+  completedLaps: Record<number, number>,
+  rawPositions: Record<number, number>,
+  sessionTime: number,
+  checkpointHistory: Record<number, Checkpoint[]>
+): CalculatedPositions {
+  // Create array of car data for sorting
+  const carData: CarProgress[] = Object.entries(positions).map(([idxStr, pos]) => {
+    const idx = +idxStr;
+    const lap = laps[idx] || 0;
+    const completed = completedLaps[idx] || 0;
+    const rawPosition = rawPositions[idx] || 999;
+    const position = pos as number;
+    
+    // Calculate total progress as completed laps plus current lap percentage
+    const totalProgress = completed + position;
+    
+    return {
+      idx,
+      lap,
+      completed,
+      position,
+      rawPosition,
+      totalProgress
+    };
+  });
+
+  // Sort cars by total progress (descending)
+  carData.sort((a, b) => {
+    if (a.totalProgress !== b.totalProgress) {
+      return b.totalProgress - a.totalProgress;
+    }
+    return a.rawPosition - b.rawPosition;
+  });
+
+  // Calculate positions
+  const newPositions: Record<number, number> = {};
+  carData.forEach((car, index) => {
+    // Only assign position if the car has completed at least one lap
+    // or is on the first lap
+    if (car.completed > 0 || car.lap === 1) {
+      newPositions[car.idx] = index + 1;
+    } else {
+      // Cars that haven't started their first lap get a high position number
+      newPositions[car.idx] = 999;
+    }
+  });
+
+  // Calculate gaps
+  const newGaps: Record<number, number> = {};
+  const newGapsToLeader: Record<number, number> = {};
+  
+  // Get the leader's data
+  const leader = carData[0];
+  if (leader) {
+    // Calculate gaps to leader
+    carData.forEach((car) => {
+      if (car.idx === leader.idx) {
+        newGapsToLeader[car.idx] = 0;
+        return;
+      }
+
+      // Calculate gap based on total progress difference
+      const progressDifference = leader.totalProgress - car.totalProgress;
+      
+      let gapInSeconds = 0;
+      
+      // If the difference is more than 1 lap
+      if (progressDifference >= 1) {
+        const fullLaps = Math.floor(progressDifference);
+        const partialLap = progressDifference - fullLaps;
+        
+        const carHistory = checkpointHistory[car.idx] || [];
+        if (carHistory.length > 0) {
+          // Use the most recent lap time if available
+          const lastCheckpoint = carHistory[carHistory.length - 1];
+          const lapTime = lastCheckpoint.lapTime || 90; // Default to 90s if no lap time available
+          
+          // Add time for full laps
+          gapInSeconds += fullLaps * lapTime;
+          
+          // Add time for partial lap using checkpoint history
+          if (partialLap > 0) {
+            const partialTime = calculateTimeBetweenProgress(
+              carHistory,
+              car.totalProgress,
+              car.totalProgress + partialLap,
+              sessionTime
+            );
+            gapInSeconds += partialTime;
+          }
+        }
+      } else {
+        // Less than a lap difference, calculate based on checkpoint history
+        const carHistory = checkpointHistory[car.idx] || [];
+        const timeToPosition = calculateTimeBetweenProgress(
+          carHistory,
+          car.totalProgress,
+          car.totalProgress + progressDifference,
+          sessionTime
+        );
+        
+        gapInSeconds += timeToPosition;
+      }
+      
+      newGapsToLeader[car.idx] = gapInSeconds;
+    });
+
+    // Calculate gaps to car ahead
+    carData.forEach((car, index) => {
+      if (index === 0) {
+        newGaps[car.idx] = 0;
+        return;
+      }
+
+      const carAhead = carData[index - 1];
+      const progressDifference = carAhead.totalProgress - car.totalProgress;
+      
+      let gapInSeconds = 0;
+      
+      // If the difference is more than 1 lap
+      if (progressDifference >= 1) {
+        const fullLaps = Math.floor(progressDifference);
+        const partialLap = progressDifference - fullLaps;
+        
+        const carHistory = checkpointHistory[car.idx] || [];
+        if (carHistory.length > 0) {
+          // Use the most recent lap time if available
+          const lastCheckpoint = carHistory[carHistory.length - 1];
+          const lapTime = lastCheckpoint.lapTime || 90; // Default to 90s if no lap time available
+          
+          // Add time for full laps
+          gapInSeconds += fullLaps * lapTime;
+          
+          // Add time for partial lap using checkpoint history
+          if (partialLap > 0) {
+            const partialTime = calculateTimeBetweenProgress(
+              carHistory,
+              car.totalProgress,
+              car.totalProgress + partialLap,
+              sessionTime
+            );
+            gapInSeconds += partialTime;
+          }
+        }
+      } else {
+        // Less than a lap difference, calculate based on checkpoint history
+        const carHistory = checkpointHistory[car.idx] || [];
+        const timeToPosition = calculateTimeBetweenProgress(
+          carHistory,
+          car.totalProgress,
+          car.totalProgress + progressDifference,
+          sessionTime
+        );
+        
+        gapInSeconds += timeToPosition;
+      }
+      
+      newGaps[car.idx] = gapInSeconds;
+    });
+  }
+
+  return {
+    positions: newPositions,
+    gaps: newGaps,
+    gapsToLeader: newGapsToLeader
+  };
+}
+
 /**
  * Custom hook for accessing telemetry data from WebSocketService
  * 
@@ -231,6 +524,7 @@ export function useTelemetryData(
   const latestDataRef = useRef<TelemetryData | null>(null);
   const timerRef = useRef<number | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const checkpointHistoryRef = useRef<Record<number, Checkpoint[]>>({});
   
   // Store metrics in a ref to avoid dependency changes
   const metricsRef = useRef(metrics);
@@ -346,12 +640,45 @@ export function useTelemetryData(
       setSessionData(parsedSessionData);
     }
     
+    // Calculate positions and gaps if we have the required data
+    if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
+      // Update checkpoint history for all cars
+      Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {
+        const idx = +idxStr;
+        const lap = newData.CarIdxLap?.[idx] || 0;
+        const completed = newData.CarIdxLapCompleted?.[idx] || 0;
+        const position = pos as number;
+        const totalProgress = completed + position;
+        
+        checkpointHistoryRef.current[idx] = updateCheckpointHistory(
+          idx,
+          totalProgress,
+          newData.SessionTime || 0,
+          checkpointHistoryRef.current,
+          newData.SessionTime || 0
+        );
+      });
+
+      const { positions, gaps, gapsToLeader } = calculatePositionsAndGaps(
+        newData.CarIdxLapDistPct,
+        newData.CarIdxLap,
+        newData.CarIdxLapCompleted,
+        newData.CarIdxPosition,
+        newData.SessionTime || 0,
+        checkpointHistoryRef.current
+      );
+
+      // Add calculated values to the data
+      newData.CarIdxPosition = positions;
+      newData.CarIdxF2Time = gaps;
+      newData.CarIdxGapToLeader = gapsToLeader;
+    }
+    
     // If specific metrics are requested, filter the data
     if (metricsRef.current && metricsRef.current.length > 0) {
       const filteredData: TelemetryData = {};
       metricsRef.current.forEach(metric => {
         if (metric in newData) {
-          // Use type assertion to fix the type error
           filteredData[metric as keyof TelemetryData] = newData[metric as keyof TelemetryData];
         }
       });
