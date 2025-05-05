@@ -124,28 +124,90 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     ...otherProps
   } = props;
 
-  // Add state for tracking time history at track positions
-  const [timeHistory, setTimeHistory] = useState<Record<number, Record<number, number>>>({});
+  // State for tracking positions and gaps
+  const [calculatedPositions, setCalculatedPositions] = useState<Record<number, number>>({});
   const [calculatedGaps, setCalculatedGaps] = useState<Record<number, number>>({});
   const [calculatedGapsToLeader, setCalculatedGapsToLeader] = useState<Record<number, number>>({});
-  const [calculatedPositions, setCalculatedPositions] = useState<Record<number, number>>({});
+  
+  // State for checkpoint history
+  const [checkpointHistory, setCheckpointHistory] = useState<Record<number, Array<{position: number, timestamp: number}>>>({});
+  
+  // Number of checkpoints to maintain per car
+  const CHECKPOINT_INTERVAL = 0.05; // 5% of track
+  const MAX_CHECKPOINTS = 20; // Keep last 20 checkpoints per car
 
-  const getSectorNumber = (laps: number, trackPos: number) =>
-    laps * 20 + Math.floor(trackPos * 20);
+  // Helper to get checkpoint index for a position
+  const getCheckpointIndex = (position: number) => Math.floor(position / CHECKPOINT_INTERVAL);
 
-  // Ensure we have a valid selectedColumns array
-  const actualColumns = Array.isArray(selectedColumns) ? selectedColumns : DEFAULT_COLUMNS;
-  
-  // Reference to track width changes
-  const widgetWidthRef = useRef<number>(widgetWidth);
-  
-  // Reference to track if we've logged session data already
-  const hasLoggedSessionDataRef = useRef<boolean>(false);
-  
-  // Keep ref in sync with width prop
-  useEffect(() => {
-    widgetWidthRef.current = widgetWidth;
-  }, [id, widgetWidth]);
+  // Helper to update checkpoint history for a car
+  const updateCheckpointHistory = (
+    carIdx: number,
+    position: number,
+    timestamp: number,
+    currentHistory: Record<number, Array<{position: number, timestamp: number}>>
+  ) => {
+    const checkpointIndex = getCheckpointIndex(position);
+    const carHistory = currentHistory[carIdx] || [];
+    
+    // Only add checkpoint if we've moved to a new interval
+    if (carHistory.length === 0 || getCheckpointIndex(carHistory[carHistory.length - 1].position) !== checkpointIndex) {
+      const newHistory = [...carHistory, { position, timestamp }];
+      // Keep only the most recent checkpoints
+      return newHistory.slice(-MAX_CHECKPOINTS);
+    }
+    
+    return carHistory;
+  };
+
+  // Helper to find the most recent checkpoint before a position
+  const findCheckpointBefore = (
+    history: Array<{position: number, timestamp: number}>,
+    position: number
+  ) => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].position <= position) {
+        return history[i];
+      }
+    }
+    return history[0]; // Fallback to first checkpoint if none found
+  };
+
+  // Helper to calculate time between two positions using checkpoint history
+  const calculateTimeBetweenPositions = (
+    history: Array<{position: number, timestamp: number}>,
+    startPos: number,
+    endPos: number,
+    currentTime: number
+  ) => {
+    if (history.length < 2) return 0;
+
+    // Find the closest checkpoints before and after the positions
+    const startCheckpoint = findCheckpointBefore(history, startPos);
+    const endCheckpoint = findCheckpointBefore(history, endPos);
+
+    // If we have checkpoints on both sides of the positions
+    if (startCheckpoint && endCheckpoint) {
+      // Calculate the time per position unit between checkpoints
+      const timePerUnit = (endCheckpoint.timestamp - startCheckpoint.timestamp) / 
+                         (endCheckpoint.position - startCheckpoint.position);
+      
+      // Calculate the time for the actual positions
+      return (endPos - startPos) * timePerUnit;
+    }
+
+    // If we don't have enough history, use the most recent checkpoint
+    // and current time to estimate
+    if (history.length > 0) {
+      const lastCheckpoint = history[history.length - 1];
+      const timeSinceLastCheckpoint = currentTime - lastCheckpoint.timestamp;
+      const positionSinceLastCheckpoint = Math.abs(endPos - lastCheckpoint.position);
+      
+      // Estimate time based on recent speed
+      return timeSinceLastCheckpoint * (positionSinceLastCheckpoint / CHECKPOINT_INTERVAL);
+    }
+
+    return 0;
+  };
 
   // Use the telemetry hook to get car index data
   const { data: telemetryData, sessionData } = useTelemetryData(id, {
@@ -173,223 +235,158 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
   });
 
   /* ────────────────────────────────────────────
-     core effect
+     core effect for position and gap calculations
      ──────────────────────────────────────────── */
   useLayoutEffect(() => {
     if (!telemetryData?.CarIdxLapDistPct) return;
 
-    const now = telemetryData.SessionTime || 0;
-    const { CarIdxLapDistPct: pos, CarIdxLapCompleted: laps = {} } = telemetryData;
-    const newTH = { ...timeHistory };
-    
-    // Initialize gap arrays with previous values to prevent undefined flicker
-    const newGapAhead: Record<number, number> = { ...calculatedGaps };
-    const newGapLead: Record<number, number> = { ...calculatedGapsToLeader };
-    const newPos: Record<number, number> = {};
+    const { 
+      CarIdxLapDistPct: positions, 
+      CarIdxLap: laps = {},
+      SessionTime: currentTime = 0
+    } = telemetryData;
 
-    /* set once-per-sector timestamps */
-    Object.entries(pos).forEach(([idxStr, p]) => {
+    // Update checkpoint history for all cars
+    const newCheckpointHistory = { ...checkpointHistory };
+    Object.entries(positions).forEach(([idxStr, pos]) => {
       const idx = +idxStr;
-      const sector = getSectorNumber(laps[idx] || 0, p as number);
-      rememberFirst(newTH, idx, sector, now);
+      newCheckpointHistory[idx] = updateCheckpointHistory(
+        idx,
+        pos as number,
+        currentTime,
+        newCheckpointHistory
+      );
+    });
+    setCheckpointHistory(newCheckpointHistory);
+    
+    // Create array of car data for sorting
+    const carData = Object.entries(positions).map(([idxStr, pos]) => {
+      const idx = +idxStr;
+      const lap = laps[idx] || 0;
+      return {
+        idx,
+        lap,
+        position: pos as number,
+        totalProgress: lap + (pos as number)
+      };
     });
 
-    /* leader detection */
-    const [leaderIdxStr, leaderPos] = Object.entries(pos).reduce(
-      (lead, [idxStr, p]) => {
-        const idx = +idxStr;
-        const completedLaps = laps[idx] || 0;
-        const s = getSectorNumber(completedLaps, p as number);
-        const [curIdxStr, curPos] = lead;
-        const curCompletedLaps = laps[+curIdxStr] || 0;
-        const sLead = getSectorNumber(curCompletedLaps, curPos as number);
+    // Sort cars by total progress (descending)
+    carData.sort((a, b) => b.totalProgress - a.totalProgress);
+
+    // Calculate positions
+    const newPositions: Record<number, number> = {};
+    carData.forEach((car, index) => {
+      newPositions[car.idx] = index + 1;
+    });
+
+    // Calculate gaps
+    const newGaps: Record<number, number> = {};
+    const newGapsToLeader: Record<number, number> = {};
+    
+    // Get the leader's data
+    const leader = carData[0];
+    if (leader) {
+      // Calculate gaps to leader
+      carData.forEach((car) => {
+        if (car.idx === leader.idx) {
+          newGapsToLeader[car.idx] = 0;
+          return;
+        }
+
+        const lapDifference = leader.lap - car.lap;
+        const positionDifference = leader.position - car.position;
         
-        if (completedLaps > curCompletedLaps) return [idxStr, p];
-        if (completedLaps === curCompletedLaps) {
-          if (s > sLead) return [idxStr, p];
-          if (s === sLead) {
-            const t = stampForSector(newTH, idx, s) ?? now;
-            const tLead = stampForSector(newTH, +curIdxStr, sLead) ?? now;
-            return t < tLead ? [idxStr, p] : lead;
+        let gapInSeconds = 0;
+        
+        // Add time for full lap differences using checkpoint history
+        if (lapDifference > 0) {
+          const carHistory = newCheckpointHistory[car.idx] || [];
+          if (carHistory.length > 0) {
+            // Use the last full lap time from history
+            const lastLapTime = carHistory[carHistory.length - 1].timestamp - 
+                              carHistory[0].timestamp;
+            gapInSeconds += lapDifference * lastLapTime;
           }
         }
-        return lead;
-      },
-      ['0', 0] as [string, number],
-    );
-    const leaderIdx = +leaderIdxStr;
-    const leaderCompletedLaps = laps[leaderIdx] || 0;
-    const leaderSector = getSectorNumber(leaderCompletedLaps, leaderPos as number);
-
-    /* position ordering */
-    const order = Object.entries(pos)
-      .map(([idxStr, p]) => {
-        const idx = +idxStr;
-        const completedLaps = laps[idx] || 0;
-        const sector = getSectorNumber(completedLaps, p as number);
-        return {
-          idx,
-          completedLaps,
-          sector,
-          t: stampForSector(newTH, idx, sector) ?? now,
-        };
-      })
-      .sort((a, b) => {
-        // First sort by completed laps (descending)
-        if (a.completedLaps !== b.completedLaps) {
-          return b.completedLaps - a.completedLaps;
+        
+        // Add time for position difference within the same lap
+        if (positionDifference > 0) {
+          // Use the car's history to calculate time to reach leader's position
+          const carHistory = newCheckpointHistory[car.idx] || [];
+          const timeToPosition = calculateTimeBetweenPositions(
+            carHistory,
+            car.position,
+            car.position + positionDifference,
+            currentTime
+          );
+          
+          gapInSeconds += timeToPosition;
         }
-        // Then by sector (descending)
-        if (a.sector !== b.sector) {
-          return b.sector - a.sector;
-        }
-        // Finally by time at sector (ascending)
-        return a.t - b.t;
+        
+        newGapsToLeader[car.idx] = gapInSeconds;
       });
 
-    /* gap calculations */
-    order.forEach((entry, i) => {
-      const me = entry.idx;
-
-      if (i === 0) {            // leader
-        newGapLead[me] = 0;
-        newGapAhead[me] = 0;
-        return;
-      }
-
-      const ahead = order[i - 1];
-      const mySector = entry.sector;
-      const aheadSector = ahead.sector;
-      
-      // For gap to car ahead
-      if (mySector === aheadSector) {
-        // Cars in same sector - use current time difference
-        const deltaAhead = (entry.t - ahead.t) / 1000;
-        if (deltaAhead > 0) {
-          newGapAhead[me] = deltaAhead;
+      // Calculate gaps to car ahead
+      carData.forEach((car, index) => {
+        if (index === 0) {
+          newGaps[car.idx] = 0;
+          return;
         }
-      } else {
-        // Cars in different sectors - use time difference at the earlier sector
-        const referenceSector = Math.min(mySector, aheadSector);
+
+        const carAhead = carData[index - 1];
+        const lapDifference = carAhead.lap - car.lap;
+        const positionDifference = carAhead.position - car.position;
         
-        // Get the time when both cars were at the reference sector
-        const aheadTimeAtSector = stampForSector(newTH, ahead.idx, referenceSector);
-        const myTimeAtSector = stampForSector(newTH, me, referenceSector);
+        let gapInSeconds = 0;
         
-        if (aheadTimeAtSector && myTimeAtSector) {
-          // Base delta is the time difference when both cars were at the reference sector
-          const baseDelta = (myTimeAtSector - aheadTimeAtSector) / 1000;
-          
-          // Add time the car ahead spent in all sectors after the reference sector
-          let additionalTime = 0;
-          if (aheadSector > referenceSector) {
-            // For each completed sector, add the time difference between sector entry and exit
-            for (let s = referenceSector + 1; s < aheadSector; s++) {
-              const sectorEntryTime = stampForSector(newTH, ahead.idx, s - 1);
-              const sectorExitTime = stampForSector(newTH, ahead.idx, s);
-              if (sectorEntryTime && sectorExitTime) {
-                additionalTime += (sectorExitTime - sectorEntryTime) / 1000;
-              }
-            }
-            
-            // For the current sector, add time since they entered it
-            const currentSectorEntryTime = stampForSector(newTH, ahead.idx, aheadSector - 1);
-            if (currentSectorEntryTime) {
-              additionalTime += (ahead.t - currentSectorEntryTime) / 1000;
-            }
-          }
-          
-          // If we're in the reference sector, subtract our current time in it
-          if (mySector === referenceSector) {
-            const mySectorEntryTime = stampForSector(newTH, me, referenceSector);
-            if (mySectorEntryTime) {
-              additionalTime -= (entry.t - mySectorEntryTime) / 1000;
-            }
-          }
-          
-          const deltaAhead = baseDelta + additionalTime;
-          if (deltaAhead > 0) {
-            newGapAhead[me] = deltaAhead;
+        // Add time for full lap differences using checkpoint history
+        if (lapDifference > 0) {
+          const carHistory = newCheckpointHistory[car.idx] || [];
+          if (carHistory.length > 0) {
+            // Use the last full lap time from history
+            const lastLapTime = carHistory[carHistory.length - 1].timestamp - 
+                              carHistory[0].timestamp;
+            gapInSeconds += lapDifference * lastLapTime;
           }
         }
-      }
-
-      // For gap to leader
-      const leaderSector = order[0].sector;
-      if (mySector === leaderSector) {
-        // Same sector as leader - use current time difference
-        const deltaLead = (entry.t - order[0].t) / 1000;
-        if (deltaLead > 0) {
-          newGapLead[me] = deltaLead;
-        }
-      } else {
-        // Different sector from leader - use time difference at the earlier sector
-        const referenceSector = Math.min(mySector, leaderSector);
         
-        // Get the time when both cars were at the reference sector
-        const leaderTimeAtSector = stampForSector(newTH, order[0].idx, referenceSector);
-        const myTimeAtSector = stampForSector(newTH, me, referenceSector);
-        
-        if (leaderTimeAtSector && myTimeAtSector) {
-          // Base delta is the time difference when both cars were at the reference sector
-          const baseDelta = (myTimeAtSector - leaderTimeAtSector) / 1000;
+        // Add time for position difference within the same lap
+        if (positionDifference > 0) {
+          // Use the car's history to calculate time to reach car ahead's position
+          const carHistory = newCheckpointHistory[car.idx] || [];
+          const timeToPosition = calculateTimeBetweenPositions(
+            carHistory,
+            car.position,
+            car.position + positionDifference,
+            currentTime
+          );
           
-          // Add time the leader spent in all sectors after the reference sector
-          let additionalTime = 0;
-          if (leaderSector > referenceSector) {
-            // For each completed sector, add the time difference between sector entry and exit
-            for (let s = referenceSector + 1; s < leaderSector; s++) {
-              const sectorEntryTime = stampForSector(newTH, order[0].idx, s - 1);
-              const sectorExitTime = stampForSector(newTH, order[0].idx, s);
-              if (sectorEntryTime && sectorExitTime) {
-                additionalTime += (sectorExitTime - sectorEntryTime) / 1000;
-              }
-            }
-            
-            // For the current sector, add time since they entered it
-            const currentSectorEntryTime = stampForSector(newTH, order[0].idx, leaderSector - 1);
-            if (currentSectorEntryTime) {
-              additionalTime += (order[0].t - currentSectorEntryTime) / 1000;
-            }
-          }
-          
-          // If we're in the reference sector, subtract our current time in it
-          if (mySector === referenceSector) {
-            const mySectorEntryTime = stampForSector(newTH, me, referenceSector);
-            if (mySectorEntryTime) {
-              additionalTime -= (entry.t - mySectorEntryTime) / 1000;
-            }
-          }
-          
-          const deltaLead = baseDelta + additionalTime;
-          if (deltaLead > 0) {
-            newGapLead[me] = deltaLead;
-          }
+          gapInSeconds += timeToPosition;
         }
-      }
-    });
+        
+        newGaps[car.idx] = gapInSeconds;
+      });
+    }
 
-    order.forEach(({ idx }, i) => (newPos[idx] = i + 1));
+    // Update state
+    setCalculatedPositions(newPositions);
+    setCalculatedGaps(newGaps);
+    setCalculatedGapsToLeader(newGapsToLeader);
 
-    /* commit state */
-    setTimeHistory(newTH);
-    setCalculatedGaps(newGapAhead);
-    setCalculatedGapsToLeader(newGapLead);
-    setCalculatedPositions(newPos);
-
-    /* feed back into telemetryData */
+    // Update telemetry data with calculated values
     if (telemetryData) {
       const upd = { ...telemetryData };
 
-      Object.entries(newGapAhead).forEach(([i, g]) => {
+      Object.entries(newGaps).forEach(([i, g]) => {
         upd.CarIdxF2Time ||= [];
         upd.CarIdxF2Time[+i] = g;
       });
-      Object.entries(newGapLead).forEach(([i, g]) => {
+      Object.entries(newGapsToLeader).forEach(([i, g]) => {
         upd.CarIdxGapToLeader ||= [];
         upd.CarIdxGapToLeader[+i] = g;
       });
-      Object.entries(newPos).forEach(([i, p]) => {
+      Object.entries(newPositions).forEach(([i, p]) => {
         upd.CarIdxPosition ||= [];
         upd.CarIdxPosition[+i] = p;
       });
@@ -398,62 +395,9 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     }
   }, [telemetryData]);
 
-  // // Log raw telemetry data when it changes
-  // useEffect(() => {
-  //   if (telemetryData) {
-  //     console.log('[SimpleRaceTelemetryWidget] Raw telemetry data:', {
-  //       // Car Index fields
-  //       CarIdxPosition: telemetryData.CarIdxPosition,
-  //       CarIdxLap: telemetryData.CarIdxLap,
-  //       CarIdxLapCompleted: telemetryData.CarIdxLapCompleted,
-  //       CarIdxLastLapTime: telemetryData.CarIdxLastLapTime,
-  //       CarIdxBestLapTime: telemetryData.CarIdxBestLapTime,
-  //       CarIdxClass: telemetryData.CarIdxClass,
-  //       CarIdxClassPosition: telemetryData.CarIdxClassPosition,
-  //       CarIdxGear: telemetryData.CarIdxGear,
-  //       CarIdxRPM: telemetryData.CarIdxRPM,
-  //       CarIdxOnPitRoad: telemetryData.CarIdxOnPitRoad,
-  //       CarIdxLapDistPct: telemetryData.CarIdxLapDistPct,
-  //       CarIdxF2Time: telemetryData.CarIdxF2Time,
-  //       CarIdxEstTime: telemetryData.CarIdxEstTime,
-  //       CarIdxFastRepairsUsed: telemetryData.CarIdxFastRepairsUsed,
-  //       CarIdxP2P_Count: telemetryData.CarIdxP2P_Count,
-  //       CarIdxP2P_Status: telemetryData.CarIdxP2P_Status,
-  //       CarIdxSteer: telemetryData.CarIdxSteer,
-  //       CarIdxPaceFlags: telemetryData.CarIdxPaceFlags,
-  //       CarIdxPaceLine: telemetryData.CarIdxPaceLine,
-  //       CarIdxPaceRow: telemetryData.CarIdxPaceRow,
-  //       CarIdxQualTireCompound: telemetryData.CarIdxQualTireCompound,
-  //       CarIdxQualTireCompoundLocked: telemetryData.CarIdxQualTireCompoundLocked,
-  //       CarIdxTireCompound: telemetryData.CarIdxTireCompound,
-  //       CarIdxTrackSurface: telemetryData.CarIdxTrackSurface,
-  //       CarIdxTrackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial,
-  //       // Selected metric
-  //       selectedMetric: telemetryData[selectedMetric]
-  //     });
-  //   }
-  // }, [telemetryData, selectedMetric]);
-
-  // // Log only the most important props - focused on columns
-  // console.log(`[SimpleRaceTelemetryWidget] Rendering with columns:`, {
-  //   columnsSelected: actualColumns, 
-  //   columnCount: actualColumns.length
-  // });
-  
   // Process the telemetry data to create the table rows
   const formattedCarData = useMemo(() => {
     if (!telemetryData || !sessionData) return [];
-
-    // // Only log session data the first time
-    // if (process.env.NODE_ENV === 'development' && !hasLoggedSessionDataRef.current) {
-    //   console.log('SESSION DATA (abbreviated):', {
-    //     hasWeekend: !!sessionData.weekend,
-    //     hasSession: !!sessionData.session,
-    //     hasDrivers: !!sessionData.drivers, 
-    //     driverCount: sessionData.drivers?.other_drivers?.length
-    //   });
-    //   hasLoggedSessionDataRef.current = true;
-    // }
 
     // Extract driver information from session data
     const allDrivers = sessionData.drivers?.other_drivers || [];
@@ -519,32 +463,6 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         trackSurfaceMaterial: telemetryData.CarIdxTrackSurfaceMaterial?.[carIdx] || '',
         currentMetricValue: telemetryData[selectedMetric]?.[carIdx],
       };
-
-      // // Log data for the player car
-      // if (isPlayer) {
-      //   console.log('[SimpleRaceTelemetryWidget] Player car data:', {
-      //     carIdx,
-      //     // Raw values
-      //     rawSteer: telemetryData.CarIdxSteer?.[carIdx],
-      //     rawRPM: telemetryData.CarIdxRPM?.[carIdx],
-      //     rawGear: telemetryData.CarIdxGear?.[carIdx],
-      //     rawPosition: telemetryData.CarIdxPosition?.[carIdx],
-      //     rawLap: telemetryData.CarIdxLap?.[carIdx],
-      //     rawLapDistPct: telemetryData.CarIdxLapDistPct?.[carIdx],
-      //     rawOnPitRoad: telemetryData.CarIdxOnPitRoad?.[carIdx],
-      //     // Formatted values
-      //     steer: carData.steer,
-      //     rpm: carData.rpm,
-      //     gear: carData.gear,
-      //     position: carData.position,
-      //     currentLap: carData.currentLap,
-      //     trackPos: carData.trackPos,
-      //     onPitRoad: carData.onPitRoad,
-      //     // Selected metric
-      //     currentMetric: selectedMetric,
-      //     currentMetricValue: carData.currentMetricValue
-      //   });
-      // }
 
       return carData;
     });
