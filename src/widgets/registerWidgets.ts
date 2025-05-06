@@ -17,6 +17,7 @@ import CarIndexTelemetryWidget from '../components/CarIndexTelemetryWidget';
 import RacePositionWidget from '../components/RacePositionWidget';
 import TrackPositionWidget from '../components/TrackPositionWidget';
 import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
+import CarBalanceWidget from '../components/CarBalanceWidget';
 
 // Register Track Map Widget
 WidgetRegistry.register('track-map', {
@@ -244,6 +245,17 @@ WidgetRegistry.register('simple-race-telemetry', {
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'
+});
+
+// Register Car Balance Widget
+WidgetRegistry.register('car-balance', {
+  component: CarBalanceWidget,
+  defaultTitle: 'Car Balance Monitor',
+  description: 'Monitor car balance metrics including yaw rate, slip angle, lateral G-force, and steering angle',
+  defaultOptions: {
+    width: 480,
+    historyLength: 100
+  }
 });
 
 export default WidgetRegistry; 

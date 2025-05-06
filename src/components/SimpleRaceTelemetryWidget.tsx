@@ -321,12 +321,12 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'interval':
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
       case 'gap':
-        const gapToAhead = telemetryData.CarIdxF2Time?.[car.carIdx] || 0;
-        if (gapToAhead === undefined) return '--';
+        const gapToAhead = telemetryData.CarIdxF2Time?.[car.carIdx];
+        if (gapToAhead === undefined || gapToAhead === 0) return '--';
         return formatLapTime(gapToAhead);
       case 'gapToLeader':
-        const gapToLeader = telemetryData.CarIdxGapToLeader?.[car.carIdx] || 0;
-        if (gapToLeader === undefined) return '--';
+        const gapToLeader = telemetryData.CarIdxGapToLeader?.[car.carIdx];
+        if (gapToLeader === undefined || gapToLeader === 0) return '--';
         return formatLapTime(gapToLeader);
       case 'lap':
         return car.currentLap;
