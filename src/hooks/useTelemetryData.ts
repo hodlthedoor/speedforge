@@ -362,26 +362,29 @@ export function useTelemetryData(
     
     // Update positions and gaps using backend-calculated data
     if (newData.gap_data) {
-      // Initialize arrays if they don't exist
-      newData.CarIdxPosition = newData.CarIdxPosition || [];
-      newData.CarIdxF2Time = newData.CarIdxF2Time || [];
-      newData.CarIdxGapToLeader = newData.CarIdxGapToLeader || [];
+      // Initialize arrays with the correct size (64 cars)
+      newData.CarIdxPosition = new Array(64).fill(0);
+      newData.CarIdxF2Time = new Array(64).fill(0);
+      newData.CarIdxGapToLeader = new Array(64).fill(0);
 
       // Debug log the gap data
       console.log('Received gap data:', newData.gap_data);
 
       // Update positions and gaps from gap_data
       newData.gap_data.forEach(gap => {
-        newData.CarIdxPosition[gap.car_idx] = gap.position;
-        newData.CarIdxF2Time[gap.car_idx] = gap.gap_to_next;
-        newData.CarIdxGapToLeader[gap.car_idx] = gap.gap_to_leader;
-        
-        // Debug log each gap update
-        console.log(`Updated gaps for car ${gap.car_idx}:`, {
-          position: gap.position,
-          gap_to_next: gap.gap_to_next,
-          gap_to_leader: gap.gap_to_leader
-        });
+        // Ensure car_idx is within bounds
+        if (gap.car_idx >= 0 && gap.car_idx < 64) {
+          newData.CarIdxPosition[gap.car_idx] = gap.position;
+          newData.CarIdxF2Time[gap.car_idx] = gap.gap_to_next;
+          newData.CarIdxGapToLeader[gap.car_idx] = gap.gap_to_leader;
+          
+          // Debug log each gap update
+          console.log(`Updated gaps for car ${gap.car_idx}:`, {
+            position: gap.position,
+            gap_to_next: gap.gap_to_next,
+            gap_to_leader: gap.gap_to_leader
+          });
+        }
       });
 
       // Debug log the final arrays
