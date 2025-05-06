@@ -548,11 +548,7 @@ export function useTelemetryData(
     if (!isMountedRef.current) return;
     
     // Log raw data to check SessionTime
-    console.log('Raw telemetry data received:', {
-      sessionTime: newData.SessionTime,
-      hasSessionTime: 'SessionTime' in newData,
-      allKeys: Object.keys(newData)
-    });
+    console.log('Raw telemetry data:', newData);
     
     // Process session info if available
     if (newData.session_info) {
@@ -564,15 +560,6 @@ export function useTelemetryData(
     if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
       const sessionTime = newData.SessionTime || 0;
       
-      console.log('Processing telemetry data:', {
-        lapDistPct: newData.CarIdxLapDistPct,
-        lap: newData.CarIdxLap,
-        lapCompleted: newData.CarIdxLapCompleted,
-        position: newData.CarIdxPosition,
-        sessionTime,
-        rawSessionTime: newData.SessionTime
-      });
-
       // Update checkpoint history for all cars
       Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {
         const idx = +idxStr;
@@ -589,20 +576,8 @@ export function useTelemetryData(
           checkpointHistoryRef.current
         );
 
-        // Log if we added a new checkpoint
-        if (newHistory.length > oldHistory.length) {
-          console.log(`New checkpoint for car ${idx}:`, {
-            totalProgress,
-            timestamp: sessionTime,
-            checkpointCount: newHistory.length,
-            rawSessionTime: newData.SessionTime
-          });
-        }
-
         checkpointHistoryRef.current[idx] = newHistory;
       });
-
-      console.log('Current checkpoint history:', checkpointHistoryRef.current);
 
       const { positions, gaps, gapsToLeader } = calculatePositionsAndGaps(
         newData.CarIdxLapDistPct,
@@ -612,12 +587,6 @@ export function useTelemetryData(
         sessionTime,
         checkpointHistoryRef.current
       );
-
-      console.log('Calculated positions and gaps:', {
-        positions,
-        gaps,
-        gapsToLeader
-      });
 
       // Initialize arrays if they don't exist
       newData.CarIdxPosition = newData.CarIdxPosition || [];
@@ -635,12 +604,6 @@ export function useTelemetryData(
       });
       Object.entries(gapsToLeader).forEach(([idx, gap]) => {
         newData.CarIdxGapToLeader[+idx] = gap;
-      });
-
-      console.log('Updated telemetry data with gaps:', {
-        positions: newData.CarIdxPosition,
-        gaps: newData.CarIdxF2Time,
-        gapsToLeader: newData.CarIdxGapToLeader
       });
     }
     
