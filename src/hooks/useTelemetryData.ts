@@ -547,6 +547,13 @@ export function useTelemetryData(
   const handleData = useCallback((newData: TelemetryData) => {
     if (!isMountedRef.current) return;
     
+    // Log raw data to check SessionTime
+    console.log('Raw telemetry data received:', {
+      sessionTime: newData.SessionTime,
+      hasSessionTime: 'SessionTime' in newData,
+      allKeys: Object.keys(newData)
+    });
+    
     // Process session info if available
     if (newData.session_info) {
       const parsedSessionData = parseSessionInfo(newData.session_info);
@@ -555,12 +562,15 @@ export function useTelemetryData(
     
     // Calculate positions and gaps if we have the required data
     if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
-      console.log('Raw telemetry data:', {
+      const sessionTime = newData.SessionTime || 0;
+      
+      console.log('Processing telemetry data:', {
         lapDistPct: newData.CarIdxLapDistPct,
         lap: newData.CarIdxLap,
         lapCompleted: newData.CarIdxLapCompleted,
         position: newData.CarIdxPosition,
-        sessionTime: newData.SessionTime
+        sessionTime,
+        rawSessionTime: newData.SessionTime
       });
 
       // Update checkpoint history for all cars
@@ -575,7 +585,7 @@ export function useTelemetryData(
         const newHistory = updateCheckpointHistory(
           idx,
           totalProgress,
-          newData.SessionTime || 0,
+          sessionTime,
           checkpointHistoryRef.current
         );
 
@@ -583,8 +593,9 @@ export function useTelemetryData(
         if (newHistory.length > oldHistory.length) {
           console.log(`New checkpoint for car ${idx}:`, {
             totalProgress,
-            timestamp: newData.SessionTime,
-            checkpointCount: newHistory.length
+            timestamp: sessionTime,
+            checkpointCount: newHistory.length,
+            rawSessionTime: newData.SessionTime
           });
         }
 
@@ -598,7 +609,7 @@ export function useTelemetryData(
         newData.CarIdxLap,
         newData.CarIdxLapCompleted,
         newData.CarIdxPosition,
-        newData.SessionTime || 0,
+        sessionTime,
         checkpointHistoryRef.current
       );
 
