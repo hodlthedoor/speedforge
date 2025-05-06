@@ -1,10 +1,13 @@
 use crate::telemetry_fields::{TelemetryData, GapData};
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 const CHECKPOINT_INTERVAL: f32 = 0.05; // 5% intervals
 
-// Store checkpoint history for each car
-static mut CHECKPOINT_HISTORY: Option<HashMap<i32, HashMap<i32, f32>>> = None;
+// Store checkpoint history for each car using thread_local storage
+thread_local! {
+    static CHECKPOINT_HISTORY: RefCell<HashMap<i32, HashMap<i32, f32>>> = RefCell::new(HashMap::new());
+}
 
 /// Calculate gaps between cars based on their positions and checkpoint times
 pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
@@ -16,13 +19,6 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     let lap_dist_pcts = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec_f32);
     let completed_laps = telemetry_data.CarIdxLapCompleted.as_ref().unwrap_or(&empty_vec_i32);
     let session_time = telemetry_data.SessionTime;
-
-    // Initialize checkpoint history if needed
-    unsafe {
-        if CHECKPOINT_HISTORY.is_none() {
-            CHECKPOINT_HISTORY = Some(HashMap::new());
-        }
-    }
 
     // Create a map of car data with their current checkpoint and time
     let mut car_data: HashMap<i32, (f32, i32, f32)> = HashMap::new();
@@ -36,16 +32,15 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
         let checkpoint = (total_progress / CHECKPOINT_INTERVAL).floor() as i32;
         
         // Update checkpoint history
-        unsafe {
-            if let Some(history) = &mut CHECKPOINT_HISTORY {
-                let car_history = history.entry(i as i32).or_insert_with(HashMap::new);
-                
-                // If we've passed a new checkpoint, record the time
-                if !car_history.contains_key(&checkpoint) {
-                    car_history.insert(checkpoint, session_time);
-                }
+        CHECKPOINT_HISTORY.with(|history| {
+            let mut history = history.borrow_mut();
+            let car_history = history.entry(i as i32).or_insert_with(HashMap::new);
+            
+            // If we've passed a new checkpoint, record the time
+            if !car_history.contains_key(&checkpoint) {
+                car_history.insert(checkpoint, session_time);
             }
-        }
+        });
         
         car_data.insert(i as i32, (total_progress, checkpoint, session_time));
     }
@@ -69,39 +64,36 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             let leader_idx = sorted_cars[0].0;
             let leader_checkpoint = sorted_cars[0].1.1;
             
-            unsafe {
-                if let Some(history) = &CHECKPOINT_HISTORY {
-                    if let Some(car_history) = history.get(car_idx) {
-                        if let Some(leader_history) = history.get(&leader_idx) {
-                            // Find the last common checkpoint
-                            let mut common_checkpoint = *checkpoint;
-                            let mut gap = 0.0;
-                            
-                            loop {
-                                if common_checkpoint <= 0 {
-                                    break;
-                                }
-                                
-                                if car_history.contains_key(&common_checkpoint) && 
-                                   leader_history.contains_key(&common_checkpoint) {
-                                    let car_time = car_history.get(&common_checkpoint).unwrap();
-                                    let leader_time = leader_history.get(&common_checkpoint).unwrap();
-                                    gap = car_time - leader_time;
-                                    break;
-                                }
-                                common_checkpoint -= 1;
+            CHECKPOINT_HISTORY.with(|history| {
+                let history = history.borrow();
+                if let Some(car_history) = history.get(car_idx) {
+                    if let Some(leader_history) = history.get(&leader_idx) {
+                        // Find the last common checkpoint
+                        let mut common_checkpoint = *checkpoint;
+                        let mut gap = 0.0;
+                        
+                        loop {
+                            if common_checkpoint <= 0 {
+                                break;
                             }
-                            gap
-                        } else {
-                            0.0
+                            
+                            if car_history.contains_key(&common_checkpoint) && 
+                               leader_history.contains_key(&common_checkpoint) {
+                                let car_time = car_history.get(&common_checkpoint).unwrap();
+                                let leader_time = leader_history.get(&common_checkpoint).unwrap();
+                                gap = car_time - leader_time;
+                                break;
+                            }
+                            common_checkpoint -= 1;
                         }
+                        gap
                     } else {
                         0.0
                     }
                 } else {
                     0.0
                 }
-            }
+            })
         };
 
         let gap_to_next = if i == sorted_cars.len() - 1 {
@@ -110,39 +102,36 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             let next_idx = sorted_cars[i + 1].0;
             let next_checkpoint = sorted_cars[i + 1].1.1;
             
-            unsafe {
-                if let Some(history) = &CHECKPOINT_HISTORY {
-                    if let Some(car_history) = history.get(car_idx) {
-                        if let Some(next_history) = history.get(&next_idx) {
-                            // Find the last common checkpoint
-                            let mut common_checkpoint = *checkpoint;
-                            let mut gap = 0.0;
-                            
-                            loop {
-                                if common_checkpoint <= 0 {
-                                    break;
-                                }
-                                
-                                if car_history.contains_key(&common_checkpoint) && 
-                                   next_history.contains_key(&common_checkpoint) {
-                                    let car_time = car_history.get(&common_checkpoint).unwrap();
-                                    let next_time = next_history.get(&common_checkpoint).unwrap();
-                                    gap = car_time - next_time;
-                                    break;
-                                }
-                                common_checkpoint -= 1;
+            CHECKPOINT_HISTORY.with(|history| {
+                let history = history.borrow();
+                if let Some(car_history) = history.get(car_idx) {
+                    if let Some(next_history) = history.get(&next_idx) {
+                        // Find the last common checkpoint
+                        let mut common_checkpoint = *checkpoint;
+                        let mut gap = 0.0;
+                        
+                        loop {
+                            if common_checkpoint <= 0 {
+                                break;
                             }
-                            gap
-                        } else {
-                            0.0
+                            
+                            if car_history.contains_key(&common_checkpoint) && 
+                               next_history.contains_key(&common_checkpoint) {
+                                let car_time = car_history.get(&common_checkpoint).unwrap();
+                                let next_time = next_history.get(&common_checkpoint).unwrap();
+                                gap = car_time - next_time;
+                                break;
+                            }
+                            common_checkpoint -= 1;
                         }
+                        gap
                     } else {
                         0.0
                     }
                 } else {
                     0.0
                 }
-            }
+            })
         };
 
         let gap_to_prev = if i == 0 {
@@ -151,39 +140,36 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             let prev_idx = sorted_cars[i - 1].0;
             let prev_checkpoint = sorted_cars[i - 1].1.1;
             
-            unsafe {
-                if let Some(history) = &CHECKPOINT_HISTORY {
-                    if let Some(car_history) = history.get(car_idx) {
-                        if let Some(prev_history) = history.get(&prev_idx) {
-                            // Find the last common checkpoint
-                            let mut common_checkpoint = *checkpoint;
-                            let mut gap = 0.0;
-                            
-                            loop {
-                                if common_checkpoint <= 0 {
-                                    break;
-                                }
-                                
-                                if car_history.contains_key(&common_checkpoint) && 
-                                   prev_history.contains_key(&common_checkpoint) {
-                                    let car_time = car_history.get(&common_checkpoint).unwrap();
-                                    let prev_time = prev_history.get(&common_checkpoint).unwrap();
-                                    gap = car_time - prev_time;
-                                    break;
-                                }
-                                common_checkpoint -= 1;
+            CHECKPOINT_HISTORY.with(|history| {
+                let history = history.borrow();
+                if let Some(car_history) = history.get(car_idx) {
+                    if let Some(prev_history) = history.get(&prev_idx) {
+                        // Find the last common checkpoint
+                        let mut common_checkpoint = *checkpoint;
+                        let mut gap = 0.0;
+                        
+                        loop {
+                            if common_checkpoint <= 0 {
+                                break;
                             }
-                            gap
-                        } else {
-                            0.0
+                            
+                            if car_history.contains_key(&common_checkpoint) && 
+                               prev_history.contains_key(&common_checkpoint) {
+                                let car_time = car_history.get(&common_checkpoint).unwrap();
+                                let prev_time = prev_history.get(&common_checkpoint).unwrap();
+                                gap = car_time - prev_time;
+                                break;
+                            }
+                            common_checkpoint -= 1;
                         }
+                        gap
                     } else {
                         0.0
                     }
                 } else {
                     0.0
                 }
-            }
+            })
         };
 
         // Debug logging for car in position 2
