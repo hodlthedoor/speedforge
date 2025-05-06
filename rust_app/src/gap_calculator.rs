@@ -21,7 +21,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     for (i, &dist_pct) in lap_dist_pcts.iter().enumerate() {
         // Calculate which 5% checkpoint the car is at
         // Add completed laps to get total progress
-        let completed_laps_f32 = completed_laps.get(i).unwrap_or(&0) as f32;
+        let completed_laps_f32 = *completed_laps.get(i).unwrap_or(&0) as f32;
         let total_progress = dist_pct + completed_laps_f32;
         let checkpoint = (total_progress / CHECKPOINT_INTERVAL).floor() as i32;
         car_data.insert(i as i32, (total_progress, checkpoint, session_time));
