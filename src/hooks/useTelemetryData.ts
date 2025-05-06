@@ -28,6 +28,17 @@ export interface WeekendInfo {
   speed_unit?: string;
 }
 
+// Add GapData interface
+interface GapData {
+  car_idx: number;
+  position: number;
+  gap_to_leader: number;
+  gap_to_next: number;
+  gap_to_prev: number;
+  last_checkpoint: number;
+  last_checkpoint_time: number;
+}
+
 // Typescript interface for telemetry data
 export interface TelemetryData {
   // Car State
@@ -103,6 +114,9 @@ export interface TelemetryData {
   // Additional fields from SimpleTelemetryWidget metrics
   // Any other fields that might be present in the data
   [key: string]: any;
+  
+  // Add gap_data field
+  gap_data?: GapData[];
 }
 
 // Create a union type from TelemetryData keys for type safety
@@ -211,214 +225,6 @@ interface UseTelemetryDataOptions {
   updateInterval?: number;
 }
 
-// Add these interfaces after the existing interfaces
-interface Checkpoint {
-  totalProgress: number;
-  timestamp: number;
-  lapTime?: number;  // Time for the last completed lap
-}
-
-interface CarProgress {
-  idx: number;
-  lap: number;
-  completed: number;
-  position: number;
-  rawPosition: number;
-  totalProgress: number;
-  checkpointCount: number;
-  lastCheckpointTime: number;
-  lastCheckpoint: Checkpoint | null;
-}
-
-interface CalculatedPositions {
-  positions: Record<number, number>;
-  gaps: Record<number, number>;
-  gapsToLeader: Record<number, number>;
-}
-
-// Add this interface after the existing interfaces
-interface SimpleCheckpoint {
-  totalProgress: number;  // laps completed + track position
-  timestamp: number;      // session time when checkpoint was recorded
-}
-
-// Replace the existing checkpoint management code with this simpler version
-const CHECKPOINT_INTERVAL = 0.05; // 5% of track
-
-// Helper to get checkpoint index for a total progress
-const getCheckpointIndex = (totalProgress: number) => Math.floor(totalProgress / CHECKPOINT_INTERVAL);
-
-// Helper to update checkpoint history for a car
-const updateCheckpointHistory = (
-  carIdx: number,
-  totalProgress: number,
-  timestamp: number,
-  currentHistory: Record<number, SimpleCheckpoint[]>
-) => {
-  const checkpointIndex = getCheckpointIndex(totalProgress);
-  const carHistory = currentHistory[carIdx] || [];
-  
-  // If we have a previous checkpoint, check if we need to clear future data
-  if (carHistory.length > 0) {
-    const lastCheckpoint = carHistory[carHistory.length - 1];
-    if (totalProgress < lastCheckpoint.totalProgress) {
-      // We've gone backwards (session restart or telemetry jump)
-      // Clear all checkpoints after this point
-      return [{ totalProgress, timestamp }];
-    }
-  }
-  
-  // Only add checkpoint if we've moved to a new interval
-  if (carHistory.length === 0 || getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
-    const newHistory = [...carHistory, { totalProgress, timestamp }];
-    return newHistory;
-  }
-  
-  return carHistory;
-};
-
-// Helper to find the last common checkpoint between two cars
-const findLastCommonCheckpoint = (history1: SimpleCheckpoint[], history2: SimpleCheckpoint[]): { checkpoint: SimpleCheckpoint, time1: number, time2: number } | null => {
-  if (!history1.length || !history2.length) return null;
-  
-  // Use the last checkpoint of the car behind
-  const behindCheckpoint = history1[history1.length - 1];
-  // Use the checkpoint at the same index from the car ahead
-  const aheadCheckpoint = history2[history1.length - 1];
-  
-  return {
-    checkpoint: behindCheckpoint,
-    time1: behindCheckpoint.timestamp,
-    time2: aheadCheckpoint.timestamp
-  };
-};
-
-// Helper to calculate positions and gaps
-function calculatePositionsAndGaps(
-  positions: Record<number, number>,
-  laps: Record<number, number>,
-  completedLaps: Record<number, number>,
-  rawPositions: Record<number, number>,
-  sessionTime: number,
-  checkpointHistory: Record<number, SimpleCheckpoint[]>
-): CalculatedPositions {
-  // Create array of car data for sorting
-  const carData: CarProgress[] = Object.entries(positions).map(([idxStr, pos]) => {
-    const idx = +idxStr;
-    const lap = laps[idx] || 0;
-    const completed = completedLaps[idx] || 0;
-    const rawPosition = rawPositions[idx] || 999;
-    const position = pos as number;
-    const history = checkpointHistory[idx] || [];
-    
-    return {
-      idx,
-      lap,
-      completed,
-      position,
-      rawPosition,
-      totalProgress: completed + position,
-      checkpointCount: history.length,
-      lastCheckpointTime: history.length > 0 ? history[history.length - 1].timestamp : Infinity,
-      lastCheckpoint: history.length > 0 ? history[history.length - 1] : null
-    };
-  });
-
-  // Sort cars by checkpoint count (descending) and then by last checkpoint time (ascending)
-  carData.sort((a, b) => {
-    if (a.checkpointCount !== b.checkpointCount) {
-      return b.checkpointCount - a.checkpointCount;
-    }
-    return a.lastCheckpointTime - b.lastCheckpointTime;
-  });
-
-  // Calculate positions
-  const newPositions: Record<number, number> = {};
-  carData.forEach((car, index) => {
-    if (car.completed > 0 || car.lap === 1) {
-      newPositions[car.idx] = index + 1;
-    } else {
-      newPositions[car.idx] = 999;
-    }
-  });
-
-  // Calculate gaps
-  const newGaps: Record<number, number> = {};
-  const newGapsToLeader: Record<number, number> = {};
-  
-  // Get the leader's data
-  const leader = carData[0];
-  if (leader && leader.lastCheckpoint) {
-    // Calculate gaps to leader
-    carData.forEach((car) => {
-      if (car.idx === leader.idx) {
-        newGapsToLeader[car.idx] = 0;
-        return;
-      }
-
-      const carHistory = checkpointHistory[car.idx] || [];
-      const leaderHistory = checkpointHistory[leader.idx] || [];
-      
-      // Find the last common checkpoint between this car and the leader
-      const commonCheckpoint = findLastCommonCheckpoint(carHistory, leaderHistory);
-      
-      if (commonCheckpoint) {
-        // Calculate gap based on time difference at the last common checkpoint
-        newGapsToLeader[car.idx] = commonCheckpoint.time1 - commonCheckpoint.time2;
-
-        // Log details for car in position 2
-        if (newPositions[car.idx] === 2) {
-          console.log('Car in position 2:', {
-            carIdx: car.idx,
-            checkpointHistory: carHistory,
-            leaderHistory: leaderHistory,
-            lastCommonCheckpoint: commonCheckpoint.checkpoint,
-            carTime: commonCheckpoint.time1,
-            leaderTime: commonCheckpoint.time2,
-            gapToLeader: newGapsToLeader[car.idx]
-          });
-        }
-      } else {
-        newGapsToLeader[car.idx] = 0;
-      }
-    });
-
-    // Calculate gaps to car ahead
-    carData.forEach((car, index) => {
-      if (index === 0) {
-        newGaps[car.idx] = 0;
-        return;
-      }
-
-      const carAhead = carData[index - 1];
-      const carHistory = checkpointHistory[car.idx] || [];
-      const carAheadHistory = checkpointHistory[carAhead.idx] || [];
-      
-      // Find the last common checkpoint between this car and the car ahead
-      const commonCheckpoint = findLastCommonCheckpoint(carHistory, carAheadHistory);
-      
-      if (commonCheckpoint) {
-        // Calculate gap based on time difference at the last common checkpoint
-        newGaps[car.idx] = commonCheckpoint.time1 - commonCheckpoint.time2;
-      } else {
-        newGaps[car.idx] = 0;
-      }
-    });
-  }
-
-  // Log only the final calculated gaps
-  console.log('Gaps calculated:', {
-    gaps: newGaps,
-    gapsToLeader: newGapsToLeader
-  });
-
-  return {
-    positions: newPositions,
-    gaps: newGaps,
-    gapsToLeader: newGapsToLeader
-  };
-}
-
 /**
  * Custom hook for accessing telemetry data from WebSocketService
  * 
@@ -439,7 +245,6 @@ export function useTelemetryData(
   const latestDataRef = useRef<TelemetryData | null>(null);
   const timerRef = useRef<number | null>(null);
   const isMountedRef = useRef<boolean>(true);
-  const checkpointHistoryRef = useRef<Record<number, SimpleCheckpoint[]>>({});
   
   // Store metrics in a ref to avoid dependency changes
   const metricsRef = useRef(metrics);
@@ -555,54 +360,18 @@ export function useTelemetryData(
       setSessionData(parsedSessionData);
     }
     
-    // Calculate positions and gaps if we have the required data
-    if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
-      const sessionTime = newData.SessionTime || 0;
-      
-      // Update checkpoint history for all cars
-      Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {
-        const idx = +idxStr;
-        const lap = newData.CarIdxLap?.[idx] || 0;
-        const completed = newData.CarIdxLapCompleted?.[idx] || 0;
-        const position = pos as number;
-        const totalProgress = completed + position;
-        
-        const oldHistory = checkpointHistoryRef.current[idx] || [];
-        const newHistory = updateCheckpointHistory(
-          idx,
-          totalProgress,
-          sessionTime,
-          checkpointHistoryRef.current
-        );
-
-        checkpointHistoryRef.current[idx] = newHistory;
-      });
-
-      const { positions, gaps, gapsToLeader } = calculatePositionsAndGaps(
-        newData.CarIdxLapDistPct,
-        newData.CarIdxLap,
-        newData.CarIdxLapCompleted,
-        newData.CarIdxPosition,
-        sessionTime,
-        checkpointHistoryRef.current
-      );
-
+    // Update positions and gaps using backend-calculated data
+    if (newData.gap_data) {
       // Initialize arrays if they don't exist
       newData.CarIdxPosition = newData.CarIdxPosition || [];
       newData.CarIdxF2Time = newData.CarIdxF2Time || [];
       newData.CarIdxGapToLeader = newData.CarIdxGapToLeader || [];
 
-      // Add calculated values to the data
-      Object.entries(positions).forEach(([idx, pos]) => {
-        newData.CarIdxPosition[+idx] = pos;
-      });
-
-      // Update gap times
-      Object.entries(gaps).forEach(([idx, gap]) => {
-        newData.CarIdxF2Time[+idx] = gap;
-      });
-      Object.entries(gapsToLeader).forEach(([idx, gap]) => {
-        newData.CarIdxGapToLeader[+idx] = gap;
+      // Update positions and gaps from gap_data
+      newData.gap_data.forEach(gap => {
+        newData.CarIdxPosition[gap.car_idx] = gap.position;
+        newData.CarIdxF2Time[gap.car_idx] = gap.gap_to_next;
+        newData.CarIdxGapToLeader[gap.car_idx] = gap.gap_to_leader;
       });
     }
     

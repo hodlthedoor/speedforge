@@ -50,6 +50,18 @@ impl Default for EngineWarnings {
     }
 }
 
+/// Represents gap data for a car
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GapData {
+    pub car_idx: i32,
+    pub position: i32,
+    pub gap_to_leader: f32,
+    pub gap_to_next: f32,
+    pub gap_to_prev: f32,
+    pub last_checkpoint: i32,
+    pub last_checkpoint_time: f32,
+}
+
 /// Represents all telemetry data organized into logical sections
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct TelemetryData {
@@ -229,6 +241,10 @@ pub struct TelemetryData {
     
     // New field for SessionTime
     pub SessionTime: f32,
+
+    // Gap calculation data
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_data: Option<Vec<GapData>>,
 }
 
 /// Flag constants based on iRacing SDK

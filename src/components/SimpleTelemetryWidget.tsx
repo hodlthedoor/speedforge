@@ -126,8 +126,12 @@ export const SimpleTelemetryWidget: React.FC<SimpleTelemetryWidgetProps> = ({
   initialPosition,
   onClose
 }) => {
-  // Use the new hook with the specific metric we want to track
-  const { data } = useTelemetryData(id, { metrics: [metric] });
+  // Use the new hook with the specific metric we want to track and enable throttled updates
+  const { data } = useTelemetryData(id, { 
+    metrics: [metric],
+    throttleUpdates: true,
+    updateInterval: 50  // Update every 50ms
+  });
   
   // Transform array data for individual wheel metrics
   const transformedData = useMemo(() => {

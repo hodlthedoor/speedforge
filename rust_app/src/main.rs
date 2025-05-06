@@ -1,5 +1,6 @@
 mod telemetry_fields;
 mod websocket_server;
+mod gap_calculator;
 
 use iracing::telemetry::Connection;
 use std::{thread, time::Duration};
@@ -403,6 +404,9 @@ async fn main() {
                                         
                                         // Extract basic telemetry data
                                         let mut telemetry_data = telemetry_fields::extract_telemetry(&sample);
+                                        
+                                        // Calculate gaps
+                                        gap_calculator::calculate_gaps(&mut telemetry_data);
                                         
                                         // Use the session info we got from the connection
                                         if !raw_yaml.is_empty() {
