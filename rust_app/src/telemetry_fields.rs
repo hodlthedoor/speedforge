@@ -536,8 +536,12 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     data.position = TryInto::<i32>::try_into(telem.get("PlayerCarPosition").unwrap_or(Value::INT(0))).unwrap();
     
     // Extract SessionTime
-    data.SessionTime = TryInto::<f32>::try_into(session_time).unwrap_or(0.0);
-
+    if let Ok(session_time) = telem.get("SessionTime") {
+        data.SessionTime = TryInto::<f32>::try_into(session_time).unwrap_or(0.0);
+        raw_values.insert("SessionTime".to_string(), serde_json::json!(data.SessionTime));
+    } else {
+        data.SessionTime = 0.0;
+    }
     
     // Incident count
     data.incident_count = TryInto::<i32>::try_into(telem.get("PlayerCarDriverIncidentCount").unwrap_or(Value::INT(0))).unwrap();
