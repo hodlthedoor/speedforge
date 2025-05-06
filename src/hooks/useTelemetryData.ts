@@ -367,12 +367,27 @@ export function useTelemetryData(
       newData.CarIdxF2Time = newData.CarIdxF2Time || [];
       newData.CarIdxGapToLeader = newData.CarIdxGapToLeader || [];
 
+      // Debug log the gap data
+      console.log('Received gap data:', newData.gap_data);
+
       // Update positions and gaps from gap_data
       newData.gap_data.forEach(gap => {
         newData.CarIdxPosition[gap.car_idx] = gap.position;
         newData.CarIdxF2Time[gap.car_idx] = gap.gap_to_next;
         newData.CarIdxGapToLeader[gap.car_idx] = gap.gap_to_leader;
+        
+        // Debug log each gap update
+        console.log(`Updated gaps for car ${gap.car_idx}:`, {
+          position: gap.position,
+          gap_to_next: gap.gap_to_next,
+          gap_to_leader: gap.gap_to_leader
+        });
       });
+
+      // Debug log the final arrays
+      console.log('Updated position array:', newData.CarIdxPosition);
+      console.log('Updated gap to next array:', newData.CarIdxF2Time);
+      console.log('Updated gap to leader array:', newData.CarIdxGapToLeader);
     }
     
     // If specific metrics are requested, filter the data
