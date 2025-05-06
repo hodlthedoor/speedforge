@@ -3,6 +3,9 @@ use std::collections::HashMap;
 
 const CHECKPOINT_INTERVAL: f32 = 0.05; // 5% intervals
 
+// Store checkpoint history for each car
+static mut CHECKPOINT_HISTORY: Option<HashMap<i32, HashMap<i32, f32>>> = None;
+
 /// Calculate gaps between cars based on their positions and checkpoint times
 pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     // Create default empty vectors that live for the entire function
@@ -14,6 +17,13 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     let completed_laps = telemetry_data.CarIdxLapCompleted.as_ref().unwrap_or(&empty_vec_i32);
     let session_time = telemetry_data.SessionTime;
 
+    // Initialize checkpoint history if needed
+    unsafe {
+        if CHECKPOINT_HISTORY.is_none() {
+            CHECKPOINT_HISTORY = Some(HashMap::new());
+        }
+    }
+
     // Create a map of car data with their current checkpoint and time
     let mut car_data: HashMap<i32, (f32, i32, f32)> = HashMap::new();
     
@@ -24,6 +34,19 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
         let completed_laps_f32 = *completed_laps.get(i).unwrap_or(&0) as f32;
         let total_progress = dist_pct + completed_laps_f32;
         let checkpoint = (total_progress / CHECKPOINT_INTERVAL).floor() as i32;
+        
+        // Update checkpoint history
+        unsafe {
+            if let Some(history) = &mut CHECKPOINT_HISTORY {
+                let car_history = history.entry(i as i32).or_insert_with(HashMap::new);
+                
+                // If we've passed a new checkpoint, record the time
+                if !car_history.contains_key(&checkpoint) {
+                    car_history.insert(checkpoint, session_time);
+                }
+            }
+        }
+        
         car_data.insert(i as i32, (total_progress, checkpoint, session_time));
     }
 
@@ -39,25 +62,89 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     let mut gap_data = Vec::new();
     
     for (i, (car_idx, (total_progress, checkpoint, time))) in sorted_cars.iter().enumerate() {
+        // Find the last common checkpoint with the car in front
         let gap_to_leader = if i == 0 {
             0.0
         } else {
-            let leader_time = sorted_cars[0].1.2;
-            time - leader_time
+            let leader_idx = sorted_cars[0].0;
+            let leader_checkpoint = sorted_cars[0].1.1;
+            
+            unsafe {
+                if let Some(history) = &CHECKPOINT_HISTORY {
+                    if let Some(car_history) = history.get(car_idx) {
+                        if let Some(leader_history) = history.get(&leader_idx) {
+                            // Find the last common checkpoint
+                            let mut common_checkpoint = checkpoint;
+                            while common_checkpoint > 0 {
+                                if car_history.contains_key(&common_checkpoint) && 
+                                   leader_history.contains_key(&common_checkpoint) {
+                                    let car_time = car_history.get(&common_checkpoint).unwrap();
+                                    let leader_time = leader_history.get(&common_checkpoint).unwrap();
+                                    return car_time - leader_time;
+                                }
+                                common_checkpoint -= 1;
+                            }
+                        }
+                    }
+                }
+            }
+            0.0 // Default if no common checkpoint found
         };
 
         let gap_to_next = if i == sorted_cars.len() - 1 {
             0.0
         } else {
-            let next_time = sorted_cars[i + 1].1.2;
-            time - next_time
+            let next_idx = sorted_cars[i + 1].0;
+            let next_checkpoint = sorted_cars[i + 1].1.1;
+            
+            unsafe {
+                if let Some(history) = &CHECKPOINT_HISTORY {
+                    if let Some(car_history) = history.get(car_idx) {
+                        if let Some(next_history) = history.get(&next_idx) {
+                            // Find the last common checkpoint
+                            let mut common_checkpoint = checkpoint;
+                            while common_checkpoint > 0 {
+                                if car_history.contains_key(&common_checkpoint) && 
+                                   next_history.contains_key(&common_checkpoint) {
+                                    let car_time = car_history.get(&common_checkpoint).unwrap();
+                                    let next_time = next_history.get(&common_checkpoint).unwrap();
+                                    return car_time - next_time;
+                                }
+                                common_checkpoint -= 1;
+                            }
+                        }
+                    }
+                }
+            }
+            0.0 // Default if no common checkpoint found
         };
 
         let gap_to_prev = if i == 0 {
             0.0
         } else {
-            let prev_time = sorted_cars[i - 1].1.2;
-            time - prev_time
+            let prev_idx = sorted_cars[i - 1].0;
+            let prev_checkpoint = sorted_cars[i - 1].1.1;
+            
+            unsafe {
+                if let Some(history) = &CHECKPOINT_HISTORY {
+                    if let Some(car_history) = history.get(car_idx) {
+                        if let Some(prev_history) = history.get(&prev_idx) {
+                            // Find the last common checkpoint
+                            let mut common_checkpoint = checkpoint;
+                            while common_checkpoint > 0 {
+                                if car_history.contains_key(&common_checkpoint) && 
+                                   prev_history.contains_key(&common_checkpoint) {
+                                    let car_time = car_history.get(&common_checkpoint).unwrap();
+                                    let prev_time = prev_history.get(&common_checkpoint).unwrap();
+                                    return car_time - prev_time;
+                                }
+                                common_checkpoint -= 1;
+                            }
+                        }
+                    }
+                }
+            }
+            0.0 // Default if no common checkpoint found
         };
 
         // Debug logging for car in position 2
@@ -66,6 +153,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             println!("  Total progress: {:.3}", total_progress);
             println!("  Current checkpoint: {}", checkpoint);
             println!("  Current time: {:.3}", time);
+            println!("  Leader checkpoint: {}", sorted_cars[0].1.1);
             println!("  Leader time: {:.3}", sorted_cars[0].1.2);
             println!("  Gap to leader: {:.3}", gap_to_leader);
             println!("  Gap to next: {:.3}", gap_to_next);
