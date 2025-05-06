@@ -9,7 +9,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     let positions = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
     let lap_dist = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
     let checkpoints = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
-    let session_time = telemetry_data.SessionTime.unwrap_or(0.0);
+    let session_time = telemetry_data.SessionTime;
 
     // Create a map of car data
     let mut car_data: HashMap<i32, (f32, f32, i32)> = HashMap::new();
