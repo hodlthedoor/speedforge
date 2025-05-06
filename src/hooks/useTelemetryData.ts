@@ -269,9 +269,15 @@ const updateCheckpointHistory = (
   }
   
   // Only add checkpoint if we've moved to a new interval
-  if (carHistory.length === 0 || getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
-    const newHistory = [...carHistory, { totalProgress, timestamp }];
-    return newHistory;
+  // and we don't already have a checkpoint at this interval
+  if (carHistory.length === 0 || 
+      getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
+    // Check if we already have a checkpoint at this interval
+    const existingCheckpoint = carHistory.find(cp => getCheckpointIndex(cp.totalProgress) === checkpointIndex);
+    if (!existingCheckpoint) {
+      const newHistory = [...carHistory, { totalProgress, timestamp }];
+      return newHistory;
+    }
   }
   
   return carHistory;
