@@ -303,16 +303,25 @@ const calculateTimeBetweenProgress = (
 
 // Helper to find the last common checkpoint between two cars
 const findLastCommonCheckpoint = (history1: SimpleCheckpoint[], history2: SimpleCheckpoint[]): SimpleCheckpoint | null => {
-  if (!history1.length || !history2.length) return null;
+  if (!history1.length || !history2.length) {
+    console.log('No history available for one or both cars');
+    return null;
+  }
   
   // Find the last checkpoint that both cars have passed
   for (let i = history1.length - 1; i >= 0; i--) {
     const checkpoint1 = history1[i];
     const checkpoint2 = history2.find(cp => cp.totalProgress === checkpoint1.totalProgress);
     if (checkpoint2) {
+      console.log('Found common checkpoint:', {
+        totalProgress: checkpoint1.totalProgress,
+        car1Time: checkpoint1.timestamp,
+        car2Time: checkpoint2.timestamp
+      });
       return checkpoint1;
     }
   }
+  console.log('No common checkpoint found between cars');
   return null;
 };
 
@@ -325,6 +334,9 @@ function calculatePositionsAndGaps(
   sessionTime: number,
   checkpointHistory: Record<number, SimpleCheckpoint[]>
 ): CalculatedPositions {
+  console.log('Calculating positions and gaps with session time:', sessionTime);
+  console.log('Checkpoint history:', checkpointHistory);
+
   // Create array of car data for sorting
   const carData: CarProgress[] = Object.entries(positions).map(([idxStr, pos]) => {
     const idx = +idxStr;
@@ -347,6 +359,8 @@ function calculatePositionsAndGaps(
     };
   });
 
+  console.log('Car data before sorting:', carData);
+
   // Sort cars by checkpoint count (descending) and then by last checkpoint time (ascending)
   carData.sort((a, b) => {
     if (a.checkpointCount !== b.checkpointCount) {
@@ -354,6 +368,8 @@ function calculatePositionsAndGaps(
     }
     return a.lastCheckpointTime - b.lastCheckpointTime;
   });
+
+  console.log('Car data after sorting:', carData);
 
   // Calculate positions
   const newPositions: Record<number, number> = {};
@@ -372,6 +388,12 @@ function calculatePositionsAndGaps(
   // Get the leader's data
   const leader = carData[0];
   if (leader && leader.lastCheckpoint) {
+    console.log('Leader data:', {
+      idx: leader.idx,
+      checkpointCount: leader.checkpointCount,
+      lastCheckpoint: leader.lastCheckpoint
+    });
+
     // Calculate gaps to leader
     carData.forEach((car) => {
       if (car.idx === leader.idx) {
@@ -381,6 +403,11 @@ function calculatePositionsAndGaps(
 
       const carHistory = checkpointHistory[car.idx] || [];
       const leaderHistory = checkpointHistory[leader.idx] || [];
+      
+      console.log(`Calculating gap to leader for car ${car.idx}:`, {
+        carHistory,
+        leaderHistory
+      });
       
       // Find the last common checkpoint between this car and the leader
       const lastCommonCheckpoint = findLastCommonCheckpoint(carHistory, leaderHistory);
@@ -392,8 +419,15 @@ function calculatePositionsAndGaps(
         
         // Calculate gap based on time difference at the last common checkpoint
         newGapsToLeader[car.idx] = carTime - leaderTime;
+        console.log(`Gap to leader for car ${car.idx}:`, {
+          lastCommonCheckpoint,
+          carTime,
+          leaderTime,
+          gap: newGapsToLeader[car.idx]
+        });
       } else {
         newGapsToLeader[car.idx] = 0;
+        console.log(`No gap to leader calculated for car ${car.idx} - no common checkpoint`);
       }
     });
 
@@ -408,6 +442,12 @@ function calculatePositionsAndGaps(
       const carHistory = checkpointHistory[car.idx] || [];
       const carAheadHistory = checkpointHistory[carAhead.idx] || [];
       
+      console.log(`Calculating gap to car ahead for car ${car.idx}:`, {
+        carAhead: carAhead.idx,
+        carHistory,
+        carAheadHistory
+      });
+      
       // Find the last common checkpoint between this car and the car ahead
       const lastCommonCheckpoint = findLastCommonCheckpoint(carHistory, carAheadHistory);
       
@@ -418,11 +458,26 @@ function calculatePositionsAndGaps(
         
         // Calculate gap based on time difference at the last common checkpoint
         newGaps[car.idx] = carTime - carAheadTime;
+        console.log(`Gap to car ahead for car ${car.idx}:`, {
+          lastCommonCheckpoint,
+          carTime,
+          carAheadTime,
+          gap: newGaps[car.idx]
+        });
       } else {
         newGaps[car.idx] = 0;
+        console.log(`No gap to car ahead calculated for car ${car.idx} - no common checkpoint`);
       }
     });
+  } else {
+    console.log('No leader data available');
   }
+
+  console.log('Final calculated gaps:', {
+    positions: newPositions,
+    gaps: newGaps,
+    gapsToLeader: newGapsToLeader
+  });
 
   return {
     positions: newPositions,
@@ -561,11 +616,6 @@ export function useTelemetryData(
   const handleData = useCallback((newData: TelemetryData) => {
     if (!isMountedRef.current) return;
     
-    // Log raw data to check SessionTime
-    console.log('Raw telemetry data:', newData);
-    console.log('SessionTime value:', newData.SessionTime);
-    console.log('All available keys:', Object.keys(newData));
-    
     // Process session info if available
     if (newData.session_info) {
       const parsedSessionData = parseSessionInfo(newData.session_info);
@@ -575,7 +625,6 @@ export function useTelemetryData(
     // Calculate positions and gaps if we have the required data
     if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
       const sessionTime = newData.SessionTime || 0;
-      console.log('Using session time:', sessionTime);
       
       // Update checkpoint history for all cars
       Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {
