@@ -75,16 +75,23 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                         if let Some(leader_history) = history.get(&leader_idx) {
                             // Find the last common checkpoint
                             let mut common_checkpoint = *checkpoint;
-                            while common_checkpoint > 0 {
+                            let mut gap = 0.0;
+                            
+                            loop {
+                                if common_checkpoint <= 0 {
+                                    break;
+                                }
+                                
                                 if car_history.contains_key(&common_checkpoint) && 
                                    leader_history.contains_key(&common_checkpoint) {
                                     let car_time = car_history.get(&common_checkpoint).unwrap();
                                     let leader_time = leader_history.get(&common_checkpoint).unwrap();
-                                    break car_time - leader_time;
+                                    gap = car_time - leader_time;
+                                    break;
                                 }
                                 common_checkpoint -= 1;
                             }
-                            0.0 // Default if no common checkpoint found
+                            gap
                         } else {
                             0.0
                         }
@@ -109,16 +116,23 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                         if let Some(next_history) = history.get(&next_idx) {
                             // Find the last common checkpoint
                             let mut common_checkpoint = *checkpoint;
-                            while common_checkpoint > 0 {
+                            let mut gap = 0.0;
+                            
+                            loop {
+                                if common_checkpoint <= 0 {
+                                    break;
+                                }
+                                
                                 if car_history.contains_key(&common_checkpoint) && 
                                    next_history.contains_key(&common_checkpoint) {
                                     let car_time = car_history.get(&common_checkpoint).unwrap();
                                     let next_time = next_history.get(&common_checkpoint).unwrap();
-                                    break car_time - next_time;
+                                    gap = car_time - next_time;
+                                    break;
                                 }
                                 common_checkpoint -= 1;
                             }
-                            0.0 // Default if no common checkpoint found
+                            gap
                         } else {
                             0.0
                         }
@@ -143,16 +157,23 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                         if let Some(prev_history) = history.get(&prev_idx) {
                             // Find the last common checkpoint
                             let mut common_checkpoint = *checkpoint;
-                            while common_checkpoint > 0 {
+                            let mut gap = 0.0;
+                            
+                            loop {
+                                if common_checkpoint <= 0 {
+                                    break;
+                                }
+                                
                                 if car_history.contains_key(&common_checkpoint) && 
                                    prev_history.contains_key(&common_checkpoint) {
                                     let car_time = car_history.get(&common_checkpoint).unwrap();
                                     let prev_time = prev_history.get(&common_checkpoint).unwrap();
-                                    break car_time - prev_time;
+                                    gap = car_time - prev_time;
+                                    break;
                                 }
                                 common_checkpoint -= 1;
                             }
-                            0.0 // Default if no common checkpoint found
+                            gap
                         } else {
                             0.0
                         }
