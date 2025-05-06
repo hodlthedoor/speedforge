@@ -25,11 +25,21 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     
     // Collect data for each car
     for (i, &dist_pct) in lap_dist_pcts.iter().enumerate() {
-        // Calculate which 5% checkpoint the car is at
-        // Add completed laps to get total progress
+        // Calculate total progress: raw lap % + (100% * completed laps)
         let completed_laps_f32 = *completed_laps.get(i).unwrap_or(&0) as f32;
         let total_progress = dist_pct + completed_laps_f32;
+        
+        // Calculate which 5% checkpoint the car is at
         let checkpoint = (total_progress / CHECKPOINT_INTERVAL).floor() as i32;
+        
+        // Debug output for checkpoint calculation
+        if i == 19 { // Car in position 2
+            println!("\nCheckpoint calculation for car {}:", i);
+            println!("  Raw lap distance: {:.3}", dist_pct);
+            println!("  Completed laps: {}", completed_laps_f32);
+            println!("  Total progress: {:.3}", total_progress);
+            println!("  Current checkpoint: {} ({:.1}%)", checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0);
+        }
         
         // Update checkpoint history
         CHECKPOINT_HISTORY.with(|history| {
@@ -39,6 +49,8 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             // If we've passed a new checkpoint, record the time
             if !car_history.contains_key(&checkpoint) {
                 car_history.insert(checkpoint, session_time);
+                println!("Car {} passed checkpoint {} ({:.1}%) at time {:.3}", 
+                    i, checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0, session_time);
             }
         });
         
@@ -47,11 +59,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
 
     // Sort cars by total progress (descending)
     let mut sorted_cars: Vec<_> = car_data.into_iter().collect();
-    sorted_cars.sort_by(|a, b| {
-        b.1.0.partial_cmp(&a.1.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.1.2.partial_cmp(&b.1.2).unwrap_or(std::cmp::Ordering::Equal))
-    });
+    sorted_cars.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
 
     // Calculate gaps
     let mut gap_data = Vec::new();
@@ -62,7 +70,6 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             0.0
         } else {
             let leader_idx = sorted_cars[0].0;
-            let leader_checkpoint = sorted_cars[0].1.1;
             
             CHECKPOINT_HISTORY.with(|history| {
                 let history = history.borrow();
@@ -82,15 +89,21 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                                 let car_time = car_history.get(&common_checkpoint).unwrap();
                                 let leader_time = leader_history.get(&common_checkpoint).unwrap();
                                 gap = car_time - leader_time;
+                                println!("Car {} and leader {} common checkpoint {} ({:.1}%): car={:.3}, leader={:.3}, gap={:.3}", 
+                                    car_idx, leader_idx, common_checkpoint, 
+                                    common_checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0,
+                                    car_time, leader_time, gap);
                                 break;
                             }
                             common_checkpoint -= 1;
                         }
                         gap
                     } else {
+                        println!("No history found for leader {}", leader_idx);
                         0.0
                     }
                 } else {
+                    println!("No history found for car {}", car_idx);
                     0.0
                 }
             })
@@ -100,7 +113,6 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             0.0
         } else {
             let next_idx = sorted_cars[i + 1].0;
-            let next_checkpoint = sorted_cars[i + 1].1.1;
             
             CHECKPOINT_HISTORY.with(|history| {
                 let history = history.borrow();
@@ -120,15 +132,21 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                                 let car_time = car_history.get(&common_checkpoint).unwrap();
                                 let next_time = next_history.get(&common_checkpoint).unwrap();
                                 gap = car_time - next_time;
+                                println!("Car {} and next {} common checkpoint {} ({:.1}%): car={:.3}, next={:.3}, gap={:.3}", 
+                                    car_idx, next_idx, common_checkpoint,
+                                    common_checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0,
+                                    car_time, next_time, gap);
                                 break;
                             }
                             common_checkpoint -= 1;
                         }
                         gap
                     } else {
+                        println!("No history found for next car {}", next_idx);
                         0.0
                     }
                 } else {
+                    println!("No history found for car {}", car_idx);
                     0.0
                 }
             })
@@ -138,7 +156,6 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             0.0
         } else {
             let prev_idx = sorted_cars[i - 1].0;
-            let prev_checkpoint = sorted_cars[i - 1].1.1;
             
             CHECKPOINT_HISTORY.with(|history| {
                 let history = history.borrow();
@@ -158,15 +175,21 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                                 let car_time = car_history.get(&common_checkpoint).unwrap();
                                 let prev_time = prev_history.get(&common_checkpoint).unwrap();
                                 gap = car_time - prev_time;
+                                println!("Car {} and prev {} common checkpoint {} ({:.1}%): car={:.3}, prev={:.3}, gap={:.3}", 
+                                    car_idx, prev_idx, common_checkpoint,
+                                    common_checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0,
+                                    car_time, prev_time, gap);
                                 break;
                             }
                             common_checkpoint -= 1;
                         }
                         gap
                     } else {
+                        println!("No history found for prev car {}", prev_idx);
                         0.0
                     }
                 } else {
+                    println!("No history found for car {}", car_idx);
                     0.0
                 }
             })
@@ -174,17 +197,29 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
 
         // Debug logging for car in position 2
         if i == 1 {
-            println!("Car in position 2 (idx: {})", car_idx);
+            println!("\nCar in position 2 (idx: {})", car_idx);
+            println!("  Raw lap distance: {:.3}", lap_dist_pcts[*car_idx as usize]);
+            println!("  Completed laps: {}", completed_laps.get(*car_idx as usize).unwrap_or(&0));
             println!("  Total progress: {:.3}", total_progress);
-            println!("  Current checkpoint: {}", checkpoint);
+            println!("  Current checkpoint: {} ({:.1}%)", checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0);
             println!("  Current time: {:.3}", time);
-            println!("  Leader checkpoint: {}", sorted_cars[0].1.1);
+            println!("  Leader checkpoint: {} ({:.1}%)", sorted_cars[0].1.1, sorted_cars[0].1.1 as f32 * CHECKPOINT_INTERVAL * 100.0);
             println!("  Leader time: {:.3}", sorted_cars[0].1.2);
             println!("  Gap to leader: {:.3}", gap_to_leader);
             println!("  Gap to next: {:.3}", gap_to_next);
             println!("  Gap to prev: {:.3}", gap_to_prev);
-            println!("  Raw lap distance: {:.3}", lap_dist_pcts[*car_idx as usize]);
-            println!("  Completed laps: {}", completed_laps.get(*car_idx as usize).unwrap_or(&0));
+            
+            // Print checkpoint history for this car
+            CHECKPOINT_HISTORY.with(|history| {
+                let history = history.borrow();
+                if let Some(car_history) = history.get(car_idx) {
+                    println!("  Checkpoint history:");
+                    for (checkpoint, time) in car_history.iter() {
+                        println!("    Checkpoint {} ({:.1}%): {:.3}", 
+                            checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0, time);
+                    }
+                }
+            });
         }
 
         gap_data.push(GapData {
