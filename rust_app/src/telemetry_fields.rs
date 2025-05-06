@@ -537,18 +537,13 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     
     // Extract SessionTime
     if let Ok(session_time) = telem.get("SessionTime") {
-        println!("Raw SessionTime from iRacing: {:?}", session_time);
-        // First convert to f64, then to f32
         if let Ok(session_time_f64) = TryInto::<f64>::try_into(session_time) {
             data.SessionTime = session_time_f64 as f32;
-            println!("Converted SessionTime: {}", data.SessionTime);
             raw_values.insert("SessionTime".to_string(), serde_json::json!(data.SessionTime));
         } else {
-            println!("Failed to convert SessionTime to f64");
             data.SessionTime = 0.0;
         }
     } else {
-        println!("SessionTime not found in telemetry data");
         data.SessionTime = 0.0;
     }
     

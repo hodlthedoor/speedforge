@@ -301,7 +301,22 @@ const calculateTimeBetweenProgress = (
   return 0;
 };
 
-// Add this function before useTelemetryData
+// Helper to find the last common checkpoint between two cars
+const findLastCommonCheckpoint = (history1: SimpleCheckpoint[], history2: SimpleCheckpoint[]): SimpleCheckpoint | null => {
+  if (!history1.length || !history2.length) return null;
+  
+  // Find the last checkpoint that both cars have passed
+  for (let i = history1.length - 1; i >= 0; i--) {
+    const checkpoint1 = history1[i];
+    const checkpoint2 = history2.find(cp => cp.totalProgress === checkpoint1.totalProgress);
+    if (checkpoint2) {
+      return checkpoint1;
+    }
+  }
+  return null;
+};
+
+// Helper to calculate positions and gaps
 function calculatePositionsAndGaps(
   positions: Record<number, number>,
   laps: Record<number, number>,
@@ -343,12 +358,9 @@ function calculatePositionsAndGaps(
   // Calculate positions
   const newPositions: Record<number, number> = {};
   carData.forEach((car, index) => {
-    // Only assign position if the car has completed at least one lap
-    // or is on the first lap
     if (car.completed > 0 || car.lap === 1) {
       newPositions[car.idx] = index + 1;
     } else {
-      // Cars that haven't started their first lap get a high position number
       newPositions[car.idx] = 999;
     }
   });
@@ -367,20 +379,21 @@ function calculatePositionsAndGaps(
         return;
       }
 
-      if (!car.lastCheckpoint) {
-        newGapsToLeader[car.idx] = 0;
-        return;
-      }
-
-      // Calculate gap based on checkpoint differences
-      if (car.checkpointCount === leader.checkpointCount) {
-        // Same checkpoint, use time difference
-        newGapsToLeader[car.idx] = car.lastCheckpoint.timestamp - leader.lastCheckpoint.timestamp;
+      const carHistory = checkpointHistory[car.idx] || [];
+      const leaderHistory = checkpointHistory[leader.idx] || [];
+      
+      // Find the last common checkpoint between this car and the leader
+      const lastCommonCheckpoint = findLastCommonCheckpoint(carHistory, leaderHistory);
+      
+      if (lastCommonCheckpoint) {
+        // Find the timestamps at this checkpoint for both cars
+        const carTime = carHistory.find(cp => cp.totalProgress === lastCommonCheckpoint.totalProgress)?.timestamp || 0;
+        const leaderTime = leaderHistory.find(cp => cp.totalProgress === lastCommonCheckpoint.totalProgress)?.timestamp || 0;
+        
+        // Calculate gap based on time difference at the last common checkpoint
+        newGapsToLeader[car.idx] = carTime - leaderTime;
       } else {
-        // Different checkpoints, calculate time to reach leader's position
-        const checkpointDifference = leader.checkpointCount - car.checkpointCount;
-        const timePerCheckpoint = car.lastCheckpoint.timestamp / car.checkpointCount;
-        newGapsToLeader[car.idx] = checkpointDifference * timePerCheckpoint;
+        newGapsToLeader[car.idx] = 0;
       }
     });
 
@@ -392,20 +405,21 @@ function calculatePositionsAndGaps(
       }
 
       const carAhead = carData[index - 1];
-      if (!car.lastCheckpoint || !carAhead.lastCheckpoint) {
-        newGaps[car.idx] = 0;
-        return;
-      }
-
-      // Calculate gap based on checkpoint differences
-      if (car.checkpointCount === carAhead.checkpointCount) {
-        // Same checkpoint, use time difference
-        newGaps[car.idx] = car.lastCheckpoint.timestamp - carAhead.lastCheckpoint.timestamp;
+      const carHistory = checkpointHistory[car.idx] || [];
+      const carAheadHistory = checkpointHistory[carAhead.idx] || [];
+      
+      // Find the last common checkpoint between this car and the car ahead
+      const lastCommonCheckpoint = findLastCommonCheckpoint(carHistory, carAheadHistory);
+      
+      if (lastCommonCheckpoint) {
+        // Find the timestamps at this checkpoint for both cars
+        const carTime = carHistory.find(cp => cp.totalProgress === lastCommonCheckpoint.totalProgress)?.timestamp || 0;
+        const carAheadTime = carAheadHistory.find(cp => cp.totalProgress === lastCommonCheckpoint.totalProgress)?.timestamp || 0;
+        
+        // Calculate gap based on time difference at the last common checkpoint
+        newGaps[car.idx] = carTime - carAheadTime;
       } else {
-        // Different checkpoints, calculate time to reach car ahead's position
-        const checkpointDifference = carAhead.checkpointCount - car.checkpointCount;
-        const timePerCheckpoint = car.lastCheckpoint.timestamp / car.checkpointCount;
-        newGaps[car.idx] = checkpointDifference * timePerCheckpoint;
+        newGaps[car.idx] = 0;
       }
     });
   }
