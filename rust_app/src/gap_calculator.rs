@@ -201,7 +201,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             println!("  Raw lap distance: {:.3}", lap_dist_pcts[*car_idx as usize]);
             println!("  Completed laps: {}", completed_laps.get(*car_idx as usize).unwrap_or(&0));
             println!("  Total progress: {:.3}", total_progress);
-            println!("  Current checkpoint: {} ({:.1}%)", checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0);
+            println!("  Current checkpoint: {} ({:.1}%)", checkpoint, *checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0);
             println!("  Current time: {:.3}", time);
             println!("  Leader checkpoint: {} ({:.1}%)", sorted_cars[0].1.1, sorted_cars[0].1.1 as f32 * CHECKPOINT_INTERVAL * 100.0);
             println!("  Leader time: {:.3}", sorted_cars[0].1.2);
@@ -216,7 +216,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
                     println!("  Checkpoint history:");
                     for (checkpoint, time) in car_history.iter() {
                         println!("    Checkpoint {} ({:.1}%): {:.3}", 
-                            checkpoint, checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0, time);
+                            checkpoint, *checkpoint as f32 * CHECKPOINT_INTERVAL * 100.0, time);
                     }
                 }
             });
