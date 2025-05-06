@@ -5,10 +5,13 @@ const CHECKPOINT_INTERVAL: f32 = 0.05; // 5% intervals
 
 /// Calculate gaps between cars based on their positions and checkpoint times
 pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
+    // Create default empty vectors that live for the entire function
+    let empty_vec: Vec<f32> = Vec::new();
+    
     // Get required arrays from telemetry data
-    let positions = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
-    let lap_dist = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
-    let checkpoints = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&vec![]);
+    let positions = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec);
+    let lap_dist = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec);
+    let checkpoints = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec);
     let session_time = telemetry_data.SessionTime;
 
     // Create a map of car data
