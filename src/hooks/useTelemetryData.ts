@@ -281,17 +281,15 @@ const updateCheckpointHistory = (
 const findLastCommonCheckpoint = (history1: SimpleCheckpoint[], history2: SimpleCheckpoint[]): { checkpoint: SimpleCheckpoint, time1: number, time2: number } | null => {
   if (!history1.length || !history2.length) return null;
   
-  // Use the last checkpoint of the trailing car (the one with fewer checkpoints)
-  const trailingHistory = history1.length < history2.length ? history1 : history2;
-  const leadingHistory = history1.length < history2.length ? history2 : history1;
-  
-  const trailingCheckpoint = trailingHistory[trailingHistory.length - 1];
-  const leadingCheckpoint = leadingHistory[trailingHistory.length - 1];
+  // Use the last checkpoint of the car behind
+  const behindCheckpoint = history1[history1.length - 1];
+  // Use the checkpoint at the same index from the car ahead
+  const aheadCheckpoint = history2[history1.length - 1];
   
   return {
-    checkpoint: trailingCheckpoint,
-    time1: trailingCheckpoint.timestamp,
-    time2: leadingCheckpoint.timestamp
+    checkpoint: behindCheckpoint,
+    time1: behindCheckpoint.timestamp,
+    time2: aheadCheckpoint.timestamp
   };
 };
 
