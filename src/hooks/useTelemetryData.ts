@@ -549,6 +549,8 @@ export function useTelemetryData(
     
     // Log raw data to check SessionTime
     console.log('Raw telemetry data:', newData);
+    console.log('SessionTime value:', newData.SessionTime);
+    console.log('All available keys:', Object.keys(newData));
     
     // Process session info if available
     if (newData.session_info) {
@@ -559,6 +561,7 @@ export function useTelemetryData(
     // Calculate positions and gaps if we have the required data
     if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
       const sessionTime = newData.SessionTime || 0;
+      console.log('Using session time:', sessionTime);
       
       // Update checkpoint history for all cars
       Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {

@@ -226,6 +226,9 @@ pub struct TelemetryData {
     
     #[serde(skip_serializing_if = "Option::is_none")]
     pub CarIdxTrackSurfaceMaterial: Option<Vec<i32>>,
+    
+    // New field for SessionTime
+    pub SessionTime: f32,
 }
 
 /// Flag constants based on iRacing SDK
@@ -531,6 +534,10 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     data.delta_session_best = TryInto::<f32>::try_into(telem.get("LapDeltaToSessionBestLap").unwrap_or(Value::FLOAT(0.0))).unwrap();
     data.delta_optimal = TryInto::<f32>::try_into(telem.get("LapDeltaToOptimalLap").unwrap_or(Value::FLOAT(0.0))).unwrap();
     data.position = TryInto::<i32>::try_into(telem.get("PlayerCarPosition").unwrap_or(Value::INT(0))).unwrap();
+    
+    // Extract SessionTime
+    data.SessionTime = TryInto::<f32>::try_into(session_time).unwrap_or(0.0);
+
     
     // Incident count
     data.incident_count = TryInto::<i32>::try_into(telem.get("PlayerCarDriverIncidentCount").unwrap_or(Value::INT(0))).unwrap();
