@@ -227,6 +227,7 @@ interface CarProgress {
   totalProgress: number;
   checkpointCount: number;
   lastCheckpointTime: number;
+  lastCheckpoint: Checkpoint | null;
 }
 
 interface CalculatedPositions {
@@ -326,7 +327,8 @@ function calculatePositionsAndGaps(
       rawPosition,
       totalProgress: completed + position,
       checkpointCount: history.length,
-      lastCheckpointTime: history.length > 0 ? history[history.length - 1].timestamp : Infinity
+      lastCheckpointTime: history.length > 0 ? history[history.length - 1].timestamp : Infinity,
+      lastCheckpoint: history.length > 0 ? history[history.length - 1] : null
     };
   });
 
@@ -357,7 +359,7 @@ function calculatePositionsAndGaps(
   
   // Get the leader's data
   const leader = carData[0];
-  if (leader) {
+  if (leader && leader.lastCheckpoint) {
     // Calculate gaps to leader
     carData.forEach((car) => {
       if (car.idx === leader.idx) {
@@ -365,23 +367,20 @@ function calculatePositionsAndGaps(
         return;
       }
 
-      const carHistory = checkpointHistory[car.idx] || [];
-      const leaderHistory = checkpointHistory[leader.idx] || [];
-      
-      if (carHistory.length === 0 || leaderHistory.length === 0) {
+      if (!car.lastCheckpoint) {
         newGapsToLeader[car.idx] = 0;
         return;
       }
 
-      // If cars have same number of checkpoints, use time difference between their latest checkpoints
+      // Calculate gap based on checkpoint differences
       if (car.checkpointCount === leader.checkpointCount) {
-        const carLastCheckpoint = carHistory[carHistory.length - 1];
-        const leaderLastCheckpoint = leaderHistory[leaderHistory.length - 1];
-        newGapsToLeader[car.idx] = carLastCheckpoint.timestamp - leaderLastCheckpoint.timestamp;
+        // Same checkpoint, use time difference
+        newGapsToLeader[car.idx] = car.lastCheckpoint.timestamp - leader.lastCheckpoint.timestamp;
       } else {
-        // If different number of checkpoints, use time difference between when trailing car reached their latest checkpoint
-        const carLastCheckpoint = carHistory[carHistory.length - 1];
-        newGapsToLeader[car.idx] = carLastCheckpoint.timestamp;
+        // Different checkpoints, calculate time to reach leader's position
+        const checkpointDifference = leader.checkpointCount - car.checkpointCount;
+        const timePerCheckpoint = car.lastCheckpoint.timestamp / car.checkpointCount;
+        newGapsToLeader[car.idx] = checkpointDifference * timePerCheckpoint;
       }
     });
 
@@ -393,23 +392,20 @@ function calculatePositionsAndGaps(
       }
 
       const carAhead = carData[index - 1];
-      const carHistory = checkpointHistory[car.idx] || [];
-      const carAheadHistory = checkpointHistory[carAhead.idx] || [];
-      
-      if (carHistory.length === 0 || carAheadHistory.length === 0) {
+      if (!car.lastCheckpoint || !carAhead.lastCheckpoint) {
         newGaps[car.idx] = 0;
         return;
       }
 
-      // If cars have same number of checkpoints, use time difference between their latest checkpoints
+      // Calculate gap based on checkpoint differences
       if (car.checkpointCount === carAhead.checkpointCount) {
-        const carLastCheckpoint = carHistory[carHistory.length - 1];
-        const carAheadLastCheckpoint = carAheadHistory[carAheadHistory.length - 1];
-        newGaps[car.idx] = carLastCheckpoint.timestamp - carAheadLastCheckpoint.timestamp;
+        // Same checkpoint, use time difference
+        newGaps[car.idx] = car.lastCheckpoint.timestamp - carAhead.lastCheckpoint.timestamp;
       } else {
-        // If different number of checkpoints, use time difference between when trailing car reached their latest checkpoint
-        const carLastCheckpoint = carHistory[carHistory.length - 1];
-        newGaps[car.idx] = carLastCheckpoint.timestamp;
+        // Different checkpoints, calculate time to reach car ahead's position
+        const checkpointDifference = carAhead.checkpointCount - car.checkpointCount;
+        const timePerCheckpoint = car.lastCheckpoint.timestamp / car.checkpointCount;
+        newGaps[car.idx] = checkpointDifference * timePerCheckpoint;
       }
     });
   }
@@ -559,6 +555,14 @@ export function useTelemetryData(
     
     // Calculate positions and gaps if we have the required data
     if (newData.CarIdxLapDistPct && newData.CarIdxLap && newData.CarIdxLapCompleted && newData.CarIdxPosition) {
+      console.log('Raw telemetry data:', {
+        lapDistPct: newData.CarIdxLapDistPct,
+        lap: newData.CarIdxLap,
+        lapCompleted: newData.CarIdxLapCompleted,
+        position: newData.CarIdxPosition,
+        sessionTime: newData.SessionTime
+      });
+
       // Update checkpoint history for all cars
       Object.entries(newData.CarIdxLapDistPct).forEach(([idxStr, pos]) => {
         const idx = +idxStr;
@@ -567,13 +571,27 @@ export function useTelemetryData(
         const position = pos as number;
         const totalProgress = completed + position;
         
-        checkpointHistoryRef.current[idx] = updateCheckpointHistory(
+        const oldHistory = checkpointHistoryRef.current[idx] || [];
+        const newHistory = updateCheckpointHistory(
           idx,
           totalProgress,
           newData.SessionTime || 0,
           checkpointHistoryRef.current
         );
+
+        // Log if we added a new checkpoint
+        if (newHistory.length > oldHistory.length) {
+          console.log(`New checkpoint for car ${idx}:`, {
+            totalProgress,
+            timestamp: newData.SessionTime,
+            checkpointCount: newHistory.length
+          });
+        }
+
+        checkpointHistoryRef.current[idx] = newHistory;
       });
+
+      console.log('Current checkpoint history:', checkpointHistoryRef.current);
 
       const { positions, gaps, gapsToLeader } = calculatePositionsAndGaps(
         newData.CarIdxLapDistPct,
@@ -583,6 +601,12 @@ export function useTelemetryData(
         newData.SessionTime || 0,
         checkpointHistoryRef.current
       );
+
+      console.log('Calculated positions and gaps:', {
+        positions,
+        gaps,
+        gapsToLeader
+      });
 
       // Initialize arrays if they don't exist
       newData.CarIdxPosition = newData.CarIdxPosition || [];
@@ -602,8 +626,8 @@ export function useTelemetryData(
         newData.CarIdxGapToLeader[+idx] = gap;
       });
 
-      // Log gap times for debugging
-      console.log('Gap times updated:', {
+      console.log('Updated telemetry data with gaps:', {
+        positions: newData.CarIdxPosition,
         gaps: newData.CarIdxF2Time,
         gapsToLeader: newData.CarIdxGapToLeader
       });
