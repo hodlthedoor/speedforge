@@ -537,9 +537,12 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
     
     // Extract SessionTime
     if let Ok(session_time) = telem.get("SessionTime") {
+        println!("Raw SessionTime from iRacing: {:?}", session_time);
         data.SessionTime = TryInto::<f32>::try_into(session_time).unwrap_or(0.0);
+        println!("Converted SessionTime: {}", data.SessionTime);
         raw_values.insert("SessionTime".to_string(), serde_json::json!(data.SessionTime));
     } else {
+        println!("SessionTime not found in telemetry data");
         data.SessionTime = 0.0;
     }
     
