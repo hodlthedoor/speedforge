@@ -6,11 +6,12 @@ const CHECKPOINT_INTERVAL: f32 = 0.05; // 5% intervals
 /// Calculate gaps between cars based on their positions and checkpoint times
 pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     // Create default empty vectors that live for the entire function
-    let empty_vec: Vec<f32> = Vec::new();
+    let empty_vec_f32: Vec<f32> = Vec::new();
+    let empty_vec_i32: Vec<i32> = Vec::new();
     
     // Get required arrays from telemetry data
-    let lap_dist_pcts = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec);
-    let completed_laps = telemetry_data.CarIdxLapCompleted.as_ref().unwrap_or(&empty_vec);
+    let lap_dist_pcts = telemetry_data.CarIdxLapDistPct.as_ref().unwrap_or(&empty_vec_f32);
+    let completed_laps = telemetry_data.CarIdxLapCompleted.as_ref().unwrap_or(&empty_vec_i32);
     let session_time = telemetry_data.SessionTime;
 
     // Create a map of car data with their current checkpoint and time
@@ -20,7 +21,8 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     for (i, &dist_pct) in lap_dist_pcts.iter().enumerate() {
         // Calculate which 5% checkpoint the car is at
         // Add completed laps to get total progress
-        let total_progress = dist_pct + (completed_laps.get(i).unwrap_or(&0.0) as f32);
+        let completed_laps_f32 = completed_laps.get(i).unwrap_or(&0) as f32;
+        let total_progress = dist_pct + completed_laps_f32;
         let checkpoint = (total_progress / CHECKPOINT_INTERVAL).floor() as i32;
         car_data.insert(i as i32, (total_progress, checkpoint, session_time));
     }
@@ -69,7 +71,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
             println!("  Gap to next: {:.3}", gap_to_next);
             println!("  Gap to prev: {:.3}", gap_to_prev);
             println!("  Raw lap distance: {:.3}", lap_dist_pcts[*car_idx as usize]);
-            println!("  Completed laps: {:.0}", completed_laps.get(*car_idx as usize).unwrap_or(&0.0));
+            println!("  Completed laps: {}", completed_laps.get(*car_idx as usize).unwrap_or(&0));
         }
 
         gap_data.push(GapData {
