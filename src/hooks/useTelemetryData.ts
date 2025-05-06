@@ -269,42 +269,12 @@ const updateCheckpointHistory = (
   }
   
   // Only add checkpoint if we've moved to a new interval
-  // and we don't already have a checkpoint at this interval
-  if (carHistory.length === 0 || 
-      getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
-    // Check if we already have a checkpoint at this interval
-    const existingCheckpoint = carHistory.find(cp => getCheckpointIndex(cp.totalProgress) === checkpointIndex);
-    if (!existingCheckpoint) {
-      const newHistory = [...carHistory, { totalProgress, timestamp }];
-      return newHistory;
-    }
+  if (carHistory.length === 0 || getCheckpointIndex(carHistory[carHistory.length - 1].totalProgress) !== checkpointIndex) {
+    const newHistory = [...carHistory, { totalProgress, timestamp }];
+    return newHistory;
   }
   
   return carHistory;
-};
-
-// Helper to calculate time between two total progress values using checkpoint history
-const calculateTimeBetweenProgress = (
-  history: SimpleCheckpoint[],
-  startProgress: number,
-  endProgress: number
-) => {
-  if (history.length < 2) return 0;
-
-  // Find the closest checkpoints before and after the positions
-  const startCheckpoint = history.find(cp => cp.totalProgress <= startProgress);
-  const endCheckpoint = history.find(cp => cp.totalProgress >= endProgress);
-
-  if (startCheckpoint && endCheckpoint) {
-    // Calculate the time per progress unit between checkpoints
-    const timePerUnit = (endCheckpoint.timestamp - startCheckpoint.timestamp) / 
-                       (endCheckpoint.totalProgress - startCheckpoint.totalProgress);
-    
-    // Calculate the time for the actual positions
-    return (endProgress - startProgress) * timePerUnit;
-  }
-
-  return 0;
 };
 
 // Helper to find the last common checkpoint between two cars
@@ -312,12 +282,10 @@ const findLastCommonCheckpoint = (history1: SimpleCheckpoint[], history2: Simple
   if (!history1.length || !history2.length) return null;
   
   // Find the last checkpoint that both cars have passed
-  for (let i = history1.length - 1; i >= 0; i--) {
-    const checkpoint1 = history1[i];
-    const checkpoint2 = history2.find(cp => cp.totalProgress === checkpoint1.totalProgress);
-    if (checkpoint2) {
-      return checkpoint1;
-    }
+  // Since we use fixed 5% intervals, we can just compare array indices
+  const minLength = Math.min(history1.length, history2.length);
+  if (minLength > 0) {
+    return history1[minLength - 1];
   }
   return null;
 };
