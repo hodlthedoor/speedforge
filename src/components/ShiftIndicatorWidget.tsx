@@ -166,8 +166,6 @@ const ShiftIndicatorWidgetComponent: React.FC<ShiftIndicatorWidgetProps> = ({ id
     if (!svgRef.current) return;
     
     const currentWidth = widgetWidthRef.current;
-    console.log(`[RENDER] Drawing chart with width: ${currentWidth}px`);
-    
     const svg = d3.select(svgRef.current);
     const height = 120;
     const margin = { top: 15, right: 10, bottom: 25, left: 10 };

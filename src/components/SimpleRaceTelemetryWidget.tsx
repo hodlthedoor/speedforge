@@ -189,7 +189,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         incidents: driver?.incidents,
         carClass: telemetryData.CarIdxClass?.[carIdx] || '',
         position,
-        classPosition: telemetryData.CarIdxClassPosition?.[carIdx] || 999,
+        classPosition: telemetryData.CarIdxClassPosition?.[carIdx] ?? 0,
         currentLap,
         lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
         lastLapTime: telemetryData.CarIdxLastLapTime?.[carIdx] || 0,
@@ -222,7 +222,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
     });
     
     // Filter out invalid entries (position 0 or 999 usually means no car there)
-    const validCars = carRows.filter(car => car.position > 0 && car.position < 999);
+    const validCars = carRows.filter(car => car.position > 0 && car.position < 999 && car.classPosition > 0);
     
     // Sort the data based on the selected sort method
     let sortedCars = [...validCars];
