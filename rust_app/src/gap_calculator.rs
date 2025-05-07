@@ -64,19 +64,13 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
         }
         let ahead = car_data[idx - 1].0;
 
-        // find last common checkpoint
         let gap = CHECKPOINT_HISTORY.with(|h| {
             let H = h.borrow();
-            let me = &H[&car];
-            let him = &H[&ahead];
-            let mut c = cp;
-            while c >= 0 {
-                if let (Some(&tm), Some(&th)) = (me.get(&c), him.get(&c)) {
-                    return tm - th;
-                }
-                c -= 1;
-            }
-            0.0
+            let me   = &H[&car];
+            let him  = &H[&ahead];
+            let t_me = me.get(&cp).copied().unwrap_or(0.0);
+            let t_him= him.get(&cp).copied().unwrap_or(0.0);
+            t_me - t_him
         });
 
         gaps[ci] = gap;
