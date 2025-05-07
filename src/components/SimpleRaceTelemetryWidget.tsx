@@ -174,7 +174,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       const currentLap = telemetryData.CarIdxLap?.[carIdx] || 0;
 
       // Get the gaps from telemetry data
-      const gapToAhead = telemetryData.CarIdxF2Time?.[carIdx] || 0;
+      const gapVal = telemetryData.CarIdxF2Time?.[carIdx] || 0;
       const gapToLeader = telemetryData.CarIdxGapToLeader?.[carIdx] || 0;
 
       // Create data object for this car with only available CarIdx metrics
@@ -194,8 +194,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         lastLapCompleted: telemetryData.CarIdxLapCompleted?.[carIdx] || 0,
         lastLapTime: telemetryData.CarIdxLastLapTime?.[carIdx] || 0,
         bestLapTime: telemetryData.CarIdxBestLapTime?.[carIdx] || 0,
-        gapToAhead,
-        gapToLeader,
+        gapToAhead: gapVal,
+        gapToLeader: gapToLeader,
         trackPosition,
         gear: telemetryData.CarIdxGear?.[carIdx] || '-',
         rpm: telemetryData.CarIdxRPM?.[carIdx] || 0,
@@ -321,13 +321,13 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       case 'interval':
         return car.trackPos ? (car.trackPos * 100).toFixed(1) + '%' : '0%';
       case 'gap':
-        const gapToAhead = telemetryData.CarIdxF2Time?.[car.carIdx];
-        if (gapToAhead === undefined || gapToAhead === 0) return '--';
-        return formatLapTime(gapToAhead);
+        const gapVal = telemetryData.CarIdxF2Time?.[car.carIdx];
+        if (gapVal === undefined || gapVal === 0) return '--';
+        return `${gapVal.toFixed(1)}s`;
       case 'gapToLeader':
-        const gapToLeader = telemetryData.CarIdxGapToLeader?.[car.carIdx];
-        if (gapToLeader === undefined || gapToLeader === 0) return '--';
-        return formatLapTime(gapToLeader);
+        const leaderGap = telemetryData.CarIdxGapToLeader?.[car.carIdx];
+        if (leaderGap === undefined || leaderGap === 0) return '--';
+        return `${leaderGap.toFixed(1)}s`;
       case 'lap':
         return car.currentLap;
       case 'lastLapTime':
