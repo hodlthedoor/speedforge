@@ -362,11 +362,11 @@ export function useTelemetryData(
     
     // Update positions and gaps using backend-calculated data
     if (newData.gap_data) {
-      // Filter out cars with invalid class position (999)
+      // Filter out cars without a valid class position (<= 0)
       newData.gap_data = newData.gap_data.filter(gap => {
         const classPosArr = newData.CarIdxClassPosition;
         const classPos = classPosArr ? classPosArr[gap.car_idx] : undefined;
-        return classPos !== undefined && classPos < 999;
+        return classPos && classPos !== undefined && classPos > 0;
       });
       // Initialize arrays with the correct size (64 cars)
       newData.CarIdxPosition = new Array(64).fill(0);
@@ -384,12 +384,6 @@ export function useTelemetryData(
           newData.CarIdxF2Time[gap.car_idx] = gap.gap_to_next;
           newData.CarIdxGapToLeader[gap.car_idx] = gap.gap_to_leader;
           
-          // Debug log each gap update
-          console.log(`Updated gaps for car ${gap.car_idx}:`, {
-            position: gap.position,
-            gap_to_next: gap.gap_to_next,
-            gap_to_leader: gap.gap_to_leader
-          });
         }
       });
 
