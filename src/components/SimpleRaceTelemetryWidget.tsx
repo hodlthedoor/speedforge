@@ -725,10 +725,10 @@ const getControls = (widgetState: any, updateWidget: (updates: any) => void): Wi
       label: 'Font Size',
       value: widgetState.fontSize || 'text-sm',
       options: [
-        { value: 'text-xs', label: 'Small' },
-        { value: 'text-sm', label: 'Medium' },
-        { value: 'text-base', label: 'Large' },
-        { value: 'text-lg', label: 'X-Large' }
+        { value: 'text-sm', label: 'Small' },
+        { value: 'text-base', label: 'Medium' },
+        { value: 'text-lg', label: 'Large' },
+        { value: 'text-xl', label: 'X-Large' }
       ],
       onChange: (value) => onChange('fontSize', value)
     },
