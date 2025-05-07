@@ -362,6 +362,12 @@ export function useTelemetryData(
     
     // Update positions and gaps using backend-calculated data
     if (newData.gap_data) {
+      // Filter out cars with invalid class position (999)
+      newData.gap_data = newData.gap_data.filter(gap => {
+        const classPosArr = newData.CarIdxClassPosition;
+        const classPos = classPosArr ? classPosArr[gap.car_idx] : undefined;
+        return classPos !== undefined && classPos < 999;
+      });
       // Initialize arrays with the correct size (64 cars)
       newData.CarIdxPosition = new Array(64).fill(0);
       newData.CarIdxF2Time = new Array(64).fill(0);
