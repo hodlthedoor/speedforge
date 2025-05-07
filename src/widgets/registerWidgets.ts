@@ -4,8 +4,6 @@ import { SimpleTelemetryWidget } from '../components/SimpleTelemetryWidget';
 import PedalTraceWidget from '../components/PedalTraceWidget';
 import ShiftIndicatorWidget from '../components/ShiftIndicatorWidget';
 import GearShiftWidget from '../components/GearShiftWidget';
-import CarLeftIndicatorWidget from '../components/CarLeftIndicatorWidget';
-import CarRightIndicatorWidget from '../components/CarRightIndicatorWidget';
 import SpotterWidget from '../components/SpotterWidget';
 import WeekendInfoWidget from '../components/WeekendInfoWidget';
 import SpeedWidget from '../components/SpeedWidget';
@@ -17,24 +15,7 @@ import CarIndexTelemetryWidget from '../components/CarIndexTelemetryWidget';
 import RacePositionWidget from '../components/RacePositionWidget';
 import TrackPositionWidget from '../components/TrackPositionWidget';
 import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
-import CarBalanceWidget from '../components/CarBalanceWidget';
 
-// Register Track Map Widget
-WidgetRegistry.register('track-map', {
-  component: TrackMapWidget,
-  defaultTitle: 'Track Map',
-  defaultOptions: {
-    colorMode: 'none'
-  },
-  defaultState: {
-    width: 550,
-    height: 300,
-    colorMode: 'none',
-    mapBuildingState: 'idle'
-  },
-  description: 'Visualize the race track and car position',
-  category: 'Visualization'
-});
 
 // Register Telemetry Widget
 WidgetRegistry.register('telemetry', {
@@ -67,32 +48,6 @@ WidgetRegistry.register('shift-indicator', {
   category: 'Driving Aids'
 });
 
-// Register Gear Shift Widget
-WidgetRegistry.register('gear-shift', {
-  component: GearShiftWidget,
-  defaultTitle: 'Gear Shift Indicator',
-  defaultOptions: { width: 300 },
-  description: 'Display a gear shift indicator bar that transitions from green to amber to red based on telemetry data',
-  category: 'Driving Aids'
-});
-
-// Register Car Left Indicator Widget
-WidgetRegistry.register('car-left-indicator', {
-  component: CarLeftIndicatorWidget,
-  defaultTitle: 'Car Left',
-  defaultOptions: {},
-  description: 'Display indicator when cars are to your left',
-  category: 'Spotter Aids'
-});
-
-// Register Car Right Indicator Widget
-WidgetRegistry.register('car-right-indicator', {
-  component: CarRightIndicatorWidget,
-  defaultTitle: 'Car Right',
-  defaultOptions: {},
-  description: 'Display indicator when cars are to your right',
-  category: 'Spotter Aids'
-});
 
 // Register Spotter Widget
 WidgetRegistry.register('spotter', {
@@ -190,33 +145,7 @@ WidgetRegistry.register('car-index-telemetry', {
   category: 'Race Data'
 });
 
-// Register Race Position Widget
-WidgetRegistry.register('race-positions', {
-  component: RacePositionWidget,
-  defaultTitle: 'Race Positions',
-  defaultOptions: {},
-  defaultState: {
-    width: 300,
-    height: 400,
-    highlightPlayerCar: true,
-    maxCarsToShow: 20
-  },
-  description: 'Display race positions and gaps for all cars',
-  category: 'Race Data'
-});
 
-// Register Track Position Widget
-WidgetRegistry.register('track-positions', {
-  component: TrackPositionWidget,
-  defaultTitle: 'Track Map',
-  defaultOptions: {},
-  defaultState: {
-    width: 350,
-    height: 250
-  },
-  description: 'Visualize car positions on the track',
-  category: 'Race Data'
-});
 
 // Register Simple Race Telemetry Widget
 WidgetRegistry.register('simple-race-telemetry', {
@@ -245,17 +174,6 @@ WidgetRegistry.register('simple-race-telemetry', {
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'
-});
-
-// Register Car Balance Widget
-WidgetRegistry.register('car-balance', {
-  component: CarBalanceWidget,
-  defaultTitle: 'Car Balance Monitor',
-  description: 'Monitor car balance metrics including yaw rate, slip angle, lateral G-force, and steering angle',
-  defaultOptions: {
-    width: 480,
-    historyLength: 100
-  }
 });
 
 export default WidgetRegistry; 
