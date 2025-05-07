@@ -10,6 +10,10 @@ thread_local! {
 }
 
 pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
+    // DEBUG: log availability of lap time arrays and raw keys
+    println!("DEBUG calculate_gaps: CarIdxBestLapTime = {:?}", telemetry_data.CarIdxBestLapTime);
+    println!("DEBUG calculate_gaps: CarIdxLapCompleted = {:?}", telemetry_data.CarIdxLapCompleted);
+    println!("DEBUG calculate_gaps: raw_values keys = {:?}", telemetry_data.raw_values.keys().collect::<Vec<_>>());
     let lap_dist = telemetry_data.CarIdxLapDistPct.as_ref().unwrap();
     let laps_done = telemetry_data.CarIdxLapCompleted.as_ref().unwrap();
     let t = telemetry_data.SessionTime;
