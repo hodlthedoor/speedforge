@@ -16,7 +16,7 @@ interface SimpleRaceTelemetryWidgetProps {
   maxItems?: number;
   name?: string;
   widgetWidth?: number;
-  fontSize?: 'text-xs' | 'text-sm' | 'text-base' | 'text-lg';
+  fontSize?: 'text-sm' | 'text-base' | 'text-lg' | 'text-xl';
   selectedColumns?: string[]; // New property for column selection
 }
 
