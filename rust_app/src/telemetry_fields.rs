@@ -207,6 +207,9 @@ pub struct TelemetryData {
     pub CarIdxBestLapTime: Option<Vec<f32>>,
     
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxLastLapTime: Option<Vec<f32>>,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub CarIdxEstTime: Option<Vec<f32>>,
     
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -351,7 +354,8 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
         "CarIdxPosition", "CarIdxLapDistPct", "CarIdxLap", "CarIdxLapCompleted",
         "CarIdxF2Time", "CarIdxClassPosition", "CarIdxClass", "CarIdxGear",
         "CarIdxRPM", "CarIdxOnPitRoad", "CarIdxP2P_Count", "CarIdxP2P_Status",
-        "CarIdxBestLapNum", "CarIdxBestLapTime", "CarIdxEstTime", "CarIdxFastRepairsUsed",
+        "CarIdxBestLapNum", "CarIdxBestLapTime", "CarIdxLastLapTime",
+        "CarIdxEstTime", "CarIdxFastRepairsUsed",
         "CarIdxPaceFlags", "CarIdxPaceLine", "CarIdxPaceRow", "CarIdxQualTireCompound",
         "CarIdxQualTireCompoundLocked", "CarIdxSteer", "CarIdxTireCompound",
         "CarIdxTrackSurface", "CarIdxTrackSurfaceMaterial"
@@ -398,12 +402,13 @@ pub fn extract_telemetry(telem: &iracing::telemetry::Sample) -> TelemetryData {
                         
                         // Set the actual struct field based on field name
                         match *field_name {
-                            "CarIdxLapDistPct" => data.CarIdxLapDistPct = Some(json_array),
-                            "CarIdxF2Time" => data.CarIdxF2Time = Some(json_array),
-                            "CarIdxRPM" => data.CarIdxRPM = Some(json_array),
-                            "CarIdxBestLapTime" => data.CarIdxBestLapTime = Some(json_array),
-                            "CarIdxEstTime" => data.CarIdxEstTime = Some(json_array),
-                            "CarIdxSteer" => data.CarIdxSteer = Some(json_array),
+                            "CarIdxLapDistPct" => data.CarIdxLapDistPct = Some(json_array.clone()),
+                            "CarIdxF2Time" => data.CarIdxF2Time = Some(json_array.clone()),
+                            "CarIdxRPM" => data.CarIdxRPM = Some(json_array.clone()),
+                            "CarIdxBestLapTime" => data.CarIdxBestLapTime = Some(json_array.clone()),
+                            "CarIdxLastLapTime" => data.CarIdxLastLapTime = Some(json_array.clone()),
+                            "CarIdxEstTime" => data.CarIdxEstTime = Some(json_array.clone()),
+                            "CarIdxSteer" => data.CarIdxSteer = Some(json_array.clone()),
                             _ => {}, // Ignore other fields
                         }
                     }
