@@ -332,6 +332,8 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
         return car.currentLap;
       case 'lastLapTime':
         return car.lastLapTime > 0 ? formatLapTime(car.lastLapTime) : '--:--';
+      case 'bestLapTime':
+        return car.bestLapTime > 0 ? formatLapTime(car.bestLapTime) : '--:--';
       case 'lapDelta':
         return car.lapDelta || '-';
       case 'raceStartPosition':
