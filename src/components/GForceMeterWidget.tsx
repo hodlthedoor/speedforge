@@ -106,11 +106,27 @@ const GForceMeterWidgetComponent: React.FC<GForceMeterWidgetProps> = ({ id, onCl
     const svg = d3.select(svgEl)
       .attr('width', width)
       .attr('height', height);
-    // Clear only axes/trail/bubble
-    svg.selectAll('.axis, .trail, .bubble').remove();
+    // Clear only axes, rings, trail and bubble
+    svg.selectAll('.axis, .ring, .trail, .bubble').remove();
 
     const xScale = d3.scaleLinear().domain([-max, max]).range([margin.left, width - margin.right]);
     const yScale = d3.scaleLinear().domain([-max, max]).range([height - margin.bottom, margin.top]);
+
+    // Draw concentric reference rings at 50%, 80%, and 100% of max G
+    const centerX = xScale(0);
+    const centerY = yScale(0);
+    const ringPercents = [0.5, 0.8, 1];
+    ringPercents.forEach((pct, idx) => {
+      const r = xScale(pct * max) - xScale(0);
+      svg.append('circle').classed('ring', true)
+        .attr('cx', centerX)
+        .attr('cy', centerY)
+        .attr('r', r)
+        .attr('stroke', '#666')
+        .attr('stroke-width', 1)
+        .attr('fill', 'none')
+        .attr('stroke-dasharray', idx === ringPercents.length - 1 ? '' : (idx === 0 ? '4,4' : '2,2'));
+    });
 
     // Draw axes lines
     const axes = [[-max,0, max,0], [0,-max, 0,max]];

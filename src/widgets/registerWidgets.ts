@@ -16,6 +16,8 @@ import RacePositionWidget from '../components/RacePositionWidget';
 import TrackPositionWidget from '../components/TrackPositionWidget';
 import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
 import GForceMeterWidget from '../components/GForceMeterWidget';
+import SlipYawWidget from '../components/SlipYawWidget';
+import SlipYawPixiWidget from '../components/SlipYawPixiWidget';
 
 
 // Register Telemetry Widget
@@ -185,6 +187,26 @@ WidgetRegistry.register('simple-race-telemetry', {
   },
   description: 'Display detailed race standings with customizable metrics for all cars',
   category: 'Race Data'
+});
+
+// Register Slip & Yaw Widget
+WidgetRegistry.register('slip-yaw', {
+  component: SlipYawWidget,
+  defaultTitle: 'Slip & Yaw',
+  defaultOptions: {},
+  defaultState: { widgetSize: 300, slipMax: 10, yawMax: 100 },
+  description: 'Visualize car slip angle vs yaw rate in real time',
+  category: 'Driving Data'
+});
+
+// Register Slip & Yaw Pixi Widget
+WidgetRegistry.register('slip-yaw-pixi', {
+  component: SlipYawPixiWidget,
+  defaultTitle: 'Slip & Yaw (Pixi)',
+  defaultOptions: {},
+  defaultState: { widgetSize: 300, slipMax: 10, yawMax: 100 },
+  description: 'High-performance PixiJS visualization of slip angle vs yaw rate',
+  category: 'Driving Data'
 });
 
 export default WidgetRegistry; 
