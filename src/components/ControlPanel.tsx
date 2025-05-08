@@ -1489,10 +1489,28 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           });
         }
         
-        // Apply widget state
+        // Apply widget state by invoking each control's onChange
         if (settings.state) {
           console.log(`Applying state for newly mounted widget ${widgetId}:`, settings.state);
-          updateWidgetState(widgetId, settings.state);
+          // Get the widget object for control definitions
+          const widget = activeWidgets.find(w => w.id === widgetId);
+          if (widget) {
+            const controls = getWidgetControls(widget);
+            // Loop through each state key and apply via control or fallback
+            Object.entries(settings.state).forEach(([key, value]) => {
+              const control = controls.find(c => c.id === key);
+              if (control) {
+                console.log(`[ControlPanel] Applying control '${key}' for widget ${widgetId}`);
+                control.onChange(value);
+              } else {
+                console.log(`[ControlPanel] No control found for '${key}', using updateWidgetState fallback`);
+                updateWidgetState(widgetId, { [key]: value });
+              }
+            });
+          } else {
+            // Fallback if widget info is missing
+            updateWidgetState(widgetId, settings.state);
+          }
         }
         
         // Remove from pending map
@@ -1521,7 +1539,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       window.removeEventListener('widget:mounted', handleWidgetMounted);
       window.removeEventListener('widget:unmounted', handleWidgetUnmounted);
     };
-  }, [dispatchWidgetAppearance, updateWidgetState]);
+  }, [dispatchWidgetAppearance, updateWidgetState, getWidgetControls, activeWidgets]);
 
   // Make sure we return JSX at the end of the component
   return (
@@ -1866,7 +1884,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 />
                 <button
                   onClick={(e) => {
-                    console.log('Save Config button clicked');
                     e.preventDefault(); // Prevent any default action
                     handleSavePanel();
                   }}
