@@ -15,6 +15,7 @@ import CarIndexTelemetryWidget from '../components/CarIndexTelemetryWidget';
 import RacePositionWidget from '../components/RacePositionWidget';
 import TrackPositionWidget from '../components/TrackPositionWidget';
 import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
+import GForceMeterWidget from '../components/GForceMeterWidget';
 
 
 // Register Telemetry Widget
@@ -75,6 +76,16 @@ WidgetRegistry.register('speed', {
     unit: 'kph'
   },
   description: 'Display current speed with customizable size',
+  category: 'Driving Data'
+});
+
+// Register G-Force Meter Widget
+WidgetRegistry.register('g-force-meter', {
+  component: GForceMeterWidget,
+  defaultTitle: 'G-Force Meter',
+  defaultOptions: {},
+  defaultState: { widgetSize: 300, maxG: 3 },
+  description: 'Display lateral and longitudinal g-forces in a bubble diagram',
   category: 'Driving Data'
 });
 

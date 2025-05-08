@@ -245,7 +245,7 @@ const NearbyCarWidgetComponent: React.FC<NearbyCarWidgetProps> = ({ id, onClose 
           fontWeight: 'bold',
           backgroundColor: displayState.color,
           color: displayState.color === 'transparent' ? '#333' : 'white',
-          opacity: displayState.color === 'transparent' && isClickThrough ? 0 : 1
+          opacity: displayState.color === 'transparent' && isClickThrough ? 0 : 1,
         }}
       >
         {!isClickThrough && displayState.text}
