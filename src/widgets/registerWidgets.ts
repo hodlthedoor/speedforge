@@ -18,6 +18,7 @@ import SimpleRaceTelemetryWidget from '../components/SimpleRaceTelemetryWidget';
 import GForceMeterWidget from '../components/GForceMeterWidget';
 import SlipYawWidget from '../components/SlipYawWidget';
 import SlipYawPixiWidget from '../components/SlipYawPixiWidget';
+import PedalTracePixiWidget from '../components/PedalTracePixiWidget';
 
 
 // Register Telemetry Widget
@@ -207,6 +208,16 @@ WidgetRegistry.register('slip-yaw-pixi', {
   defaultState: { widgetSize: 300, slipMax: 10, yawMax: 100 },
   description: 'High-performance PixiJS visualization of slip angle vs yaw rate',
   category: 'Driving Data'
+});
+
+// Register Pedal Trace Pixi Widget
+WidgetRegistry.register('pedal-trace-pixi', {
+  component: PedalTracePixiWidget,
+  defaultTitle: 'Pedal Inputs (Pixi)',
+  defaultOptions: {},
+  defaultState: { width: 480, historyLength: 100 },
+  description: 'Visualize throttle and brake inputs with PixiJS',
+  category: 'Visualization'
 });
 
 export default WidgetRegistry; 
