@@ -178,7 +178,10 @@ pub struct TelemetryData {
     
     #[serde(skip_serializing_if = "Option::is_none")]
     pub CarIdxF2Time: Option<Vec<f32>>,
-    
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub CarIdxGapToLeader: Option<Vec<f32>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub CarIdxClassPosition: Option<Vec<i32>>,
     

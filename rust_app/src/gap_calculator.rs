@@ -31,6 +31,9 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
     telemetry_data
         .CarIdxF2Time
         .get_or_insert_with(|| vec![0.0; n]);
+    telemetry_data
+        .CarIdxGapToLeader
+        .get_or_insert_with(|| vec![0.0; n]);
 
     // gather (car, progress, cp)
     let mut car_data = Vec::with_capacity(lap_dist.len());
@@ -56,6 +59,7 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
 
     let positions = telemetry_data.CarIdxPosition.as_mut().unwrap();
     let gaps = telemetry_data.CarIdxF2Time.as_mut().unwrap();
+    let leader_gaps = telemetry_data.CarIdxGapToLeader.as_mut().unwrap();
 
     for (idx, &(car, _, cp)) in car_data.iter().enumerate() {
         let ci = car as usize;
@@ -63,19 +67,29 @@ pub fn calculate_gaps(telemetry_data: &mut TelemetryData) {
 
         if idx == 0 {
             gaps[ci] = 0.0;
+            leader_gaps[ci] = 0.0;
             continue;
         }
 
         let ahead = car_data[idx - 1].0;
-        // compute and apply only if >0
+        let leader = car_data[0].0;
+
         CHECKPOINT_HISTORY.with(|h| {
             let H = h.borrow();
-            if let (Some(&t_me), Some(&t_him)) =
-                (H[&car].get(&cp), H[&ahead].get(&cp))
-            {
+        
+            // compute gap to car ahead
+            if let (Some(&t_me), Some(&t_him)) = (H[&car].get(&cp), H[&ahead].get(&cp)) {
                 let delta = t_me - t_him;
                 if delta > 0.0 {
                     gaps[ci] = delta;
+                }
+            }
+        
+            // compute gap to leader
+            if let (Some(&t_me), Some(&t_leader)) = (H[&car].get(&cp), H[&leader].get(&cp)) {
+                let delta2 = t_me - t_leader;
+                if delta2 > 0.0 {
+                    leader_gaps[ci] = delta2;
                 }
             }
         });

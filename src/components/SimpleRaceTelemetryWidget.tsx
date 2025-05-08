@@ -31,7 +31,6 @@ const AVAILABLE_COLUMNS = [
   { value: 'gap', label: 'Gap to Ahead' },
   { value: 'gapToLeader', label: 'Gap to Leader' },
   { value: 'lap', label: 'Current Lap' },
-  { value: 'lastLapCompleted', label: 'Last Completed Lap' },
   { value: 'bestLapTime', label: 'Best Lap Time' },
   { value: 'lastLapTime', label: 'Last Lap Time' },
   { value: 'gear', label: 'Gear' },
@@ -48,8 +47,7 @@ const AVAILABLE_COLUMNS = [
   { value: 'qualTireCompoundLocked', label: 'Qual Tire Locked' },
   { value: 'tireCompound', label: 'Tire Compound' },
   { value: 'trackSurface', label: 'Track Surface' },
-  { value: 'trackSurfaceMaterial', label: 'Surface Material' },
-  { value: 'currentMetric', label: 'Selected Metric' }
+  { value: 'trackSurfaceMaterial', label: 'Surface Material' }
 ];
 
 // Update DEFAULT_COLUMNS array with object format values
