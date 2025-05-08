@@ -1213,20 +1213,32 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     };
   }, [isConnected, reconnecting, handleReconnect]);
 
-  // Listen for widget click events
+  // Listen for widget click events (from control-click in control panel or widget click)
   useEffect(() => {
     const handleWidgetClick = (e: any) => {
-      if (e && e.detail && e.detail.widget) {
+      if (!e || !e.detail) return;
+      // If event provides full widget object
+      if (e.detail.widget) {
         setSelectedWidget(e.detail.widget);
+      }
+      // If event provides only widgetId (e.g. from BaseWidget click)
+      else if (e.detail.widgetId) {
+        const widget = activeWidgets.find(w => w.id === e.detail.widgetId);
+        if (widget) {
+          setSelectedWidget(widget);
+        }
       }
     };
 
+    // Listen to both event names
     window.addEventListener('widget:click', handleWidgetClick);
+    window.addEventListener('widget:clicked', handleWidgetClick);
     
     return () => {
       window.removeEventListener('widget:click', handleWidgetClick);
+      window.removeEventListener('widget:clicked', handleWidgetClick);
     };
-  }, []);
+  }, [activeWidgets]);
 
   // Ensure proper cleanup when component is unmounted
   useEffect(() => {
