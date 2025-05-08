@@ -217,7 +217,8 @@ export type TelemetryMetric =
   | 'CarIdxSteer'
   | 'CarIdxTireCompound'
   | 'CarIdxTrackSurface'
-  | 'CarIdxTrackSurfaceMaterial';
+  | 'CarIdxTrackSurfaceMaterial'
+  | 'CarIdxGapToLeader';
 
 interface UseTelemetryDataOptions {
   metrics?: TelemetryMetric[];

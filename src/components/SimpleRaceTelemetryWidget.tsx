@@ -143,6 +143,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
       'CarIdxP2P_Status',
       'CarIdxSteer',
       'SessionTime',
+      'CarIdxGapToLeader',
       selectedMetric,
     ],
   });
