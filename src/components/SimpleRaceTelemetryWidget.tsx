@@ -451,7 +451,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
               <thead className="sticky top-0 bg-slate-800 text-gray-300">
                 <tr className="text-xs md:text-sm">
                   {selectedColumns.map((column) => (
-                    <th key={column} className="py-2 px-3 text-left">
+                    <th key={column} className={`py-2 px-3 text-left ${column === 'position' ? 'w-8 px-1' : ''}`}>
                       {AVAILABLE_COLUMNS.find((c) => c.value === column)?.label || column}
                     </th>
                   ))}
@@ -464,7 +464,7 @@ const SimpleRaceTelemetryWidgetInternal: React.FC<SimpleRaceTelemetryWidgetProps
                     className={`${car.isPlayer ? 'bg-blue-900/50' : 'hover:bg-slate-700/60'} border-b border-slate-700/50 text-ellipsis`}
                   >
                     {selectedColumns.map((column) => (
-                      <td key={column} className={`py-2 px-3 truncate ${column === 'metric' ? 'font-mono' : ''}`}>
+                      <td key={column} className={`py-2 px-3 truncate ${column === 'metric' ? 'font-mono' : ''} ${column === 'position' ? 'w-8 px-1' : ''}`}>
                         {renderColumnContent(column, car)}
                       </td>
                     ))}
