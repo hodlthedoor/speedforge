@@ -38,30 +38,25 @@ const AVAILABLE_COLUMNS = [
   { value: 'steer', label: 'Steering Input' },
   { value: 'isOnPitRoad', label: 'On Pit Road' },
   { value: 'fastRepairsUsed', label: 'Fast Repairs Used' },
-  { value: 'p2pCount', label: 'Push-to-Pass Count' },
-  { value: 'p2pStatus', label: 'Push-to-Pass Status' },
-  { value: 'paceFlags', label: 'Pace Flags' },
-  { value: 'paceLine', label: 'Pace Line' },
-  { value: 'paceRow', label: 'Pace Row' },
-  { value: 'qualTireCompound', label: 'Qualifying Tire' },
-  { value: 'qualTireCompoundLocked', label: 'Qual Tire Locked' },
-  { value: 'tireCompound', label: 'Tire Compound' },
-  { value: 'trackSurface', label: 'Track Surface' },
-  { value: 'trackSurfaceMaterial', label: 'Surface Material' }
+  // { value: 'p2pCount', label: 'Push-to-Pass Count' },
+  // { value: 'p2pStatus', label: 'Push-to-Pass Status' },
+  // { value: 'paceFlags', label: 'Pace Flags' },
+  // { value: 'paceLine', label: 'Pace Line' },
+  // { value: 'paceRow', label: 'Pace Row' },
+  // { value: 'qualTireCompound', label: 'Qualifying Tire' },
+  // { value: 'qualTireCompoundLocked', label: 'Qual Tire Locked' },
+  // { value: 'tireCompound', label: 'Tire Compound' },
+  // { value: 'trackSurface', label: 'Track Surface' },
+  // { value: 'trackSurfaceMaterial', label: 'Surface Material' }
 ];
 
 // Update DEFAULT_COLUMNS array with object format values
 const DEFAULT_COLUMNS = [
   'position',
-  'number',
   'driverName',
-  'carClass',
-  'classPosition',
   'interval',
   'gap',
-  'lap',
-  'bestLapTime',
-  'currentMetric',
+  'bestLapTime'
 ];
 
 // Add formatLapTime helper function
