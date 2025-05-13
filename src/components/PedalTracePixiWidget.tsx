@@ -13,6 +13,8 @@ interface PedalTracePixiWidgetProps {
 
 const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Debug: log on each render to see when component renders and ref state
+  console.log('[PedalTracePixiWidget] component render, containerRef.current:', containerRef.current);
   const appRef = useRef<PIXI.Application | null>(null);
   const throttleRef = useRef<PIXI.Graphics | null>(null);
   const brakeRef = useRef<PIXI.Graphics | null>(null);
@@ -46,9 +48,13 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
 
   // Setup Pixi
   useEffect(() => {
-    console.log('[PedalTracePixiWidget] initialization effect running, containerRef:', containerRef.current);
+    // Only initialize once when the container is available
+    if (appRef.current) {
+      return;
+    }
+    console.log('[PedalTracePixiWidget] initialization effect, containerRef.current:', containerRef.current);
     if (!containerRef.current) {
-      console.warn('[PedalTracePixiWidget] containerRef.current is null, skipping Pixi init');
+      // Container not yet mounted, wait for next render
       return;
     }
     const initOptions = { width, height: 150, backgroundAlpha: 0 };
@@ -61,16 +67,19 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
         appRef.current = app;
         throttleRef.current = new PIXI.Graphics();
         brakeRef.current = new PIXI.Graphics();
-        app.stage.addChild(throttleRef.current, throttleRef.current, brakeRef.current);
+        // Add throttle and brake graphics to the stage
+        app.stage.addChild(throttleRef.current, brakeRef.current);
       })
       .catch(error => {
         console.error('[PedalTracePixiWidget] app.init() failed:', error);
       });
     return () => {
-      console.log('[PedalTracePixiWidget] destroying PIXI.Application');
-      app.destroy(true, { children: true });
+      if (appRef.current) {
+        console.log('[PedalTracePixiWidget] destroying PIXI.Application');
+        appRef.current.destroy(true, { children: true });
+      }
     };
-  }, []);
+  }, [containerRef.current]);
 
   // Data buffer
   const bufferRef = useRef<{t:number; thr:number; brk:number}[]>([]);
