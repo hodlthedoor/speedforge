@@ -45,23 +45,38 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     return () => unsub();
   }, [id]);
 
-  // Setup Pixi.js application
+  // Ref to ensure Pixi init only happens once
+  const pixiInitializedRef = useRef<boolean>(false);
+  // State to track when Pixi is ready for drawing
+  const [isPixiReady, setIsPixiReady] = useState<boolean>(false);
+
+  // Setup Pixi.js application once container is mounted
   useEffect(() => {
-    if (!containerRef.current) return;
-    // Create the application and initialize with options
+    if (pixiInitializedRef.current) return;
+    if (!containerRef.current) {
+      console.log('[SlipYawPixiWidget] container not mounted, waiting...');
+      return;
+    }
+    pixiInitializedRef.current = true;
+    console.log('[SlipYawPixiWidget] initializing Pixi with size', widgetSize);
     const app = new PIXI.Application();
-    app.init({ width: widgetSize, height: widgetSize, backgroundAlpha: 0 }).then(() => {
-      // Append canvas after initialization
-      containerRef.current!.appendChild(app.canvas);
-      appRef.current = app;
-      axesRef.current = new PIXI.Graphics();
-      bubbleRef.current = new PIXI.Graphics();
-      app.stage.addChild(axesRef.current, bubbleRef.current);
-    });
+    app.init({ width: widgetSize, height: widgetSize, backgroundAlpha: 0 })
+      .then(() => {
+        console.log('[SlipYawPixiWidget] Pixi init resolved');
+        containerRef.current!.appendChild(app.canvas);
+        appRef.current = app;
+        axesRef.current = new PIXI.Graphics();
+        bubbleRef.current = new PIXI.Graphics();
+        app.stage.addChild(axesRef.current, bubbleRef.current);
+        // Mark ready to draw
+        setIsPixiReady(true);
+      })
+      .catch(error => console.error('[SlipYawPixiWidget] Pixi init error:', error));
     return () => {
+      console.log('[SlipYawPixiWidget] destroying Pixi app');
       app.destroy(true, { children: true });
     };
-  }, []);
+  }, [containerRef.current]);
 
   // Get telemetry data
   const { data: telemetryData } = useTelemetryData(id, {
@@ -75,7 +90,7 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     const app = appRef.current;
     const axes = axesRef.current;
     const bubble = bubbleRef.current;
-    if (!app || !axes || !bubble) return;
+    if (!isPixiReady || !app || !axes || !bubble) return;
 
     const size = widgetSize;
     const margin = 20;
@@ -114,7 +129,7 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     bubble.circle(x, y, 6);
     bubble.fill({ color: 0xff9800 });
     bubble.stroke({ color: 0xffffff, width: 1 });
-  }, [telemetryData, widgetSize, slipMax, yawMax]);
+  }, [telemetryData, widgetSize, slipMax, yawMax, isPixiReady]);
 
   return (
     <Widget id={id} title="Slip & Yaw (Pixi)" width={widgetSize} height={widgetSize} onClose={onClose}>
