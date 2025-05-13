@@ -46,15 +46,27 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
     return () => unsub();
   }, [id]);
 
-  // Setup Pixi
+  // Wait for telemetry connection before initializing Pixi (ensures BaseWidget has rendered children)
+  const { data: telemetryData, isConnected: telemetryConnected } = useTelemetryData(id, {
+    metrics: ['throttle_pct', 'brake_pct'] as TelemetryMetric[],
+    throttleUpdates: true,
+    updateInterval: 20
+  });
+
+  // Debug: log telemetry connection status changes
   useEffect(() => {
-    // Only initialize once when the container is available
-    if (appRef.current) {
+    console.log('[PedalTracePixiWidget] telemetryConnected:', telemetryConnected);
+  }, [telemetryConnected]);
+
+  useEffect(() => {
+    if (!telemetryConnected) {
+      console.log('[PedalTracePixiWidget] telemetry not connected yet, delaying Pixi init');
       return;
     }
-    console.log('[PedalTracePixiWidget] initialization effect, containerRef.current:', containerRef.current);
+    if (appRef.current) return;
+    console.log('[PedalTracePixiWidget] initializing Pixi, containerRef.current:', containerRef.current);
     if (!containerRef.current) {
-      // Container not yet mounted, wait for next render
+      console.warn('[PedalTracePixiWidget] container missing after telemetryConnected');
       return;
     }
     const initOptions = { width, height: 150, backgroundAlpha: 0 };
@@ -67,7 +79,6 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
         appRef.current = app;
         throttleRef.current = new PIXI.Graphics();
         brakeRef.current = new PIXI.Graphics();
-        // Add throttle and brake graphics to the stage
         app.stage.addChild(throttleRef.current, brakeRef.current);
       })
       .catch(error => {
@@ -79,17 +90,10 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
         appRef.current.destroy(true, { children: true });
       }
     };
-  }, [containerRef.current]);
+  }, [telemetryConnected, containerRef.current, width]);
 
   // Data buffer
   const bufferRef = useRef<{t:number; thr:number; brk:number}[]>([]);
-
-  // Telemetry hook
-  const { data: telemetryData } = useTelemetryData(id, {
-    metrics: ['throttle_pct', 'brake_pct'] as TelemetryMetric[],
-    throttleUpdates: true,
-    updateInterval: 20
-  });
 
   // Update buffer on data
   useEffect(() => {
