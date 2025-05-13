@@ -97,7 +97,7 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
         appRef.current.destroy(true, { children: true });
       }
     };
-  }, [telemetryConnected, containerRef.current, width]);
+  }, [telemetryConnected, containerRef.current]);
 
   // Data buffer
   const bufferRef = useRef<{t:number; thr:number; brk:number}[]>([]);
