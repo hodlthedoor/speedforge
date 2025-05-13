@@ -46,18 +46,30 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
 
   // Setup Pixi
   useEffect(() => {
-    if (!containerRef.current) return;
-    // Create the application and initialize it with options
+    console.log('[PedalTracePixiWidget] initialization effect running, containerRef:', containerRef.current);
+    if (!containerRef.current) {
+      console.warn('[PedalTracePixiWidget] containerRef.current is null, skipping Pixi init');
+      return;
+    }
+    const initOptions = { width, height: 150, backgroundAlpha: 0 };
+    console.log('[PedalTracePixiWidget] creating PIXI.Application with options:', initOptions);
     const app = new PIXI.Application();
-    app.init({ width, height: 150, backgroundAlpha: 0 }).then(() => {
-      // Append the canvas element once initialized
-      containerRef.current!.appendChild(app.canvas);
-      appRef.current = app;
-      throttleRef.current = new PIXI.Graphics();
-      brakeRef.current = new PIXI.Graphics();
-      app.stage.addChild(throttleRef.current, brakeRef.current);
-    });
-    return () => { app.destroy(true, { children: true }); };
+    app.init(initOptions)
+      .then(() => {
+        console.log('[PedalTracePixiWidget] app.init() resolved, canvas:', app.canvas);
+        containerRef.current!.appendChild(app.canvas);
+        appRef.current = app;
+        throttleRef.current = new PIXI.Graphics();
+        brakeRef.current = new PIXI.Graphics();
+        app.stage.addChild(throttleRef.current, throttleRef.current, brakeRef.current);
+      })
+      .catch(error => {
+        console.error('[PedalTracePixiWidget] app.init() failed:', error);
+      });
+    return () => {
+      console.log('[PedalTracePixiWidget] destroying PIXI.Application');
+      app.destroy(true, { children: true });
+    };
   }, []);
 
   // Data buffer
@@ -72,6 +84,7 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
 
   // Update buffer on data
   useEffect(() => {
+    console.log('[PedalTracePixiWidget] telemetryData update:', telemetryData);
     if (telemetryData) {
       const now = Date.now();
       const thr = telemetryData.throttle_pct ?? 0;
@@ -82,12 +95,14 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
 
   // Draw
   useEffect(() => {
+    console.log('[PedalTracePixiWidget] draw effect running, appRef:', appRef.current, 'graphicsRefs:', throttleRef.current, brakeRef.current);
     const app = appRef.current;
     const thrG = throttleRef.current;
     const brkG = brakeRef.current;
     if (!app || !thrG || !brkG) return;
 
     const pts = bufferRef.current.slice(-historyRef.current);
+    console.log('[PedalTracePixiWidget] drawing pts length:', pts.length);
     const w = width;
     const h = 150;
     const margin = { top: 3, right: 0, bottom: 5, left: 0 };
