@@ -93,25 +93,29 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
     const len = pts.length;
     if (len < 2) return;
 
-    // Clear
-    thrG.clear(); brkG.clear();
+    // Clear previous graphics and start new paths
+    thrG.clear().beginPath();
+    brkG.clear().beginPath();
 
-    // Draw throttle line
-    thrG.lineStyle(2.8, 0x4CAF50, 1);
+    // Build throttle path
     pts.forEach((p, i) => {
       const x = margin.left + (i / (historyRef.current - 1)) * usableW;
       const y = (h - margin.bottom) - p.thr / 100 * usableH;
       if (i === 0) thrG.moveTo(x, y);
       else thrG.lineTo(x, y);
     });
-    // Draw brake line
-    brkG.lineStyle(2.8, 0xF44336, 1);
+    // Stroke the throttle path
+    thrG.stroke({ color: 0x4CAF50, width: 2.8 });
+
+    // Build brake path
     pts.forEach((p, i) => {
       const x = margin.left + (i / (historyRef.current - 1)) * usableW;
       const y = (h - margin.bottom) - p.brk / 100 * usableH;
       if (i === 0) brkG.moveTo(x, y);
       else brkG.lineTo(x, y);
     });
+    // Stroke the brake path
+    brkG.stroke({ color: 0xF44336, width: 2.8 });
   }, [telemetryData, width, historyLength]);
 
   useEffect(() => {
