@@ -80,33 +80,40 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     const size = widgetSize;
     const margin = 20;
 
-    // Resize renderer
+    // Resize renderer to match widget
     app.renderer.resize(size, size);
 
-    // Clear and draw axes
-    axes.clear();
-    axes.lineStyle(1, 0x555555);
-    // X axis
-    axes.moveTo(margin, size/2).lineTo(size - margin, size/2);
-    // Y axis
-    axes.moveTo(size/2, margin).lineTo(size/2, size - margin);
-    // Reference rings
-    [0.5, 1].forEach((pct, idx) => {
-      const rx = pct * (size/2 - margin);
-      axes.lineStyle(1, 0x666666, 1)
-        .drawCircle(size/2, size/2, rx);
+    // Draw X axis
+    axes.clear()
+      .beginPath()
+      .moveTo(margin, size / 2)
+      .lineTo(size - margin, size / 2)
+      .stroke({ color: 0x555555, width: 1 });
+
+    // Draw Y axis
+    axes.beginPath()
+      .moveTo(size / 2, margin)
+      .lineTo(size / 2, size - margin)
+      .stroke({ color: 0x555555, width: 1 });
+
+    // Draw reference rings
+    [0.5, 1].forEach(pct => {
+      const rx = pct * (size / 2 - margin);
+      axes.beginPath()
+        .circle(size / 2, size / 2, rx)
+        .stroke({ color: 0x666666, width: 1 });
     });
 
-    // Draw bubble
+    // Draw bubble at current slip/yaw
     bubble.clear();
     const slip = telemetryData?.car_slip_angle_deg ?? 0;
-    const yaw = telemetryData?.yaw_rate_deg_s ?? 0;
-    const x = ((slip + slipMax) / (2 * slipMax)) * (size - 2*margin) + margin;
-    const y = size - ( (yaw + yawMax) / (2 * yawMax) * (size - 2*margin) + margin );
-    bubble.beginFill(0xff9800);
-    bubble.lineStyle(1, 0xffffff);
-    bubble.drawCircle(x, y, 6);
-    bubble.endFill();
+    const yawRate = telemetryData?.yaw_rate_deg_s ?? 0;
+    const x = ((slip + slipMax) / (2 * slipMax)) * (size - 2 * margin) + margin;
+    const y = size - ((yawRate + yawMax) / (2 * yawMax) * (size - 2 * margin) + margin);
+    bubble.beginPath()
+      .circle(x, y, 6)
+      .fill({ color: 0xff9800 })
+      .stroke({ color: 0xffffff, width: 1 });
   }, [telemetryData, widgetSize, slipMax, yawMax]);
 
   return (
