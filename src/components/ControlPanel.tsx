@@ -1392,50 +1392,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   }, []);
 
-  // Auto-load default panel configuration on startup
-  useEffect(() => {
-    // Only try to auto-load if we have current display ID and active widgets is empty
-    if (currentDisplayId !== null && activeWidgets.length === 0) {
-      // Try to load the default config for this display
-      const configService = ConfigService.getInstance();
-      configService.loadPanelConfig('Default').then(config => {
-        if (config && config.widgets && config.widgets.length > 0) {
-          // Clear pending settings before adding new ones
-          pendingWidgetSettings.current.clear();
-          
-          // Store settings for each widget that will be created
-          config.widgets.forEach(widgetConfig => {
-            if (widgetConfig.enabled) {
-              // Store all settings for this widget
-              pendingWidgetSettings.current.set(widgetConfig.id, {
-                position: widgetConfig.position,
-                opacity: widgetConfig.opacity,
-                isBackgroundTransparent: widgetConfig.isBackgroundTransparent,
-                state: widgetConfig.state
-              });
-              
-              // Add widget using onAddWidget
-              const newWidget = {
-                id: widgetConfig.id,
-                type: widgetConfig.type,
-                title: widgetConfig.title,
-                options: widgetConfig.options,
-                state: widgetConfig.state,
-                enabled: true
-              };
-              
-              if (onAddWidget) {
-                onAddWidget(newWidget);
-              }
-            }
-          });
-          
-          setPanelName('Default');
-        }
-      });
-    }
-  }, [currentDisplayId, activeWidgets, onAddWidget]);
-
   // Add a useEffect to listen for widget mount/unmount events
   useEffect(() => {
     const handleWidgetMounted = (event: Event) => {
