@@ -81,6 +81,12 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
         throttleRef.current = new PIXI.Graphics();
         brakeRef.current = new PIXI.Graphics();
         app.stage.addChild(throttleRef.current, brakeRef.current);
+        // Debug: add a red square to verify rendering without deprecated APIs
+        const debugRect = new PIXI.Graphics();
+        // Draw path and fill using new API
+        debugRect.rect(0, 0, 20, 20).fill({ color: 0xff0000, alpha: 1 });
+        app.stage.addChild(debugRect);
+        console.log('[PedalTracePixiWidget] debugRect added to stage');
       })
       .catch(error => {
         console.error('[PedalTracePixiWidget] app.init() failed:', error);
