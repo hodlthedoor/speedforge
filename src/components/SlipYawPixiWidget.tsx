@@ -83,25 +83,25 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     // Resize renderer to match widget
     app.renderer.resize(size, size);
 
-    // Draw X axis
-    axes.clear()
-      .beginPath()
-      .moveTo(margin, size / 2)
-      .lineTo(size - margin, size / 2)
-      .stroke({ color: 0x555555, width: 1 });
+    // Clear and draw X axis
+    axes.clear();
+    axes.beginPath();
+    axes.moveTo(margin, size / 2);
+    axes.lineTo(size - margin, size / 2);
+    axes.stroke({ color: 0x555555, width: 1 });
 
     // Draw Y axis
-    axes.beginPath()
-      .moveTo(size / 2, margin)
-      .lineTo(size / 2, size - margin)
-      .stroke({ color: 0x555555, width: 1 });
+    axes.beginPath();
+    axes.moveTo(size / 2, margin);
+    axes.lineTo(size / 2, size - margin);
+    axes.stroke({ color: 0x555555, width: 1 });
 
     // Draw reference rings
     [0.5, 1].forEach(pct => {
       const rx = pct * (size / 2 - margin);
-      axes.beginPath()
-        .circle(size / 2, size / 2, rx)
-        .stroke({ color: 0x666666, width: 1 });
+      axes.beginPath();
+      axes.circle(size / 2, size / 2, rx);
+      axes.stroke({ color: 0x666666, width: 1 });
     });
 
     // Draw bubble at current slip/yaw
@@ -110,10 +110,10 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
     const yawRate = telemetryData?.yaw_rate_deg_s ?? 0;
     const x = ((slip + slipMax) / (2 * slipMax)) * (size - 2 * margin) + margin;
     const y = size - ((yawRate + yawMax) / (2 * yawMax) * (size - 2 * margin) + margin);
-    bubble.beginPath()
-      .circle(x, y, 6)
-      .fill({ color: 0xff9800 })
-      .stroke({ color: 0xffffff, width: 1 });
+    bubble.beginPath();
+    bubble.circle(x, y, 6);
+    bubble.fill({ color: 0xff9800 });
+    bubble.stroke({ color: 0xffffff, width: 1 });
   }, [telemetryData, widgetSize, slipMax, yawMax]);
 
   return (
