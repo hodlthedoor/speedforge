@@ -19,6 +19,7 @@ import GForceMeterWidget from '../components/GForceMeterWidget';
 import SlipYawWidget from '../components/SlipYawWidget';
 import SlipYawPixiWidget from '../components/SlipYawPixiWidget';
 import PedalTracePixiWidget from '../components/PedalTracePixiWidget';
+import BrakeVsSteerPixiWidget from '../components/BrakeVsSteerPixiWidget';
 
 
 // Register Telemetry Widget
@@ -218,6 +219,16 @@ WidgetRegistry.register('pedal-trace-pixi', {
   defaultState: { width: 480, historyLength: 100 },
   description: 'Visualize throttle and brake inputs with PixiJS',
   category: 'Visualization'
+});
+
+// Register Brake vs Steering Pixi Widget
+WidgetRegistry.register('brake-vs-steer-pixi', {
+  component: BrakeVsSteerPixiWidget,
+  defaultTitle: 'Brake vs Steering (Pixi)',
+  defaultOptions: {},
+  defaultState: { historyLength: 100, width: 480, maxAngle: 270 },
+  description: 'High-performance PixiJS visualization of brake vs steering angle',
+  category: 'Driving Data'
 });
 
 export default WidgetRegistry; 
