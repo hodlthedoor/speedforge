@@ -74,10 +74,12 @@ const BrakeVsSteerPixiWidget: React.FC<BrakeVsSteerProps> = ({ id, onClose }) =>
       setIsPixiReady(true);
     }).catch(() => {});
     return () => {
-      app.destroy(true, { children: true });
-      appRef.current = null;
-      scatterRef.current = null;
-      setIsPixiReady(false);
+      if (appRef.current) {
+        appRef.current.destroy(true, { children: true });
+        appRef.current = null;
+        scatterRef.current = null;
+        setIsPixiReady(false);
+      }
     };
   }, [isConnected, containerRef.current]);
 
