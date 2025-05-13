@@ -59,48 +59,10 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
     console.log('[PedalTracePixiWidget] telemetryConnected:', telemetryConnected);
   }, [telemetryConnected]);
 
-  useEffect(() => {
-    if (!telemetryConnected) {
-      console.log('[PedalTracePixiWidget] telemetry not connected yet, delaying Pixi init');
-      return;
-    }
-    if (appRef.current) return;
-    console.log('[PedalTracePixiWidget] initializing Pixi, containerRef.current:', containerRef.current);
-    if (!containerRef.current) {
-      console.warn('[PedalTracePixiWidget] container missing after telemetryConnected');
-      return;
-    }
-    const initOptions = { width, height: 150, backgroundAlpha: 0 };
-    console.log('[PedalTracePixiWidget] creating PIXI.Application with options:', initOptions);
-    const app = new PIXI.Application();
-    app.init(initOptions)
-      .then(() => {
-        console.log('[PedalTracePixiWidget] app.init() resolved, canvas:', app.canvas);
-        containerRef.current!.appendChild(app.canvas);
-        appRef.current = app;
-        throttleRef.current = new PIXI.Graphics();
-        brakeRef.current = new PIXI.Graphics();
-        app.stage.addChild(throttleRef.current, brakeRef.current);
-        // Debug: add a red square to verify rendering without deprecated APIs
-        const debugRect = new PIXI.Graphics();
-        // Draw path and fill using new API
-        debugRect.rect(0, 0, 20, 20).fill({ color: 0xff0000, alpha: 1 });
-        app.stage.addChild(debugRect);
-        console.log('[PedalTracePixiWidget] debugRect added to stage');
-      })
-      .catch(error => {
-        console.error('[PedalTracePixiWidget] app.init() failed:', error);
-      });
-    return () => {
-      if (appRef.current) {
-        console.log('[PedalTracePixiWidget] destroying PIXI.Application');
-        appRef.current.destroy(true, { children: true });
-      }
-    };
-  }, [telemetryConnected, containerRef.current]);
-
   // Data buffer
   const bufferRef = useRef<{t:number; thr:number; brk:number}[]>([]);
+  // Ref to ensure Pixi init only happens once
+  const pixiInitializedRef = useRef<boolean>(false);
 
   // Update buffer on data
   useEffect(() => {
@@ -151,6 +113,38 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
       else brkG.lineTo(x, y);
     });
   }, [telemetryData, width, historyLength]);
+
+  useEffect(() => {
+    // Only initialize once after telemetry connects and container is mounted
+    if (!telemetryConnected || !containerRef.current || pixiInitializedRef.current) {
+      if (!telemetryConnected) console.log('[PedalTracePixiWidget] delaying Pixi init until telemetryConnected');
+      return;
+    }
+    pixiInitializedRef.current = true;
+    console.log('[PedalTracePixiWidget] initializing Pixi, containerRef.current:', containerRef.current);
+
+    const initOptions = { width, height: 150, backgroundAlpha: 0 };
+    console.log('[PedalTracePixiWidget] creating PIXI.Application with options:', initOptions);
+    const app = new PIXI.Application();
+    app.init(initOptions)
+      .then(() => {
+        console.log('[PedalTracePixiWidget] app.init() resolved, canvas:', app.canvas);
+        containerRef.current!.appendChild(app.canvas);
+        appRef.current = app;
+        throttleRef.current = new PIXI.Graphics();
+        brakeRef.current = new PIXI.Graphics();
+        app.stage.addChild(throttleRef.current, brakeRef.current);
+      })
+      .catch(error => {
+        console.error('[PedalTracePixiWidget] app.init() failed:', error);
+      });
+    return () => {
+      if (appRef.current) {
+        console.log('[PedalTracePixiWidget] destroying PIXI.Application');
+        appRef.current.destroy(true, { children: true });
+      }
+    };
+  }, [telemetryConnected, containerRef.current]);
 
   return (
     <Widget id={id} title="Pedal Inputs (Pixi)" width={width} onClose={onClose}>
