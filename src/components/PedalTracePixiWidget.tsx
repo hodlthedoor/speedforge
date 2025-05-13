@@ -47,12 +47,16 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
   // Setup Pixi
   useEffect(() => {
     if (!containerRef.current) return;
-    const app = new PIXI.Application({ width, height: 150, backgroundAlpha: 0 });
-    containerRef.current.appendChild(app.view);
-    appRef.current = app;
-    throttleRef.current = new PIXI.Graphics();
-    brakeRef.current = new PIXI.Graphics();
-    app.stage.addChild(throttleRef.current, brakeRef.current);
+    // Create the application and initialize it with options
+    const app = new PIXI.Application();
+    app.init({ width, height: 150, backgroundAlpha: 0 }).then(() => {
+      // Append the canvas element once initialized
+      containerRef.current!.appendChild(app.canvas);
+      appRef.current = app;
+      throttleRef.current = new PIXI.Graphics();
+      brakeRef.current = new PIXI.Graphics();
+      app.stage.addChild(throttleRef.current, brakeRef.current);
+    });
     return () => { app.destroy(true, { children: true }); };
   }, []);
 

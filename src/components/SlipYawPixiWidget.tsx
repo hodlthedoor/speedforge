@@ -47,12 +47,16 @@ const SlipYawPixiWidgetComponent: React.FC<SlipYawPixiWidgetProps> = ({ id, onCl
   // Setup Pixi.js application
   useEffect(() => {
     if (!containerRef.current) return;
-    const app = new PIXI.Application({ width: widgetSize, height: widgetSize, backgroundAlpha: 0 });
-    containerRef.current.appendChild(app.view);
-    appRef.current = app;
-    axesRef.current = new PIXI.Graphics();
-    bubbleRef.current = new PIXI.Graphics();
-    app.stage.addChild(axesRef.current, bubbleRef.current);
+    // Create the application and initialize with options
+    const app = new PIXI.Application();
+    app.init({ width: widgetSize, height: widgetSize, backgroundAlpha: 0 }).then(() => {
+      // Append canvas after initialization
+      containerRef.current!.appendChild(app.canvas);
+      appRef.current = app;
+      axesRef.current = new PIXI.Graphics();
+      bubbleRef.current = new PIXI.Graphics();
+      app.stage.addChild(axesRef.current, bubbleRef.current);
+    });
     return () => {
       app.destroy(true, { children: true });
     };
