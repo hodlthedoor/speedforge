@@ -150,6 +150,15 @@ const PedalTracePixiWidgetComponent: React.FC<PedalTracePixiWidgetProps> = ({ id
     };
   }, [telemetryConnected, containerRef.current]);
 
+  // Resize Pixi canvas when width changes
+  useEffect(() => {
+    const app = appRef.current;
+    if (app) {
+      console.log('[PedalTracePixiWidget] resizing Pixi canvas to', width);
+      app.renderer.resize(width, 150);
+    }
+  }, [width]);
+
   return (
     <Widget id={id} title="Pedal Inputs (Pixi)" width={width} onClose={onClose}>
       <div ref={containerRef} />
