@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import 'pixi.js/unsafe-eval';
 import * as PIXI from 'pixi.js';
 import Widget from './Widget';
 import { useTelemetryData, TelemetryMetric } from '../hooks/useTelemetryData';
